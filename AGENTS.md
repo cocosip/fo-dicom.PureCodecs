@@ -84,25 +84,25 @@ Do not require users to register each codec-family DLL separately.
 
 ## Reference Source Locations
 
-Use these local source trees for compatibility research:
+Use local source checkouts for compatibility research. The exact checkout roots are machine-specific:
 
-- `D:\Code\dotnet-source\fo-dicom`
-- `D:\Code\dotnet-source\fo-dicom.Codecs`
+- `<FO_DICOM_SOURCE_ROOT>`: local checkout of `fo-dicom`.
+- `<FO_DICOM_CODECS_SOURCE_ROOT>`: local checkout of `fo-dicom.Codecs`.
 
 Important files:
 
-- `D:\Code\dotnet-source\fo-dicom\FO-DICOM.Core\Imaging\Codec\IDicomCodec.cs`
-- `D:\Code\dotnet-source\fo-dicom\FO-DICOM.Core\Imaging\Codec\TranscoderManager.cs`
-- `D:\Code\dotnet-source\fo-dicom\FO-DICOM.Core\Imaging\Codec\DicomTranscoder.cs`
-- `D:\Code\dotnet-source\fo-dicom\FO-DICOM.Core\Imaging\DicomPixelData.cs`
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Codec\NativeTranscoderManager.cs`
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Codec\DicomRleCodec.cs`
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Codec\DicomJpegCodec.cs`
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Codec\DicomJpegLsCodec.cs`
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Codec\DicomJpeg2000Codec.cs`
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Codec\DicomHtJpeg2000Codec.cs`
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Tests\Unit\TranscodeUnitTest.cs`
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Tests\Acceptance\AcceptanceTests.cs`
+- `<FO_DICOM_SOURCE_ROOT>\FO-DICOM.Core\Imaging\Codec\IDicomCodec.cs`
+- `<FO_DICOM_SOURCE_ROOT>\FO-DICOM.Core\Imaging\Codec\TranscoderManager.cs`
+- `<FO_DICOM_SOURCE_ROOT>\FO-DICOM.Core\Imaging\Codec\DicomTranscoder.cs`
+- `<FO_DICOM_SOURCE_ROOT>\FO-DICOM.Core\Imaging\DicomPixelData.cs`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Codec\NativeTranscoderManager.cs`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Codec\DicomRleCodec.cs`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Codec\DicomJpegCodec.cs`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Codec\DicomJpegLsCodec.cs`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Codec\DicomJpeg2000Codec.cs`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Codec\DicomHtJpeg2000Codec.cs`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Unit\TranscodeUnitTest.cs`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Acceptance\AcceptanceTests.cs`
 
 ## Verification
 

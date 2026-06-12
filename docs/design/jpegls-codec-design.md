@@ -205,9 +205,9 @@ Error messages should include:
 
 Use sample coverage from:
 
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Tests\Unit\TranscodeUnitTest.cs`
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Tests\Acceptance\PM5644-960x540_JPEG-LS_Lossless.dcm`
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Tests\Acceptance\PM5644-960x540_JPEG-LS_NearLossless.dcm`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Unit\TranscodeUnitTest.cs`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Acceptance\PM5644-960x540_JPEG-LS_Lossless.dcm`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Acceptance\PM5644-960x540_JPEG-LS_NearLossless.dcm`
 
 ## Completion Criteria
 
@@ -219,4 +219,3 @@ JPEG-LS is complete when:
 - Near-lossless paths pass allowed-error tolerance tests.
 - Efferent JPEG-LS acceptance samples transcode, inverse transcode, and render.
 - Invalid JPEG-LS streams fail with managed exceptions.
-

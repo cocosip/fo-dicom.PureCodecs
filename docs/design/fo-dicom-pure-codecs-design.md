@@ -395,7 +395,7 @@ The test suite should be built from four layers:
 
 1. Unit tests for low-level codec primitives.
 2. Codec tests for one frame and multi-frame datasets.
-3. Compatibility tests based on `D:\Code\dotnet-source\fo-dicom.Codecs\Tests`.
+3. Compatibility tests based on `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests`.
 4. Consumer smoke tests using the built NuGet package.
 
 The `fo-dicom.Codecs` tests are useful but not sufficient because some of them only check that conversion does not throw and that pixel data exists. `fo-dicom.PureCodecs` should add stronger checks:
@@ -411,8 +411,10 @@ The `fo-dicom.Codecs` tests are useful but not sufficient because some of them o
 
 Source references used for this design:
 
-- `D:\Code\dotnet-source\fo-dicom`
-- `D:\Code\dotnet-source\fo-dicom.Codecs`
+- `<FO_DICOM_SOURCE_ROOT>`: local checkout of `fo-dicom`.
+- `<FO_DICOM_CODECS_SOURCE_ROOT>`: local checkout of `fo-dicom.Codecs`.
+
+These roots are intentionally machine-specific. Do not hard-code a developer's absolute checkout path in this repository.
 
 The key fo-dicom integration files are:
 

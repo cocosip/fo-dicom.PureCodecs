@@ -168,7 +168,7 @@ Error messages should include:
 - RGB interleaved raw -> RLE -> raw exact byte equality.
 - RGB planar raw -> RLE -> raw exact byte equality.
 - Multi-frame raw -> RLE -> raw exact byte equality.
-- Compatibility coverage for `D:\Code\dotnet-source\fo-dicom.Codecs\Tests\Unit\RLEissue.cs`.
+- Compatibility coverage for `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Unit\RLEissue.cs`.
 
 ### Integration Tests
 
@@ -186,4 +186,3 @@ RLE is complete when:
 - Efferent RLE compatibility tests are represented and pass.
 - Invalid RLE streams fail with managed exceptions.
 - RLE participates in the single NuGet package through `PureTranscoderManager`.
-

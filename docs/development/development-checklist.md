@@ -74,8 +74,8 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ## 2. Test Baseline and Fixtures
 
-- [ ] Copy or reference Efferent unit test fixtures from `D:\Code\dotnet-source\fo-dicom.Codecs\Tests\Unit`.
-- [ ] Copy or reference Efferent acceptance fixtures from `D:\Code\dotnet-source\fo-dicom.Codecs\Tests\Acceptance`.
+- [ ] Copy or reference Efferent unit test fixtures from `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Unit`.
+- [ ] Copy or reference Efferent acceptance fixtures from `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Acceptance`.
 - [ ] Create helper for building raw 8-bit monochrome datasets.
 - [ ] Create helper for building raw 16-bit monochrome datasets.
 - [ ] Create helper for building RGB interleaved datasets.

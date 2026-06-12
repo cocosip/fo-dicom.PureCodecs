@@ -274,10 +274,10 @@ Error messages should include:
 
 Use sample coverage from:
 
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Tests\Unit\TranscodeUnitTest.cs`
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Tests\Acceptance\PM5644-960x540_JPEG2000-Lossless.dcm`
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Tests\Acceptance\PM5644-960x540_JPEG2000-Lossy.dcm`
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Tests\Acceptance\PM5644-960x540_JPEG2000-Lossy50.dcm`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Unit\TranscodeUnitTest.cs`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Acceptance\PM5644-960x540_JPEG2000-Lossless.dcm`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Acceptance\PM5644-960x540_JPEG2000-Lossy.dcm`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Acceptance\PM5644-960x540_JPEG2000-Lossy50.dcm`
 - Any HTJ2K fixtures added to the local test suite.
 
 ## Completion Criteria
@@ -309,4 +309,3 @@ Mitigation:
 - Add fixtures incrementally.
 - Keep classic JPEG 2000 and HTJ2K entropy paths isolated.
 - Prefer correctness over speed until compatibility tests are stable.
-

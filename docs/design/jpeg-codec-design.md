@@ -249,9 +249,9 @@ Error messages should include:
 
 Use sample coverage from:
 
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Tests\Unit\TranscodeUnitTest.cs`
-- `D:\Code\dotnet-source\fo-dicom.Codecs\Tests\Acceptance\AcceptanceTests.cs`
-- fo-dicom JPEG lossless samples under `D:\Code\dotnet-source\fo-dicom\Tests`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Unit\TranscodeUnitTest.cs`
+- `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Acceptance\AcceptanceTests.cs`
+- fo-dicom JPEG lossless samples under `<FO_DICOM_SOURCE_ROOT>\Tests`
 
 ## Completion Criteria
 
@@ -263,4 +263,3 @@ JPEG is complete when:
 - Lossy transfer syntaxes pass agreed tolerance tests.
 - Efferent JPEG acceptance samples transcode, inverse transcode, and render.
 - Invalid JPEG streams fail with managed exceptions.
-
