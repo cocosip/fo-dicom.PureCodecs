@@ -74,22 +74,22 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ## 2. Test Baseline and Fixtures
 
-- [ ] Copy or reference Efferent unit test fixtures from `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Unit`.
-- [ ] Copy or reference Efferent acceptance fixtures from `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Acceptance`.
-- [ ] Create helper for building raw 8-bit monochrome datasets.
-- [ ] Create helper for building raw 16-bit monochrome datasets.
-- [ ] Create helper for building RGB interleaved datasets.
-- [ ] Create helper for building RGB planar datasets.
-- [ ] Create helper for building multi-frame datasets.
-- [ ] Create exact byte equality assertion for lossless round-trips.
-- [ ] Create tolerance assertion for lossy round-trips.
-- [ ] Create frame count preservation assertion.
-- [ ] Create required compression tag assertion.
-- [ ] Create managed exception assertion for invalid streams.
-- [ ] Add acceptance matrix skeleton for raw -> compressed.
-- [ ] Add acceptance matrix skeleton for compressed -> raw.
-- [ ] Add acceptance matrix skeleton for compressed render tests where rendering dependencies are available.
-- [ ] Document any fixture that cannot be redistributed in this repo.
+- [x] Copy or reference Efferent unit test fixtures from `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Unit`.
+- [x] Copy or reference Efferent acceptance fixtures from `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Acceptance`.
+- [x] Create helper for building raw 8-bit monochrome datasets.
+- [x] Create helper for building raw 16-bit monochrome datasets.
+- [x] Create helper for building RGB interleaved datasets.
+- [x] Create helper for building RGB planar datasets.
+- [x] Create helper for building multi-frame datasets.
+- [x] Create exact byte equality assertion for lossless round-trips.
+- [x] Create tolerance assertion for lossy round-trips.
+- [x] Create frame count preservation assertion.
+- [x] Create required compression tag assertion.
+- [x] Create managed exception assertion for invalid streams.
+- [x] Add acceptance matrix skeleton for raw -> compressed.
+- [x] Add acceptance matrix skeleton for compressed -> raw.
+- [x] Add acceptance matrix skeleton for compressed render tests where rendering dependencies are available.
+- [x] Document any fixture that cannot be redistributed in this repo.
 
 ## 3. RLE Lossless
 
