@@ -30,6 +30,13 @@ Target framework:
 | HTJ2K Lossless RPCL | `1.2.840.10008.1.2.4.202` | Required | Required |
 | HTJ2K Lossy | `1.2.840.10008.1.2.4.203` | Required | Required |
 
+JPEG 2000 Part 2 Multi-component transfer syntaxes are intentionally outside phase 1:
+
+- `1.2.840.10008.1.2.4.92`.
+- `1.2.840.10008.1.2.4.93`.
+
+The Go reference codec contains useful Part 2 structures, but these UIDs must not expand the phase 1 scope unless the project plan changes.
+
 ## Public Codec Types
 
 The assembly provides these fo-dicom codec implementations:
@@ -70,13 +77,18 @@ Decoder must handle required JPEG 2000 codestream markers, including:
 - COC where needed.
 - QCD.
 - QCC where needed.
+- POC when progression order changes are supported by target samples.
+- RGN and COM with explicit supported, ignored, or rejected behavior.
 - SOT.
 - SOD.
 - EOC.
+- SOP/EPH where supported by target samples.
 - PLT/PPM/PPT where supported by target samples.
 - Tile-part markers needed by DICOM datasets.
 
 Unsupported legal markers should fail with a clear managed exception until implemented. Markers must never cause out-of-bounds reads.
+
+The decoder must explicitly distinguish raw J2K codestream frames from JP2-wrapped frames. JP2 support is optional for phase 1, but unsupported JP2 wrappers must fail with a clear managed exception instead of being misparsed as raw codestreams.
 
 ## Transfer Syntax Mapping
 
@@ -156,16 +168,20 @@ JPEG 2000 parameters should cover:
 
 - Lossless vs lossy mode.
 - Irreversible transform selection.
-- Rate or quality target.
+- OpenJPEG-compatible `Rate` and `RateLevels`.
 - Progression order where supported.
+- Multi-component transform enablement through `AllowMCT`.
+- Photometric update behavior through `UpdatePhotometricInterpretation`.
+- Signed-pixel encoding behavior through `EncodeSignedPixelValuesAsUnsigned`.
+- Quality-layer count and target-ratio semantics where exposed by managed parameters.
 
 HTJ2K parameters should cover:
 
 - Lossless vs lossy mode.
-- RPCL selection for the RPCL transfer syntax.
+- `ProgressionOrder`, including mandatory RPCL behavior for the RPCL transfer syntax.
 - Quality or rate target for lossy encoding.
 
-Do not expose native-library concepts.
+The compatibility baseline is the public behavior of `fo-dicom.Codecs`, not its native implementation details. Do not expose native-library concepts such as OpenJPEG handles, OpenJPH tables, or native stream objects.
 
 ## Encoding Design
 
@@ -173,12 +189,16 @@ For each source frame:
 
 1. Snapshot DICOM pixel metadata.
 2. Validate dimensions, bit depth, signedness, components, and frame size.
-3. Normalize component layout for encoder internals.
-4. Apply reversible or irreversible transform according to transfer syntax and parameters.
-5. Partition into tiles, precincts, and code-blocks.
-6. Encode code-blocks using classic or HTJ2K path.
-7. Write packets and marker segments with the requested progression order.
-8. Add one compressed frame to `newPixelData`.
+3. Map DICOM `BitsAllocated`, `BitsStored`, `PixelRepresentation`, and component layout to JPEG 2000 `Ssiz` precision and sign.
+4. Normalize component layout for encoder internals.
+5. Apply DC level shift for unsigned and signed samples.
+6. Apply RCT/ICT only when the transfer syntax and `AllowMCT` permit it.
+7. Apply reversible or irreversible wavelet transform according to transfer syntax and parameters.
+8. Quantize for lossy paths.
+9. Partition into tiles, precincts, and code-blocks.
+10. Encode code-blocks using classic or HTJ2K path.
+11. Write packets and marker segments with the requested progression order.
+12. Add one compressed frame to `newPixelData`.
 
 The first implementation may use a conservative single-tile strategy if it remains compatible with DICOM and acceptance requirements. Any limitation must be documented before release.
 
@@ -191,11 +211,12 @@ For each compressed frame:
 3. Validate codestream metadata against DICOM pixel metadata.
 4. Decode tile-parts and packets in codestream order.
 5. Decode code-blocks using classic JPEG 2000 or HTJ2K path.
-6. Inverse quantize.
+6. Inverse quantize when needed.
 7. Apply inverse wavelet transform.
-8. Apply inverse component transform.
-9. Repack samples into fo-dicom raw pixel layout.
-10. Add one raw frame to `newPixelData`.
+8. Apply inverse component transform when the codestream uses RCT, ICT, or a supported component transform.
+9. Undo DC level shift.
+10. Repack samples into fo-dicom raw pixel layout.
+11. Add one raw frame to `newPixelData`.
 
 ## Component and Photometric Handling
 
@@ -206,6 +227,9 @@ The implementation must account for common DICOM image data:
 - YBR-related photometric interpretations used by JPEG 2000 transfer syntaxes.
 - Signed and unsigned samples.
 - 8-bit and 16-bit allocated samples.
+- Planar and interleaved RGB input layouts.
+- Component precision and sign from JPEG 2000 `Ssiz`.
+- Component subsampling. Unsupported subsampling must fail explicitly.
 
 Unsupported component transforms or photometric interpretations must fail explicitly.
 
@@ -221,8 +245,11 @@ Decode must reject:
 - Unsupported progression order.
 - Unsupported number of decomposition levels.
 - Unsupported component precision.
+- Unsupported component subsampling.
+- Unsupported JP2 wrapper when JP2 support is not implemented.
 - Codestream dimensions that conflict with DICOM metadata.
 - Packets or code-blocks that exceed declared bounds.
+- Tile-part lengths or indexes that conflict with declared tile structure.
 
 Encode must reject:
 
@@ -231,6 +258,7 @@ Encode must reject:
 - Unsupported photometric interpretation.
 - Unsupported progression order for the selected transfer syntax.
 - Invalid rate or quality parameters.
+- JPEG 2000 Part 2 transfer syntaxes `.92` and `.93` during phase 1.
 
 ## Error Handling
 
@@ -255,8 +283,12 @@ Error messages should include:
 - Tile and packet indexing.
 - Reversible wavelet transform round-trip.
 - Irreversible wavelet transform tolerance checks.
+- DC level shift and signedness mapping.
+- RCT/ICT behavior with `AllowMCT`.
 - Classic entropy coding primitives.
+- Tier-1 pass accounting and tag-tree packet header behavior.
 - HT block coding primitives.
+- MEL, VLC, MagSgn, and HT cleanup primitives.
 - Invalid marker length handling.
 
 ### Codec Tests
@@ -269,6 +301,8 @@ Error messages should include:
 - HTJ2K Lossy tolerance round-trip.
 - Multi-frame data.
 - Monochrome and RGB sample data.
+- `DicomJpeg2000Params` compatibility behavior.
+- `DicomHtJpeg2000Params.ProgressionOrder` compatibility behavior.
 
 ### Compatibility Tests
 
@@ -301,6 +335,8 @@ Risks:
 - Full JPEG 2000 and HTJ2K implementation complexity is high.
 - DICOM datasets may contain progression orders, tile layouts, or marker combinations not covered by initial samples.
 - Lossy tolerance must be defined carefully to avoid false failures.
+- `fo-dicom.Codecs` uses native codec behavior as the compatibility baseline; public parameter semantics must be matched without copying native implementation concepts.
+- The Go JPEG 2000 reference is useful for structure and tests, but its Part 2 support is outside phase 1 and its HTJ2K notes still identify partial VLC and cleanup-pass work.
 - Performance may require iterative optimization after correctness is achieved.
 
 Mitigation:
@@ -308,4 +344,5 @@ Mitigation:
 - Build marker and codestream parser tests first.
 - Add fixtures incrementally.
 - Keep classic JPEG 2000 and HTJ2K entropy paths isolated.
+- Cross-check HTJ2K block coding against OpenJPH or OpenJPEG reference vectors before marking support complete.
 - Prefer correctness over speed until compatibility tests are stable.

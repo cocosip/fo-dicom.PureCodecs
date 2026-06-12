@@ -284,11 +284,23 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [ ] Test SOC parsing.
 - [ ] Test SIZ parsing.
 - [ ] Test COD parsing.
+- [ ] Test COC parsing and component-level COD override inheritance.
 - [ ] Test QCD parsing.
+- [ ] Test QCC parsing and component-level QCD override inheritance.
+- [ ] Test POC parsing and progression order change validation.
+- [ ] Test RGN parsing and explicitly document unsupported ROI behavior.
+- [ ] Test COM parsing and safe preservation or rejection behavior.
 - [ ] Test SOT parsing.
 - [ ] Test SOD parsing.
 - [ ] Test EOC parsing.
+- [ ] Test PLT parsing or explicit managed rejection.
+- [ ] Test PPM/PPT parsing or explicit managed rejection.
+- [ ] Test SOP/EPH parsing or explicit managed rejection.
+- [ ] Detect raw J2K codestream frames.
+- [ ] Detect JP2 wrapper frames and fail explicitly unless supported.
 - [ ] Test invalid marker length failure.
+- [ ] Test multi-tile codestream geometry.
+- [ ] Test multi-tile-part `Psot`, `TPsot`, and `TNsot` validation.
 - [ ] Add image model.
 - [ ] Add tile model.
 - [ ] Add component model.
@@ -297,27 +309,55 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [ ] Add packet model.
 - [ ] Add progression order iterator.
 - [ ] Test LRCP progression when supported.
+- [ ] Test RLCP progression when supported.
 - [ ] Test RPCL progression for HTJ2K Lossless RPCL.
+- [ ] Test PCRL progression when supported.
+- [ ] Test CPRL progression when supported.
 
 ### 6.2 Transform and Quantization
 
+- [ ] Add DC level shift for unsigned and signed samples.
+- [ ] Test JPEG 2000 `Ssiz` precision and sign mapping to DICOM pixel metadata.
+- [ ] Test `BitsAllocated`, `BitsStored`, and `PixelRepresentation` validation.
 - [ ] Add reversible color transform.
 - [ ] Add irreversible color transform.
+- [ ] Test `AllowMCT` enables and disables RCT/ICT for RGB data.
 - [ ] Add reversible wavelet transform.
 - [ ] Add inverse reversible wavelet transform.
 - [ ] Add irreversible wavelet transform.
 - [ ] Add inverse irreversible wavelet transform.
 - [ ] Test reversible transform exact round-trip.
 - [ ] Test irreversible transform tolerance round-trip.
+- [ ] Add guard-bit and effective bit-depth calculation for wavelet coefficients.
+- [ ] Test zero-bit-plane calculation across decomposition levels.
 - [ ] Add quantization model.
 - [ ] Add inverse quantization.
+- [ ] Test no-quantization path for lossless 5/3 coding.
+- [ ] Test scalar-derived quantization parsing.
+- [ ] Test scalar-expounded quantization parsing.
+- [ ] Test explicit lossy subband quantization steps.
 
 ### 6.3 Classic JPEG 2000 Coding
 
+- [ ] Add MQ arithmetic decoder state table.
+- [ ] Add MQ arithmetic encoder state table.
+- [ ] Test MQ byte-stuffing and marker-safe bitstream handling.
+- [ ] Add Tier-1 significance propagation pass.
+- [ ] Add Tier-1 magnitude refinement pass.
+- [ ] Add Tier-1 cleanup pass.
+- [ ] Test Tier-1 pass termination and pass-length accounting.
 - [ ] Add classic JPEG 2000 code-block decoder.
 - [ ] Add classic JPEG 2000 code-block encoder.
+- [ ] Add tag-tree decoder.
+- [ ] Add tag-tree encoder.
 - [ ] Add packet decoder.
 - [ ] Add packet encoder.
+- [ ] Test empty packet handling.
+- [ ] Test multi-layer packet contribution handling.
+- [ ] Add rate-distortion pass model for lossy encoding.
+- [ ] Add PCRD-style layer allocation.
+- [ ] Test `Rate`, `RateLevels`, `TargetRatio`, and `NumLayers` parameter effects.
+- [ ] Test optional final lossless layer behavior for lossless rate-controlled encoding.
 - [ ] Implement JPEG 2000 Lossless decode.
 - [ ] Implement JPEG 2000 Lossless encode.
 - [ ] Implement JPEG 2000 Lossy decode.
@@ -329,8 +369,20 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ### 6.4 HTJ2K Coding
 
+- [ ] Add MEL decoder.
+- [ ] Add MEL encoder.
+- [ ] Test MEL state-machine vectors.
+- [ ] Add HT VLC decoder with Annex C table validation.
+- [ ] Add HT VLC encoder with Annex C table validation.
+- [ ] Add MagSgn decoder.
+- [ ] Add MagSgn encoder.
+- [ ] Test HT three-segment code-block assembly and disassembly.
+- [ ] Add HT cleanup pass decoder.
+- [ ] Add HT cleanup pass encoder.
+- [ ] Test HT quad and quad-pair scanning behavior.
 - [ ] Add HT block decoder.
 - [ ] Add HT block encoder.
+- [ ] Cross-check HT block vectors against OpenJPH or OpenJPEG reference output.
 - [ ] Implement HTJ2K Lossless decode.
 - [ ] Implement HTJ2K Lossless encode.
 - [ ] Implement HTJ2K Lossless RPCL decode.
@@ -339,21 +391,41 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [ ] Implement HTJ2K Lossy encode.
 - [ ] Test HTJ2K Lossless exact round-trip.
 - [ ] Test HTJ2K Lossless RPCL exact round-trip.
+- [ ] Test HTJ2K Lossless RPCL codestream uses RPCL progression.
 - [ ] Test HTJ2K Lossy tolerance round-trip.
 - [ ] Add or import HTJ2K fixtures for acceptance tests.
+- [ ] Document any HTJ2K reference-library mismatch before marking support complete.
 
 ### 6.5 JPEG 2000 DICOM Integration
 
 - [ ] Implement JPEG 2000 codec parameter type.
+- [ ] Match `DicomJpeg2000Params.Irreversible` behavior.
+- [ ] Match `DicomJpeg2000Params.Rate` behavior.
+- [ ] Match `DicomJpeg2000Params.RateLevels` behavior.
+- [ ] Match `DicomJpeg2000Params.ProgressionOrder` behavior.
+- [ ] Match `DicomJpeg2000Params.AllowMCT` behavior.
+- [ ] Match `DicomJpeg2000Params.UpdatePhotometricInterpretation` behavior.
+- [ ] Match `DicomJpeg2000Params.EncodeSignedPixelValuesAsUnsigned` behavior.
 - [ ] Implement HTJ2K codec parameter type.
+- [ ] Match `DicomHtJpeg2000Params.ProgressionOrder` behavior.
 - [ ] Implement DICOM component layout mapping.
+- [ ] Implement planar and interleaved RGB input normalization.
+- [ ] Implement decoded output repacking to fo-dicom raw frame layout.
 - [ ] Implement monochrome output path.
 - [ ] Implement RGB output path.
 - [ ] Implement YBR-related output path where supported.
+- [ ] Add explicit Phase 1 exclusion for JPEG 2000 Part 2 Multi-component transfer syntaxes `.92` and `.93`.
+- [ ] Add explicit unsupported JPIP/JPT behavior.
+- [ ] Add unsupported component subsampling failures.
 - [ ] Add unsupported progression order failures.
 - [ ] Add unsupported photometric interpretation failures.
 - [ ] Test multi-frame JPEG 2000 data.
+- [ ] Test JPEG 2000 lossless preserves frame count and required compression tags.
+- [ ] Test JPEG 2000 lossy preserves frame count and required compression tags.
+- [ ] Test HTJ2K preserves frame count and required compression tags.
 - [ ] Test invalid codestream managed exceptions.
+- [ ] Test Efferent JPEG 2000 acceptance inverse transcode samples.
+- [ ] Test Efferent JPEG 2000 render samples where rendering dependencies are available.
 - [ ] Mark JPEG 2000 stubs complete and remove stub-only failure expectations.
 - [ ] Update [JPEG 2000 design](../design/jpeg2000-codec-design.md) with implementation notes.
 
