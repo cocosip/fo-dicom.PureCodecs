@@ -84,6 +84,23 @@ No broad reflection over arbitrary loaded assemblies should be used. There shoul
 
 Before an algorithm is implemented, each transfer syntax may have a stub codec so that registration and package layout can be tested.
 
+The current stub codec public class names are:
+
+- `FellowOakDicom.PureCodecs.Rle.DicomRleLosslessCodec`
+- `FellowOakDicom.PureCodecs.Jpeg.DicomJpegProcess1Codec`
+- `FellowOakDicom.PureCodecs.Jpeg.DicomJpegProcess2_4Codec`
+- `FellowOakDicom.PureCodecs.Jpeg.DicomJpegLossless14Codec`
+- `FellowOakDicom.PureCodecs.Jpeg.DicomJpegLossless14SV1Codec`
+- `FellowOakDicom.PureCodecs.JpegLs.DicomJpegLsLosslessCodec`
+- `FellowOakDicom.PureCodecs.JpegLs.DicomJpegLsNearLosslessCodec`
+- `FellowOakDicom.PureCodecs.Jpeg2000.DicomJpeg2000LosslessCodec`
+- `FellowOakDicom.PureCodecs.Jpeg2000.DicomJpeg2000LossyCodec`
+- `FellowOakDicom.PureCodecs.Jpeg2000.DicomHtJpeg2000LosslessCodec`
+- `FellowOakDicom.PureCodecs.Jpeg2000.DicomHtJpeg2000LosslessRpclCodec`
+- `FellowOakDicom.PureCodecs.Jpeg2000.DicomHtJpeg2000LossyCodec`
+
+The shared `UnimplementedDicomCodec` base is temporary entry-layer infrastructure for stub codecs. It must be replaced or made irrelevant as each family algorithm is implemented.
+
 Stub codecs must:
 
 - Implement `IDicomCodec`.
@@ -151,4 +168,3 @@ The entry layer is complete when:
 - The NuGet package includes all family DLLs under `lib/netstandard2.0`.
 - A test consumer can install the package and register only `PureTranscoderManager`.
 - Every phase 1 transfer syntax is visible through fo-dicom's transcoder manager.
-

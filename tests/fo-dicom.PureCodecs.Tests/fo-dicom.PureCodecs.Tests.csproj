@@ -17,5 +17,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\fo-dicom.PureCodecs\fo-dicom.PureCodecs.csproj" />
+    <ProjectReference Include="..\..\src\fo-dicom.PureCodecs.Jpeg\fo-dicom.PureCodecs.Jpeg.csproj" />
+    <ProjectReference Include="..\..\src\fo-dicom.PureCodecs.Jpeg2000\fo-dicom.PureCodecs.Jpeg2000.csproj" />
+    <ProjectReference Include="..\..\src\fo-dicom.PureCodecs.JpegLs\fo-dicom.PureCodecs.JpegLs.csproj" />
+    <ProjectReference Include="..\..\src\fo-dicom.PureCodecs.Rle\fo-dicom.PureCodecs.Rle.csproj" />
   </ItemGroup>
 </Project>

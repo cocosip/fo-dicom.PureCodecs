@@ -43,34 +43,34 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ## 1. Codec Entry Layer
 
-- [ ] Create `PureTranscoderManager`.
-- [ ] Make `PureTranscoderManager` inherit fo-dicom `TranscoderManager`.
-- [ ] Implement explicit `LoadCodecs` registration.
-- [ ] Add private `AddCodec(IDicomCodec codec)` helper.
-- [ ] Create shared codec exception wrapper helper.
-- [ ] Create shared pixel metadata snapshot helper.
-- [ ] Create shared frame validation helper.
-- [ ] Create shared `IByteBuffer` conversion helper.
-- [ ] Create stub codec base for unimplemented algorithms.
-- [ ] Add stub codec for RLE Lossless.
-- [ ] Add stub codec for JPEG Process 1.
-- [ ] Add stub codec for JPEG Process 2/4.
-- [ ] Add stub codec for JPEG Lossless Process 14.
-- [ ] Add stub codec for JPEG Lossless Process 14 SV1.
-- [ ] Add stub codec for JPEG-LS Lossless.
-- [ ] Add stub codec for JPEG-LS Near-Lossless.
-- [ ] Add stub codec for JPEG 2000 Lossless.
-- [ ] Add stub codec for JPEG 2000 Lossy.
-- [ ] Add stub codec for HTJ2K Lossless.
-- [ ] Add stub codec for HTJ2K Lossless RPCL.
-- [ ] Add stub codec for HTJ2K Lossy.
-- [ ] Test `PureTranscoderManager` construction.
-- [ ] Test `HasCodec` for all phase 1 transfer syntaxes.
-- [ ] Test `GetCodec` returns a codec for all phase 1 transfer syntaxes.
-- [ ] Test `CanTranscode(ExplicitVRLittleEndian, syntax)` for all phase 1 transfer syntaxes.
-- [ ] Test `CanTranscode(syntax, ExplicitVRLittleEndian)` for all phase 1 transfer syntaxes.
-- [ ] Test stub encode/decode throws `DicomCodecException`.
-- [ ] Update entry design doc if implementation changes any public class names.
+- [x] Create `PureTranscoderManager`.
+- [x] Make `PureTranscoderManager` inherit fo-dicom `TranscoderManager`.
+- [x] Implement explicit `LoadCodecs` registration.
+- [x] Add private `AddCodec(IDicomCodec codec)` helper.
+- [x] Create shared codec exception wrapper helper.
+- [x] Create shared pixel metadata snapshot helper.
+- [x] Create shared frame validation helper.
+- [x] Create shared `IByteBuffer` conversion helper.
+- [x] Create stub codec base for unimplemented algorithms.
+- [x] Add stub codec for RLE Lossless.
+- [x] Add stub codec for JPEG Process 1.
+- [x] Add stub codec for JPEG Process 2/4.
+- [x] Add stub codec for JPEG Lossless Process 14.
+- [x] Add stub codec for JPEG Lossless Process 14 SV1.
+- [x] Add stub codec for JPEG-LS Lossless.
+- [x] Add stub codec for JPEG-LS Near-Lossless.
+- [x] Add stub codec for JPEG 2000 Lossless.
+- [x] Add stub codec for JPEG 2000 Lossy.
+- [x] Add stub codec for HTJ2K Lossless.
+- [x] Add stub codec for HTJ2K Lossless RPCL.
+- [x] Add stub codec for HTJ2K Lossy.
+- [x] Test `PureTranscoderManager` construction.
+- [x] Test `HasCodec` for all phase 1 transfer syntaxes.
+- [x] Test `GetCodec` returns a codec for all phase 1 transfer syntaxes.
+- [x] Test `CanTranscode(ExplicitVRLittleEndian, syntax)` for all phase 1 transfer syntaxes.
+- [x] Test `CanTranscode(syntax, ExplicitVRLittleEndian)` for all phase 1 transfer syntaxes.
+- [x] Test stub encode/decode throws `DicomCodecException`.
+- [x] Update entry design doc if implementation changes any public class names.
 
 ## 2. Test Baseline and Fixtures
 
