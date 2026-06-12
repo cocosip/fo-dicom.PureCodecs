@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/fo-dicom.PureCodecs.Jpeg/fo-dicom.PureCodecs.Jpeg.csproj" />
+    <Project Path="src/fo-dicom.PureCodecs.Jpeg2000/fo-dicom.PureCodecs.Jpeg2000.csproj" />
+    <Project Path="src/fo-dicom.PureCodecs.JpegLs/fo-dicom.PureCodecs.JpegLs.csproj" />
+    <Project Path="src/fo-dicom.PureCodecs.Rle/fo-dicom.PureCodecs.Rle.csproj" />
+    <Project Path="src/fo-dicom.PureCodecs/fo-dicom.PureCodecs.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/fo-dicom.PureCodecs.Tests/fo-dicom.PureCodecs.Tests.csproj" />
+  </Folder>
+</Solution>

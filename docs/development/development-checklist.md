@@ -25,21 +25,21 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ## 0. Repository Foundation
 
-- [ ] Create `fo-dicom.PureCodecs.sln`.
-- [ ] Create `src/fo-dicom.PureCodecs/fo-dicom.PureCodecs.csproj`.
-- [ ] Create `src/fo-dicom.PureCodecs.Rle/fo-dicom.PureCodecs.Rle.csproj`.
-- [ ] Create `src/fo-dicom.PureCodecs.Jpeg/fo-dicom.PureCodecs.Jpeg.csproj`.
-- [ ] Create `src/fo-dicom.PureCodecs.JpegLs/fo-dicom.PureCodecs.JpegLs.csproj`.
-- [ ] Create `src/fo-dicom.PureCodecs.Jpeg2000/fo-dicom.PureCodecs.Jpeg2000.csproj`.
-- [ ] Ensure all production projects use only `<TargetFramework>netstandard2.0</TargetFramework>`.
-- [ ] Add fo-dicom package reference to production projects.
-- [ ] Add project references from `fo-dicom.PureCodecs` to all codec-family projects.
-- [ ] Create test project `tests/fo-dicom.PureCodecs.Tests/fo-dicom.PureCodecs.Tests.csproj`.
-- [ ] Add test project to the solution.
-- [ ] Create initial package metadata for one NuGet package.
-- [ ] Configure package output to include all codec-family DLLs under `lib/netstandard2.0`.
-- [ ] Add root README with minimal usage example.
-- [ ] Run `dotnet build` and confirm the empty solution builds.
+- [x] Create `fo-dicom.PureCodecs.slnx`.
+- [x] Create `src/fo-dicom.PureCodecs/fo-dicom.PureCodecs.csproj`.
+- [x] Create `src/fo-dicom.PureCodecs.Rle/fo-dicom.PureCodecs.Rle.csproj`.
+- [x] Create `src/fo-dicom.PureCodecs.Jpeg/fo-dicom.PureCodecs.Jpeg.csproj`.
+- [x] Create `src/fo-dicom.PureCodecs.JpegLs/fo-dicom.PureCodecs.JpegLs.csproj`.
+- [x] Create `src/fo-dicom.PureCodecs.Jpeg2000/fo-dicom.PureCodecs.Jpeg2000.csproj`.
+- [x] Ensure all production projects use only `<TargetFramework>netstandard2.0</TargetFramework>`.
+- [x] Add fo-dicom package reference to production projects.
+- [x] Add project references from `fo-dicom.PureCodecs` to all codec-family projects.
+- [x] Create test project `tests/fo-dicom.PureCodecs.Tests/fo-dicom.PureCodecs.Tests.csproj`.
+- [x] Add test project to the solution.
+- [x] Create initial package metadata for one NuGet package.
+- [x] Configure package output to include all codec-family DLLs under `lib/netstandard2.0`.
+- [x] Add root README with minimal usage example.
+- [x] Run `dotnet build` and confirm the empty solution builds.
 
 ## 1. Codec Entry Layer
 
@@ -411,4 +411,3 @@ The first replacement phase is complete only when:
 - [ ] Compatibility tests based on `fo-dicom.Codecs` pass.
 - [ ] Consumer smoke tests pass on .NET Framework 4.7.2+ and modern .NET.
 - [ ] Documentation reflects the implemented behavior.
-
