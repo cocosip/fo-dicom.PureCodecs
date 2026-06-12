@@ -33,6 +33,8 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Create `src/fo-dicom.PureCodecs.Jpeg2000/fo-dicom.PureCodecs.Jpeg2000.csproj`.
 - [x] Ensure all production projects use only `<TargetFramework>netstandard2.0</TargetFramework>`.
 - [x] Add fo-dicom package reference to production projects.
+- [x] Enable NuGet Central Package Management with `Directory.Packages.props`.
+- [x] Move package versions out of project files and into `Directory.Packages.props`.
 - [x] Add project references from `fo-dicom.PureCodecs` to all codec-family projects.
 - [x] Create test project `tests/fo-dicom.PureCodecs.Tests/fo-dicom.PureCodecs.Tests.csproj`.
 - [x] Add test project to the solution.

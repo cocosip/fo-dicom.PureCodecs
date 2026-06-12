@@ -4,6 +4,8 @@
 
 The package is being built as one NuGet package that contains separate managed codec-family assemblies for RLE, JPEG, JPEG-LS, and JPEG 2000 / HTJ2K. Production assemblies target `netstandard2.0` only.
 
+NuGet package versions are managed centrally in `Directory.Packages.props`. Project files keep `PackageReference` items versionless; add or update package versions in `Directory.Packages.props`.
+
 ## Usage
 
 ```csharp
@@ -16,4 +18,4 @@ new DicomSetupBuilder()
     .Build();
 ```
 
-The initial project skeleton includes the package layout and registration entry point. Codec implementations are added in later development phases.
+The project includes the package layout, registration entry point, centralized package version management, and the first RLE codec implementation. Remaining codec families are added in later development phases.

@@ -66,6 +66,10 @@ The split is by codec family:
 
 The user installs one NuGet package and registers one transcoder manager. The internal DLL split must not add user-facing setup complexity.
 
+## Package Version Management
+
+NuGet dependency versions are managed centrally in `Directory.Packages.props` with `ManagePackageVersionsCentrally` enabled. Project files use versionless `PackageReference` items for centrally managed packages. The current phase 1 fo-dicom package version is `5.2.6`.
+
 ## fo-dicom Integration
 
 fo-dicom codec integration is based on these existing interfaces:
@@ -449,7 +453,6 @@ These decisions must be resolved before or during implementation planning:
 
 - Exact NuGet package id.
 - Whether assemblies should be strong-named.
-- Minimum fo-dicom package version for phase 1.
 - Whether fo-dicom 4.x compatibility is required in the first NuGet release.
 - Whether to vendor or port any existing managed codec implementation, subject to license review.
 - Performance goals for large multi-frame studies.
