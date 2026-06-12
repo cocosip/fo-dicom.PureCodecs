@@ -316,26 +316,26 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ### 6.2 Transform and Quantization
 
-- [ ] Add DC level shift for unsigned and signed samples.
-- [ ] Test JPEG 2000 `Ssiz` precision and sign mapping to DICOM pixel metadata.
-- [ ] Test `BitsAllocated`, `BitsStored`, and `PixelRepresentation` validation.
-- [ ] Add reversible color transform.
-- [ ] Add irreversible color transform.
-- [ ] Test `AllowMCT` enables and disables RCT/ICT for RGB data.
-- [ ] Add reversible wavelet transform.
-- [ ] Add inverse reversible wavelet transform.
-- [ ] Add irreversible wavelet transform.
-- [ ] Add inverse irreversible wavelet transform.
-- [ ] Test reversible transform exact round-trip.
-- [ ] Test irreversible transform tolerance round-trip.
-- [ ] Add guard-bit and effective bit-depth calculation for wavelet coefficients.
-- [ ] Test zero-bit-plane calculation across decomposition levels.
-- [ ] Add quantization model.
-- [ ] Add inverse quantization.
-- [ ] Test no-quantization path for lossless 5/3 coding.
-- [ ] Test scalar-derived quantization parsing.
-- [ ] Test scalar-expounded quantization parsing.
-- [ ] Test explicit lossy subband quantization steps.
+- [x] Add DC level shift for unsigned and signed samples.
+- [x] Test JPEG 2000 `Ssiz` precision and sign mapping to DICOM pixel metadata.
+- [x] Test `BitsAllocated`, `BitsStored`, and `PixelRepresentation` validation.
+- [x] Add reversible color transform.
+- [x] Add irreversible color transform.
+- [x] Test `AllowMCT` enables and disables RCT/ICT for RGB data.
+- [x] Add reversible wavelet transform.
+- [x] Add inverse reversible wavelet transform.
+- [x] Add irreversible wavelet transform.
+- [x] Add inverse irreversible wavelet transform.
+- [x] Test reversible transform exact round-trip.
+- [x] Test irreversible transform tolerance round-trip.
+- [x] Add guard-bit and effective bit-depth calculation for wavelet coefficients.
+- [x] Test zero-bit-plane calculation across decomposition levels.
+- [x] Add quantization model.
+- [x] Add inverse quantization.
+- [x] Test no-quantization path for lossless 5/3 coding.
+- [x] Test scalar-derived quantization parsing.
+- [x] Test scalar-expounded quantization parsing.
+- [x] Test explicit lossy subband quantization steps.
 
 ### 6.3 Classic JPEG 2000 Coding
 
