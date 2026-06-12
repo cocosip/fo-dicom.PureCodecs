@@ -186,3 +186,13 @@ RLE is complete when:
 - Efferent RLE compatibility tests are represented and pass.
 - Invalid RLE streams fail with managed exceptions.
 - RLE participates in the single NuGet package through `PureTranscoderManager`.
+
+## Implementation Notes
+
+- Implemented in `fo-dicom.PureCodecs.Rle` with managed header, segment, and frame codecs.
+- `DicomRleLosslessCodec` now implements encode and decode directly instead of inheriting the unimplemented stub base.
+- Segment coding uses DICOM PackBits-style literal and repeat runs and omits `-128` no-op bytes during encode.
+- Frame mapping supports 8-bit monochrome, 16-bit monochrome, RGB interleaved, RGB planar, and multi-frame round-trips.
+- Segment order is sample-major with most-significant byte first within each sample.
+- The encoder rejects images whose `BitsAllocated / 8 * SamplesPerPixel` requires more than 15 RLE segments.
+- Efferent `RLEissue.cs` behavior is covered by a deterministic local regression test for 16-bit signed MONOCHROME2 single-row frames whose low-entropy bytes repeatedly encode and decode through RLE without byte changes.

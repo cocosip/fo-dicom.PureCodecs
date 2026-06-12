@@ -10,7 +10,4 @@
     <PackageReference Include="fo-dicom" Version="5.2.6" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Compile Include="..\fo-dicom.PureCodecs\Internal\*.cs" Link="Internal\%(Filename)%(Extension)" />
-  </ItemGroup>
 </Project>

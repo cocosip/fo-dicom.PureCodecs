@@ -27,6 +27,21 @@ public sealed class PureTranscoderManagerTests
         { DicomTransferSyntax.HTJ2K, typeof(DicomHtJpeg2000LossyCodec) },
     };
 
+    public static TheoryData<DicomTransferSyntax, Type> UnimplementedPhase1Codecs => new()
+    {
+        { DicomTransferSyntax.JPEGProcess1, typeof(DicomJpegProcess1Codec) },
+        { DicomTransferSyntax.JPEGProcess2_4, typeof(DicomJpegProcess2_4Codec) },
+        { DicomTransferSyntax.JPEGProcess14, typeof(DicomJpegLossless14Codec) },
+        { DicomTransferSyntax.JPEGProcess14SV1, typeof(DicomJpegLossless14SV1Codec) },
+        { DicomTransferSyntax.JPEGLSLossless, typeof(DicomJpegLsLosslessCodec) },
+        { DicomTransferSyntax.JPEGLSNearLossless, typeof(DicomJpegLsNearLosslessCodec) },
+        { DicomTransferSyntax.JPEG2000Lossless, typeof(DicomJpeg2000LosslessCodec) },
+        { DicomTransferSyntax.JPEG2000Lossy, typeof(DicomJpeg2000LossyCodec) },
+        { DicomTransferSyntax.HTJ2KLossless, typeof(DicomHtJpeg2000LosslessCodec) },
+        { DicomTransferSyntax.HTJ2KLosslessRPCL, typeof(DicomHtJpeg2000LosslessRpclCodec) },
+        { DicomTransferSyntax.HTJ2K, typeof(DicomHtJpeg2000LossyCodec) },
+    };
+
     [Fact]
     public void Constructor_creates_transcoder_manager()
     {
@@ -77,7 +92,7 @@ public sealed class PureTranscoderManagerTests
     }
 
     [Theory]
-    [MemberData(nameof(Phase1Codecs))]
+    [MemberData(nameof(UnimplementedPhase1Codecs))]
     public void Stub_codecs_throw_dicom_codec_exception_for_encode_and_decode(DicomTransferSyntax syntax, Type _)
     {
         var codec = new PureTranscoderManager().GetCodec(syntax);

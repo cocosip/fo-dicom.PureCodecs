@@ -95,54 +95,54 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ### 3.1 RLE Parser and Writer
 
-- [ ] Add RLE header model.
-- [ ] Test parsing a valid 64-byte RLE header.
-- [ ] Test rejecting a frame shorter than 64 bytes.
-- [ ] Test rejecting segment count less than 1.
-- [ ] Test rejecting segment count greater than 15.
-- [ ] Test rejecting non-increasing segment offsets.
-- [ ] Implement RLE header parser.
-- [ ] Implement RLE header writer.
-- [ ] Test writing segment count and offsets in little-endian order.
+- [x] Add RLE header model.
+- [x] Test parsing a valid 64-byte RLE header.
+- [x] Test rejecting a frame shorter than 64 bytes.
+- [x] Test rejecting segment count less than 1.
+- [x] Test rejecting segment count greater than 15.
+- [x] Test rejecting non-increasing segment offsets.
+- [x] Implement RLE header parser.
+- [x] Implement RLE header writer.
+- [x] Test writing segment count and offsets in little-endian order.
 
 ### 3.2 RLE Decoder
 
-- [ ] Test decoding a literal run.
-- [ ] Test decoding a repeat run.
-- [ ] Test decoding mixed literal and repeat runs.
-- [ ] Test rejecting literal run that exceeds input.
-- [ ] Test rejecting repeat run that exceeds output.
-- [ ] Implement segment decoder.
-- [ ] Implement frame decoder for 8-bit monochrome.
-- [ ] Implement frame decoder for 16-bit monochrome.
-- [ ] Implement frame decoder for RGB interleaved.
-- [ ] Implement frame decoder for RGB planar.
-- [ ] Wire decoder into `DicomRleLosslessCodec.Decode`.
+- [x] Test decoding a literal run.
+- [x] Test decoding a repeat run.
+- [x] Test decoding mixed literal and repeat runs.
+- [x] Test rejecting literal run that exceeds input.
+- [x] Test rejecting repeat run that exceeds output.
+- [x] Implement segment decoder.
+- [x] Implement frame decoder for 8-bit monochrome.
+- [x] Implement frame decoder for 16-bit monochrome.
+- [x] Implement frame decoder for RGB interleaved.
+- [x] Implement frame decoder for RGB planar.
+- [x] Wire decoder into `DicomRleLosslessCodec.Decode`.
 
 ### 3.3 RLE Encoder
 
-- [ ] Test encoding a literal run.
-- [ ] Test encoding a repeat run.
-- [ ] Test encoding mixed literal and repeat runs.
-- [ ] Test encoder does not emit unsupported segment counts.
-- [ ] Implement segment encoder.
-- [ ] Implement frame encoder for 8-bit monochrome.
-- [ ] Implement frame encoder for 16-bit monochrome.
-- [ ] Implement frame encoder for RGB interleaved.
-- [ ] Implement frame encoder for RGB planar.
-- [ ] Wire encoder into `DicomRleLosslessCodec.Encode`.
+- [x] Test encoding a literal run.
+- [x] Test encoding a repeat run.
+- [x] Test encoding mixed literal and repeat runs.
+- [x] Test encoder does not emit unsupported segment counts.
+- [x] Implement segment encoder.
+- [x] Implement frame encoder for 8-bit monochrome.
+- [x] Implement frame encoder for 16-bit monochrome.
+- [x] Implement frame encoder for RGB interleaved.
+- [x] Implement frame encoder for RGB planar.
+- [x] Wire encoder into `DicomRleLosslessCodec.Encode`.
 
 ### 3.4 RLE Verification
 
-- [ ] Test 8-bit raw -> RLE -> raw exact round-trip.
-- [ ] Test 16-bit raw -> RLE -> raw exact round-trip.
-- [ ] Test RGB interleaved raw -> RLE -> raw exact round-trip.
-- [ ] Test RGB planar raw -> RLE -> raw exact round-trip.
-- [ ] Test multi-frame raw -> RLE -> raw exact round-trip.
-- [ ] Port Efferent `RLEissue.cs` behavior into local tests.
-- [ ] Test save and reopen RLE DICOM file.
-- [ ] Mark RLE stub complete and remove stub-only failure expectations.
-- [ ] Update [RLE design](../design/rle-codec-design.md) with implementation notes.
+- [x] Test 8-bit raw -> RLE -> raw exact round-trip.
+- [x] Test 16-bit raw -> RLE -> raw exact round-trip.
+- [x] Test RGB interleaved raw -> RLE -> raw exact round-trip.
+- [x] Test RGB planar raw -> RLE -> raw exact round-trip.
+- [x] Test multi-frame raw -> RLE -> raw exact round-trip.
+- [x] Port Efferent `RLEissue.cs` behavior into local tests.
+- [x] Test save and reopen RLE DICOM file.
+- [x] Mark RLE stub complete and remove stub-only failure expectations.
+- [x] Update [RLE design](../design/rle-codec-design.md) with implementation notes.
 
 ## 4. JPEG Family
 
