@@ -1,12 +1,12 @@
 using FellowOakDicom;
-using FellowOakDicom.PureCodecs.Internal;
+using FellowOakDicom.PureCodecs.Jpeg.Internal;
 
 namespace FellowOakDicom.PureCodecs.Jpeg
 {
-    public sealed class DicomJpegLossless14Codec : UnimplementedDicomCodec
+    public sealed class DicomJpegLossless14Codec : DicomJpegLosslessCodecBase
     {
         public DicomJpegLossless14Codec()
-            : base(DicomTransferSyntax.JPEGProcess14)
+            : base(DicomTransferSyntax.JPEGProcess14, firstOrderPrediction: false)
         {
         }
     }

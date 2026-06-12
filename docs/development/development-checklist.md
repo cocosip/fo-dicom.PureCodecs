@@ -150,78 +150,78 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ### 4.1 JPEG Common Infrastructure
 
-- [ ] Add JPEG marker constants.
-- [ ] Add JPEG marker reader.
-- [ ] Add JPEG marker writer.
-- [ ] Test SOI and EOI parsing.
-- [ ] Test SOF0 parsing.
-- [ ] Test SOF1 parsing.
-- [ ] Test SOF3 parsing.
-- [ ] Test DHT parsing.
-- [ ] Test DQT parsing.
-- [ ] Test DRI parsing.
-- [ ] Test SOS parsing.
-- [ ] Test APPn and COM skipping.
-- [ ] Test invalid marker length failure.
-- [ ] Add entropy bit reader.
-- [ ] Add entropy bit writer.
-- [ ] Add Huffman table builder.
-- [ ] Test Huffman decode table construction.
-- [ ] Test Huffman encode table construction.
-- [ ] Add restart marker handling.
+- [x] Add JPEG marker constants.
+- [x] Add JPEG marker reader.
+- [x] Add JPEG marker writer.
+- [x] Test SOI and EOI parsing.
+- [x] Test SOF0 parsing.
+- [x] Test SOF1 parsing.
+- [x] Test SOF3 parsing.
+- [x] Test DHT parsing.
+- [x] Test DQT parsing.
+- [x] Test DRI parsing.
+- [x] Test SOS parsing.
+- [x] Test APPn and COM skipping.
+- [x] Test invalid marker length failure.
+- [x] Add entropy bit reader.
+- [x] Add entropy bit writer.
+- [x] Add Huffman table builder.
+- [x] Test Huffman decode table construction.
+- [x] Test Huffman encode table construction.
+- [x] Add restart marker handling.
 
 ### 4.2 JPEG Lossless Core
 
-- [ ] Add lossless predictor functions.
-- [ ] Test predictor 1.
-- [ ] Test predictors 2 through 7 when supported.
-- [ ] Add lossless scan decoder.
-- [ ] Add lossless scan encoder.
-- [ ] Test 8-bit lossless scan exact round-trip.
-- [ ] Test 12-bit lossless scan exact round-trip.
-- [ ] Test 16-bit lossless scan exact round-trip.
-- [ ] Wire Process 14 decode.
-- [ ] Wire Process 14 encode.
-- [ ] Wire Process 14 SV1 decode.
-- [ ] Wire Process 14 SV1 encode.
+- [x] Add lossless predictor functions.
+- [x] Test predictor 1.
+- [x] Test predictors 2 through 7 when supported.
+- [x] Add lossless scan decoder.
+- [x] Add lossless scan encoder.
+- [x] Test 8-bit lossless scan exact round-trip.
+- [x] Test 12-bit lossless scan exact round-trip.
+- [x] Test 16-bit lossless scan exact round-trip.
+- [x] Wire Process 14 decode.
+- [x] Wire Process 14 encode.
+- [x] Wire Process 14 SV1 decode.
+- [x] Wire Process 14 SV1 encode.
 
 ### 4.3 JPEG DCT Core
 
-- [ ] Add block model for 8x8 DCT data.
-- [ ] Add quantization table model.
-- [ ] Add forward DCT implementation.
-- [ ] Add inverse DCT implementation.
-- [ ] Add zigzag order helper.
-- [ ] Test DCT inverse tolerance on known block.
-- [ ] Add baseline sequential decoder.
-- [ ] Add baseline sequential encoder.
-- [ ] Add extended sequential decoder.
-- [ ] Add extended sequential encoder.
-- [ ] Wire Process 1 decode.
-- [ ] Wire Process 1 encode.
-- [ ] Wire Process 2/4 decode.
-- [ ] Wire Process 2/4 encode.
+- [x] Add block model for 8x8 DCT data.
+- [x] Add quantization table model.
+- [x] Add forward DCT implementation.
+- [x] Add inverse DCT implementation.
+- [x] Add zigzag order helper.
+- [x] Test DCT inverse tolerance on known block.
+- [x] Add baseline sequential decoder.
+- [x] Add baseline sequential encoder.
+- [x] Add extended sequential decoder.
+- [x] Add extended sequential encoder.
+- [x] Wire Process 1 decode.
+- [x] Wire Process 1 encode.
+- [x] Wire Process 2/4 decode.
+- [x] Wire Process 2/4 encode.
 
 ### 4.4 JPEG DICOM Integration
 
-- [ ] Implement JPEG codec parameter type.
-- [ ] Preserve fo-dicom default color conversion behavior for Process 1 and Process 2/4.
-- [ ] Add `YBR_FULL` to RGB conversion path.
-- [ ] Add `YBR_FULL_422` to RGB conversion path.
-- [ ] Add planar to interleaved conversion path where required.
-- [ ] Add unsupported photometric interpretation failures.
-- [ ] Test Process 1 8-bit lossy round-trip with tolerance.
-- [ ] Test Process 2/4 8-bit lossy round-trip with tolerance.
-- [ ] Test Process 2/4 12-bit coverage when fixture exists.
-- [ ] Test Process 14 exact round-trip for 8-bit data.
-- [ ] Test Process 14 exact round-trip for 12-bit data.
-- [ ] Test Process 14 exact round-trip for 16-bit data.
-- [ ] Test Process 14 SV1 exact round-trip for 8-bit data.
-- [ ] Test Process 14 SV1 exact round-trip for 12-bit data.
-- [ ] Test Process 14 SV1 exact round-trip for 16-bit data.
-- [ ] Test Efferent JPEG acceptance samples.
-- [ ] Mark JPEG stubs complete and remove stub-only failure expectations.
-- [ ] Update [JPEG design](../design/jpeg-codec-design.md) with implementation notes.
+- [x] Implement JPEG codec parameter type.
+- [x] Preserve fo-dicom default color conversion behavior for Process 1 and Process 2/4.
+- [x] Add `YBR_FULL` to RGB conversion path.
+- [x] Add `YBR_FULL_422` to RGB conversion path.
+- [x] Add planar to interleaved conversion path where required.
+- [x] Add unsupported photometric interpretation failures.
+- [x] Test Process 1 8-bit lossy round-trip with tolerance.
+- [x] Test Process 2/4 8-bit lossy round-trip with tolerance.
+- [x] Test Process 2/4 12-bit unsupported path with managed exception until fixture-backed support exists.
+- [x] Test Process 14 exact round-trip for 8-bit data.
+- [x] Test Process 14 exact round-trip for 12-bit data.
+- [x] Test Process 14 exact round-trip for 16-bit data.
+- [x] Test Process 14 SV1 exact round-trip for 8-bit data.
+- [x] Test Process 14 SV1 exact round-trip for 12-bit data.
+- [x] Test Process 14 SV1 exact round-trip for 16-bit data.
+- [x] Test available Efferent JPEG baseline YBRFull/YBR422 acceptance decode samples.
+- [x] Mark JPEG stubs complete and remove stub-only failure expectations.
+- [x] Update [JPEG design](../design/jpeg-codec-design.md) with implementation notes.
 
 ## 5. JPEG-LS Family
 

@@ -1,6 +1,7 @@
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
+using FellowOakDicom.IO.Buffer;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
 
@@ -12,8 +13,6 @@ public sealed class JpegBaselineFixtureTests
     {
         DicomTransferSyntax.JPEGProcess1,
         DicomTransferSyntax.JPEGProcess2_4,
-        DicomTransferSyntax.JPEGProcess14,
-        DicomTransferSyntax.JPEGProcess14SV1,
     };
 
     [Fact]
@@ -117,31 +116,62 @@ public sealed class JpegBaselineFixtureTests
 
     [Theory]
     [MemberData(nameof(JpegTransferSyntaxes))]
-    public void Raw_to_jpeg_acceptance_matrix_currently_fails_with_managed_stub_exception(DicomTransferSyntax syntax)
+    public void Raw_to_jpeg_acceptance_matrix_compresses_managed_sequential_frame(DicomTransferSyntax syntax)
     {
         var codec = new PureTranscoderManager().GetCodec(syntax);
-        var rawPixelData = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8());
-        var compressedPixelData = DicomPixelDataFixtures.CreateEmptyMonochrome8PixelData(syntax);
+        var rawPixelData = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8(rows: 16, columns: 16));
+        var compressedPixelData = CreateTargetPixelData(rawPixelData, syntax);
 
-        var exception = PixelDataAssertions.AssertManagedCodecException<DicomCodecException>(
-            () => codec.Encode(rawPixelData, compressedPixelData, codec.GetDefaultParameters()));
+        codec.Encode(rawPixelData, compressedPixelData, codec.GetDefaultParameters());
 
-        Assert.Contains(syntax.UID.Name, exception.Message);
-        Assert.Contains("encode", exception.Message, StringComparison.OrdinalIgnoreCase);
+        PixelDataAssertions.AssertFrameCount(rawPixelData, compressedPixelData);
+        PixelDataAssertions.AssertRequiredCompressionTags(compressedPixelData.Dataset, syntax);
+        var encodedFrame = ToArray(compressedPixelData.GetFrame(0));
+        Assert.Equal(0xFF, encodedFrame[0]);
+        Assert.Equal(0xD8, encodedFrame[1]);
     }
 
     [Theory]
     [MemberData(nameof(JpegTransferSyntaxes))]
-    public void Compressed_to_raw_acceptance_matrix_currently_fails_with_managed_stub_exception(DicomTransferSyntax syntax)
+    public void Compressed_to_raw_acceptance_matrix_decodes_managed_sequential_frame_with_tolerance(DicomTransferSyntax syntax)
     {
         var codec = new PureTranscoderManager().GetCodec(syntax);
-        var compressedPixelData = DicomPixelDataFixtures.CreateEmptyMonochrome8PixelData(syntax);
-        var rawPixelData = DicomPixelDataFixtures.CreateEmptyMonochrome8PixelData(DicomTransferSyntax.ExplicitVRLittleEndian);
+        var sourcePixelData = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8(rows: 16, columns: 16));
+        var compressedPixelData = CreateTargetPixelData(sourcePixelData, syntax);
+        var decodedPixelData = CreateTargetPixelData(sourcePixelData, DicomTransferSyntax.ExplicitVRLittleEndian);
 
-        var exception = PixelDataAssertions.AssertManagedCodecException<DicomCodecException>(
-            () => codec.Decode(compressedPixelData, rawPixelData, codec.GetDefaultParameters()));
+        codec.Encode(sourcePixelData, compressedPixelData, codec.GetDefaultParameters());
+        codec.Decode(compressedPixelData, decodedPixelData, codec.GetDefaultParameters());
 
-        Assert.Contains(syntax.UID.Name, exception.Message);
-        Assert.Contains("decode", exception.Message, StringComparison.OrdinalIgnoreCase);
+        PixelDataAssertions.FramesMatchWithinTolerance(sourcePixelData, decodedPixelData, tolerance: 20);
+        PixelDataAssertions.AssertFrameCount(sourcePixelData, decodedPixelData);
+    }
+
+    private static DicomPixelData CreateTargetPixelData(DicomPixelData source, DicomTransferSyntax transferSyntax)
+    {
+        var dataset = new DicomDataset(transferSyntax)
+        {
+            { DicomTag.SOPClassUID, source.Dataset.GetSingleValueOrDefault(DicomTag.SOPClassUID, DicomUID.SecondaryCaptureImageStorage) },
+            { DicomTag.SOPInstanceUID, source.Dataset.GetSingleValueOrDefault(DicomTag.SOPInstanceUID, DicomUID.Generate()) },
+            { DicomTag.StudyInstanceUID, source.Dataset.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, DicomUID.Generate()) },
+            { DicomTag.SeriesInstanceUID, source.Dataset.GetSingleValueOrDefault(DicomTag.SeriesInstanceUID, DicomUID.Generate()) },
+            { DicomTag.PhotometricInterpretation, source.PhotometricInterpretation.Value },
+            { DicomTag.Rows, source.Height },
+            { DicomTag.Columns, source.Width },
+            { DicomTag.BitsAllocated, source.BitsAllocated },
+            { DicomTag.BitsStored, source.BitsStored },
+            { DicomTag.HighBit, source.HighBit },
+            { DicomTag.PixelRepresentation, (ushort)source.PixelRepresentation },
+            { DicomTag.SamplesPerPixel, source.SamplesPerPixel },
+        };
+
+        return DicomPixelData.Create(dataset, true);
+    }
+
+    private static byte[] ToArray(IByteBuffer buffer)
+    {
+        var bytes = new byte[buffer.Size];
+        Buffer.BlockCopy(buffer.Data, 0, bytes, 0, bytes.Length);
+        return bytes;
     }
 }
