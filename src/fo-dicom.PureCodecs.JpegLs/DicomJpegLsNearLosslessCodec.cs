@@ -1,9 +1,9 @@
 using FellowOakDicom;
-using FellowOakDicom.PureCodecs.Internal;
+using FellowOakDicom.PureCodecs.JpegLs.Internal;
 
 namespace FellowOakDicom.PureCodecs.JpegLs
 {
-    public sealed class DicomJpegLsNearLosslessCodec : UnimplementedDicomCodec
+    public sealed class DicomJpegLsNearLosslessCodec : DicomJpegLsCodecBase
     {
         public DicomJpegLsNearLosslessCodec()
             : base(DicomTransferSyntax.JPEGLSNearLossless)

@@ -227,52 +227,52 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ### 5.1 JPEG-LS Common Infrastructure
 
-- [ ] Add JPEG-LS marker constants.
-- [ ] Add JPEG-LS marker reader.
-- [ ] Add JPEG-LS marker writer.
-- [ ] Test SOI and EOI parsing.
-- [ ] Test SOF55 parsing.
-- [ ] Test SOS parsing.
-- [ ] Test LSE preset coding parameter parsing.
-- [ ] Test APPn and COM skipping.
-- [ ] Test invalid marker length failure.
-- [ ] Add JPEG-LS frame info model.
-- [ ] Add JPEG-LS preset coding parameter model.
+- [x] Add JPEG-LS marker constants.
+- [x] Add JPEG-LS marker reader.
+- [x] Add JPEG-LS marker writer.
+- [x] Test SOI and EOI parsing.
+- [x] Test SOF55 parsing.
+- [x] Test SOS parsing.
+- [x] Test LSE preset coding parameter parsing.
+- [x] Test APPn and COM skipping.
+- [x] Test invalid marker length failure.
+- [x] Add JPEG-LS frame info model.
+- [x] Add JPEG-LS preset coding parameter model.
 
 ### 5.2 JPEG-LS Coding Core
 
-- [ ] Add context model.
-- [ ] Add Golomb code reader.
-- [ ] Add Golomb code writer.
-- [ ] Test Golomb encode/decode.
-- [ ] Add regular mode decoder.
-- [ ] Add regular mode encoder.
-- [ ] Add run mode decoder.
-- [ ] Add run mode encoder.
-- [ ] Test regular mode sample reconstruction.
-- [ ] Test run mode sample reconstruction.
-- [ ] Add near-lossless sample clamping logic.
-- [ ] Test near-lossless tolerance helper.
+- [x] Add context model.
+- [x] Add Golomb code reader.
+- [x] Add Golomb code writer.
+- [x] Test Golomb encode/decode.
+- [x] Add regular mode decoder.
+- [x] Add regular mode encoder.
+- [x] Add run mode decoder.
+- [x] Add run mode encoder.
+- [x] Test regular mode sample reconstruction.
+- [x] Test run mode sample reconstruction.
+- [x] Add near-lossless sample clamping logic.
+- [x] Test near-lossless tolerance helper.
 
 ### 5.3 JPEG-LS DICOM Integration
 
-- [ ] Implement JPEG-LS codec parameter type.
-- [ ] Implement interleave mode mapping.
-- [ ] Implement lossless decode.
-- [ ] Implement lossless encode.
-- [ ] Implement near-lossless decode.
-- [ ] Implement near-lossless encode.
-- [ ] Add unsupported interleave failures.
-- [ ] Add unsupported photometric interpretation failures.
-- [ ] Test lossless 8-bit exact round-trip.
-- [ ] Test lossless 16-bit exact round-trip.
-- [ ] Test lossless RGB exact round-trip where supported.
-- [ ] Test near-lossless 8-bit tolerance round-trip.
-- [ ] Test near-lossless 16-bit tolerance round-trip.
-- [ ] Test multi-frame JPEG-LS data.
-- [ ] Test Efferent JPEG-LS acceptance samples.
-- [ ] Mark JPEG-LS stubs complete and remove stub-only failure expectations.
-- [ ] Update [JPEG-LS design](../design/jpegls-codec-design.md) with implementation notes.
+- [x] Implement JPEG-LS codec parameter type.
+- [x] Implement interleave mode mapping.
+- [x] Implement lossless decode.
+- [x] Implement lossless encode.
+- [x] Implement near-lossless decode.
+- [x] Implement near-lossless encode.
+- [x] Add unsupported interleave failures.
+- [x] Add unsupported photometric interpretation failures.
+- [x] Test lossless 8-bit exact round-trip.
+- [x] Test lossless 16-bit exact round-trip.
+- [x] Test lossless RGB exact round-trip where supported.
+- [x] Test near-lossless 8-bit tolerance round-trip.
+- [x] Test near-lossless 16-bit tolerance round-trip.
+- [x] Test multi-frame JPEG-LS data.
+- [x] Test Efferent JPEG-LS acceptance samples.
+- [x] Mark JPEG-LS stubs complete and remove stub-only failure expectations.
+- [x] Update [JPEG-LS design](../design/jpegls-codec-design.md) with implementation notes.
 
 ## 6. JPEG 2000 and HTJ2K Family
 

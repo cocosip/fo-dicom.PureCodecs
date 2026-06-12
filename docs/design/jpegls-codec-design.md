@@ -219,3 +219,15 @@ JPEG-LS is complete when:
 - Near-lossless paths pass allowed-error tolerance tests.
 - Efferent JPEG-LS acceptance samples transcode, inverse transcode, and render.
 - Invalid JPEG-LS streams fail with managed exceptions.
+
+## Implementation Notes
+
+The current implementation is fully managed and lives in `fo-dicom.PureCodecs.JpegLs`.
+
+- `DicomJpegLsLosslessCodec` and `DicomJpegLsNearLosslessCodec` now inherit the managed JPEG-LS codec base instead of the unimplemented stub.
+- `DicomJpegLsParams` exposes `AllowedError`, `InterleaveMode`, and `ColorTransform` with defaults matching `fo-dicom.Codecs` where applicable.
+- The encoder emits one JPEG-LS codestream per DICOM frame with SOI, SOF55, LSE preset coding parameters, SOS, scan data, and EOI.
+- The scan codec implements regular mode, run mode, Golomb coding, context modeling, default JPEG-LS thresholds, and near-lossless sample reconstruction.
+- The internal encoder currently emits non-interleaved scan data. The decoder supports non-interleaved and line-interleaved streams; Efferent JPEG-LS acceptance samples use line interleave.
+- Line interleave follows the CharLS state model: regular contexts and run interruption contexts are shared for the scan, while run index and left-edge line state are maintained per component.
+- Unsupported sample interleave, unsupported photometric interpretations, unsupported bit depths, invalid NEAR values, and malformed marker streams fail with managed `DicomCodecException`.
