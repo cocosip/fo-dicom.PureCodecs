@@ -14,12 +14,9 @@ public sealed class JpegLsExternalAcceptanceTests
     [InlineData("JPEG-LS near-lossless acceptance sample")]
     public void Decode_efferent_acceptance_jpeg_ls_samples_when_available(string fixtureName)
     {
-        var fixture = ExternalFixtureCatalog.Resolve().AcceptanceFixtures.Single(fixture => fixture.Name == fixtureName);
-        if (!File.Exists(fixture.Path))
-        {
-            return;
-        }
-
+        var catalog = ExternalFixtureCatalog.Resolve();
+        var fixture = catalog.AcceptanceFixtures.Single(fixture => fixture.Name == fixtureName);
+        Assert.True(File.Exists(fixture.Path), fixture.Path);
         var file = DicomFile.Open(fixture.Path);
         var compressedPixelData = DicomPixelData.Create(file.Dataset);
         var rawPixelData = CreateRawTarget(compressedPixelData);

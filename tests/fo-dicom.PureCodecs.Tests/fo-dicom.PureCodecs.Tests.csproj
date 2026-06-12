@@ -22,4 +22,8 @@
     <ProjectReference Include="..\..\src\fo-dicom.PureCodecs.JpegLs\fo-dicom.PureCodecs.JpegLs.csproj" />
     <ProjectReference Include="..\..\src\fo-dicom.PureCodecs.Rle\fo-dicom.PureCodecs.Rle.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="TestSupport\Fixtures\**\*.dcm" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -278,41 +278,41 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ### 6.1 Codestream Infrastructure
 
-- [ ] Add JPEG 2000 marker constants.
-- [ ] Add codestream marker reader.
-- [ ] Add codestream marker writer.
-- [ ] Test SOC parsing.
-- [ ] Test SIZ parsing.
-- [ ] Test COD parsing.
-- [ ] Test COC parsing and component-level COD override inheritance.
-- [ ] Test QCD parsing.
-- [ ] Test QCC parsing and component-level QCD override inheritance.
-- [ ] Test POC parsing and progression order change validation.
-- [ ] Test RGN parsing and explicitly document unsupported ROI behavior.
-- [ ] Test COM parsing and safe preservation or rejection behavior.
-- [ ] Test SOT parsing.
-- [ ] Test SOD parsing.
-- [ ] Test EOC parsing.
-- [ ] Test PLT parsing or explicit managed rejection.
-- [ ] Test PPM/PPT parsing or explicit managed rejection.
-- [ ] Test SOP/EPH parsing or explicit managed rejection.
-- [ ] Detect raw J2K codestream frames.
-- [ ] Detect JP2 wrapper frames and fail explicitly unless supported.
-- [ ] Test invalid marker length failure.
-- [ ] Test multi-tile codestream geometry.
-- [ ] Test multi-tile-part `Psot`, `TPsot`, and `TNsot` validation.
-- [ ] Add image model.
-- [ ] Add tile model.
-- [ ] Add component model.
-- [ ] Add precinct model.
-- [ ] Add code-block model.
-- [ ] Add packet model.
-- [ ] Add progression order iterator.
-- [ ] Test LRCP progression when supported.
-- [ ] Test RLCP progression when supported.
-- [ ] Test RPCL progression for HTJ2K Lossless RPCL.
-- [ ] Test PCRL progression when supported.
-- [ ] Test CPRL progression when supported.
+- [x] Add JPEG 2000 marker constants.
+- [x] Add codestream marker reader.
+- [x] Add codestream marker writer.
+- [x] Test SOC parsing.
+- [x] Test SIZ parsing.
+- [x] Test COD parsing.
+- [x] Test COC parsing and component-level COD override inheritance.
+- [x] Test QCD parsing.
+- [x] Test QCC parsing and component-level QCD override inheritance.
+- [x] Test POC parsing and progression order change validation.
+- [x] Test RGN parsing and explicitly document unsupported ROI behavior.
+- [x] Test COM parsing and safe preservation or rejection behavior.
+- [x] Test SOT parsing.
+- [x] Test SOD parsing.
+- [x] Test EOC parsing.
+- [x] Test PLT parsing or explicit managed rejection.
+- [x] Test PPM/PPT parsing or explicit managed rejection.
+- [x] Test SOP/EPH parsing or explicit managed rejection.
+- [x] Detect raw J2K codestream frames.
+- [x] Detect JP2 wrapper frames and fail explicitly unless supported.
+- [x] Test invalid marker length failure.
+- [x] Test multi-tile codestream geometry.
+- [x] Test multi-tile-part `Psot`, `TPsot`, and `TNsot` validation.
+- [x] Add image model.
+- [x] Add tile model.
+- [x] Add component model.
+- [x] Add precinct model.
+- [x] Add code-block model.
+- [x] Add packet model.
+- [x] Add progression order iterator.
+- [x] Test LRCP progression when supported.
+- [x] Test RLCP progression when supported.
+- [x] Test RPCL progression for HTJ2K Lossless RPCL.
+- [x] Test PCRL progression when supported.
+- [x] Test CPRL progression when supported.
 
 ### 6.2 Transform and Quantization
 

@@ -13,7 +13,9 @@ public sealed class JpegExternalAcceptanceTests
     [InlineData("JPEG baseline YBR 4:2:2 acceptance sample")]
     public void Process1_decodes_efferent_acceptance_jpeg_samples(string fixtureName)
     {
-        var fixture = ExternalFixtureCatalog.Resolve().AcceptanceFixtures.Single(fixture => fixture.Name == fixtureName);
+        var catalog = ExternalFixtureCatalog.Resolve();
+        var fixture = catalog.AcceptanceFixtures.Single(fixture => fixture.Name == fixtureName);
+        Assert.True(File.Exists(fixture.Path), fixture.Path);
         var file = DicomFile.Open(fixture.Path);
         var compressedPixelData = DicomPixelData.Create(file.Dataset);
         var rawPixelData = CreateRawTarget(compressedPixelData);
