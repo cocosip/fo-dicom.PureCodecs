@@ -240,9 +240,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         private static void ValidatePixelData(DicomPixelData pixelData, byte[] frame)
         {
-            if (pixelData.SamplesPerPixel != 1)
+            if (pixelData.SamplesPerPixel != 1 && pixelData.SamplesPerPixel != 3)
             {
-                throw Jpeg2000Binary.CreateException("HTJ2K codec currently supports only monochrome frames.");
+                throw Jpeg2000Binary.CreateException("HTJ2K codec supports only monochrome or RGB frames.");
             }
 
             if (pixelData.BitsAllocated != 8 && pixelData.BitsAllocated != 16)

@@ -29,17 +29,17 @@ public sealed class JpegLosslessCodecRoundTripTests
     }
 
     [Fact]
-    public void Process14_rejects_rgb_until_dicom_integration_supports_components()
+    public void Process14_round_trip_preserves_rgb_interleaved_samples()
     {
         var codec = new DicomJpegLossless14Codec();
         var rawPixelData = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved());
         var compressedPixelData = CreateTargetPixelData(rawPixelData, DicomTransferSyntax.JPEGProcess14);
+        var decodedPixelData = CreateTargetPixelData(rawPixelData, DicomTransferSyntax.ExplicitVRLittleEndian);
 
-        var exception = Assert.Throws<DicomCodecException>(
-            () => codec.Encode(rawPixelData, compressedPixelData, codec.GetDefaultParameters()));
+        codec.Encode(rawPixelData, compressedPixelData, codec.GetDefaultParameters());
+        codec.Decode(compressedPixelData, decodedPixelData, codec.GetDefaultParameters());
 
-        Assert.Contains("JPEG", exception.Message);
-        Assert.Contains("SamplesPerPixel", exception.Message);
+        PixelDataAssertions.FramesMatchExactly(rawPixelData, decodedPixelData);
     }
 
     private static void AssertRoundTrip(IDicomCodec codec, DicomTransferSyntax syntax, int bitsAllocated)

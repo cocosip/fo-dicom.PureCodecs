@@ -431,19 +431,19 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ## 7. Full Compatibility Matrix
 
-- [ ] Run `CanTranscode` matrix for all phase 1 transfer syntaxes.
-- [ ] Run raw 8-bit -> each codec -> raw.
-- [ ] Run raw 16-bit -> each supported codec -> raw.
-- [ ] Run RGB -> each supported codec -> raw.
-- [ ] Run multi-frame -> each supported codec -> raw.
-- [ ] Run Efferent unit compatibility tests.
-- [ ] Run Efferent acceptance transcode tests.
-- [ ] Run Efferent acceptance inverse transcode tests.
-- [ ] Run render tests where rendering dependencies are available.
-- [ ] Compare lossless outputs with exact byte equality after decode.
-- [ ] Compare lossy outputs with agreed tolerance after decode.
-- [ ] Verify invalid streams throw managed exceptions.
-- [ ] Document unsupported edge cases before release.
+- [x] Run `CanTranscode` matrix for all phase 1 transfer syntaxes.
+- [x] Run raw 8-bit -> each codec -> raw.
+- [x] Run raw 16-bit -> each supported codec -> raw.
+- [x] Run RGB -> each supported codec -> raw.
+- [x] Run multi-frame -> each supported codec -> raw.
+- [x] Run Efferent unit compatibility tests.
+- [x] Run Efferent acceptance transcode tests.
+- [x] Run Efferent acceptance inverse transcode tests.
+- [x] Run render tests where rendering dependencies are available.
+- [x] Compare lossless outputs with exact byte equality after decode.
+- [x] Compare lossy outputs with agreed tolerance after decode.
+- [x] Verify invalid streams throw managed exceptions.
+- [x] Document unsupported edge cases before release.
 
 ## 8. Packaging and Consumer Validation
 

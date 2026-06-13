@@ -17,26 +17,55 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return new JpegLosslessScanCodec(CreateDefaultHuffmanTable());
         }
 
+        internal static JpegHuffmanTable CreateDefaultHuffmanTableForFrame()
+        {
+            return CreateDefaultHuffmanTable();
+        }
+
+        public static JpegLosslessScanCodec Create(JpegHuffmanTable table)
+        {
+            return new JpegLosslessScanCodec(table ?? throw new ArgumentNullException(nameof(table)));
+        }
+
         public byte[] Encode(int[] samples, int width, int height, int samplePrecision, int selectionValue)
         {
-            ValidateShape(samples, width, height, samplePrecision);
+            return EncodeInterleaved(samples, width, height, componentCount: 1, samplePrecision, selectionValue);
+        }
+
+        public byte[] EncodeInterleaved(
+            int[] samples,
+            int width,
+            int height,
+            int componentCount,
+            int samplePrecision,
+            int selectionValue)
+        {
+            ValidateShape(samples, width, height, samplePrecision, width * height * componentCount);
+            ValidateComponentCount(componentCount);
+            if (samples.Length != width * height * componentCount)
+            {
+                throw CreateException($"JPEG lossless scan sample count {samples.Length} does not match dimensions {width}x{height}x{componentCount}.");
+            }
 
             var writer = new JpegEntropyBitWriter();
             for (var y = 0; y < height; y++)
             {
                 for (var x = 0; x < width; x++)
                 {
-                    var index = y * width + x;
-                    var sample = samples[index];
-                    ValidateSample(sample, samplePrecision);
-
-                    var prediction = Predict(samples, width, x, y, samplePrecision, selectionValue);
-                    var difference = sample - prediction;
-                    var category = GetCategory(difference);
-                    _table.Encode(writer, category);
-                    if (category > 0)
+                    for (var component = 0; component < componentCount; component++)
                     {
-                        writer.WriteBits(EncodeMagnitude(difference, category), category);
+                        var index = GetInterleavedIndex(width, componentCount, x, y, component);
+                        var sample = samples[index];
+                        ValidateSample(sample, samplePrecision);
+
+                        var prediction = PredictInterleaved(samples, width, componentCount, x, y, component, samplePrecision, selectionValue);
+                        var difference = sample - prediction;
+                        var category = GetCategory(difference);
+                        _table.Encode(writer, category);
+                        if (category > 0)
+                        {
+                            writer.WriteBits(EncodeMagnitude(difference, category), category);
+                        }
                     }
                 }
             }
@@ -46,32 +75,47 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
         public int[] Decode(byte[] encoded, int width, int height, int samplePrecision, int selectionValue)
         {
+            return DecodeInterleaved(encoded, width, height, componentCount: 1, samplePrecision, selectionValue);
+        }
+
+        public int[] DecodeInterleaved(
+            byte[] encoded,
+            int width,
+            int height,
+            int componentCount,
+            int samplePrecision,
+            int selectionValue)
+        {
             if (encoded == null)
             {
                 throw new ArgumentNullException(nameof(encoded));
             }
 
-            ValidateShape(new int[width * height], width, height, samplePrecision);
+            ValidateShape(new int[width * height], width, height, samplePrecision, width * height);
+            ValidateComponentCount(componentCount);
 
-            var samples = new int[width * height];
+            var samples = new int[width * height * componentCount];
             var reader = new JpegEntropyBitReader(encoded);
             for (var y = 0; y < height; y++)
             {
                 for (var x = 0; x < width; x++)
                 {
-                    var category = _table.Decode(reader);
-                    if (category < 0 || category > samplePrecision + 1)
+                    for (var component = 0; component < componentCount; component++)
                     {
-                        throw CreateException($"JPEG lossless scan category {category} is outside the supported range.");
-                    }
+                        var category = _table.Decode(reader);
+                        if (category < 0 || category > samplePrecision + 1)
+                        {
+                            throw CreateException($"JPEG lossless scan category {category} is outside the supported range.");
+                        }
 
-                    var difference = category == 0
-                        ? 0
-                        : DecodeMagnitude(reader.ReadBits(category), category);
-                    var prediction = Predict(samples, width, x, y, samplePrecision, selectionValue);
-                    var sample = prediction + difference;
-                    ValidateSample(sample, samplePrecision);
-                    samples[y * width + x] = sample;
+                        var difference = category == 0
+                            ? 0
+                            : DecodeMagnitude(reader.ReadBits(category), category);
+                        var prediction = PredictInterleaved(samples, width, componentCount, x, y, component, samplePrecision, selectionValue);
+                        var sample = prediction + difference;
+                        ValidateSample(sample, samplePrecision);
+                        samples[GetInterleavedIndex(width, componentCount, x, y, component)] = sample;
+                    }
                 }
             }
 
@@ -98,6 +142,32 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             var above = y > 0 ? samples[(y - 1) * width + x] : 0;
             var upperLeft = x > 0 && y > 0 ? samples[(y - 1) * width + x - 1] : 0;
             return JpegLosslessPredictor.PredictSample(selectionValue, samplePrecision, x, y, left, above, upperLeft);
+        }
+
+        private static int PredictInterleaved(
+            int[] samples,
+            int width,
+            int componentCount,
+            int x,
+            int y,
+            int component,
+            int samplePrecision,
+            int selectionValue)
+        {
+            if (componentCount == 1)
+            {
+                return Predict(samples, width, x, y, samplePrecision, selectionValue);
+            }
+
+            var left = x > 0 ? samples[GetInterleavedIndex(width, componentCount, x - 1, y, component)] : 0;
+            var above = y > 0 ? samples[GetInterleavedIndex(width, componentCount, x, y - 1, component)] : 0;
+            var upperLeft = x > 0 && y > 0 ? samples[GetInterleavedIndex(width, componentCount, x - 1, y - 1, component)] : 0;
+            return JpegLosslessPredictor.PredictSample(selectionValue, samplePrecision, x, y, left, above, upperLeft);
+        }
+
+        private static int GetInterleavedIndex(int width, int componentCount, int x, int y, int component)
+        {
+            return ((y * width) + x) * componentCount + component;
         }
 
         private static int GetCategory(int difference)
@@ -134,7 +204,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return encoded - ((1 << category) - 1);
         }
 
-        private static void ValidateShape(int[] samples, int width, int height, int samplePrecision)
+        private static void ValidateShape(int[] samples, int width, int height, int samplePrecision, int expectedLength)
         {
             if (samples == null)
             {
@@ -156,9 +226,17 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 throw CreateException($"JPEG lossless scan sample precision {samplePrecision} is not supported.");
             }
 
-            if (samples.Length != width * height)
+            if (samples.Length != expectedLength)
             {
-                throw CreateException($"JPEG lossless scan sample count {samples.Length} does not match dimensions {width}x{height}.");
+                throw CreateException($"JPEG lossless scan sample count {samples.Length} does not match expected length {expectedLength}.");
+            }
+        }
+
+        private static void ValidateComponentCount(int componentCount)
+        {
+            if (componentCount != 1 && componentCount != 3)
+            {
+                throw CreateException($"JPEG lossless scan component count {componentCount} is not supported.");
             }
         }
 
