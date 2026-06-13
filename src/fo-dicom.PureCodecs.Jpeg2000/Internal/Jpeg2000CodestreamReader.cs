@@ -86,6 +86,37 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             throw Jpeg2000Binary.CreateException("JPEG 2000 tile data was not terminated by EOC.");
         }
 
+        public byte[] ReadTileData(Jpeg2000StartOfTilePart sot)
+        {
+            if (sot == null)
+            {
+                throw new ArgumentNullException(nameof(sot));
+            }
+
+            if (sot.TilePartLength == 0)
+            {
+                return ReadTileDataUntilEoc();
+            }
+
+            const int sotMarkerAndSegmentLength = 12;
+            const int sodMarkerLength = 2;
+            var tileDataLength = checked((int)sot.TilePartLength - sotMarkerAndSegmentLength - sodMarkerLength);
+            if (tileDataLength < 0)
+            {
+                throw Jpeg2000Binary.CreateException("JPEG 2000 SOT tile-part length is invalid.");
+            }
+
+            if (_offset + tileDataLength > _data.Length)
+            {
+                throw Jpeg2000Binary.CreateException("JPEG 2000 SOT tile-part length exceeds the input buffer.");
+            }
+
+            var payload = new byte[tileDataLength];
+            Buffer.BlockCopy(_data, _offset, payload, 0, payload.Length);
+            _offset += tileDataLength;
+            return payload;
+        }
+
         public static bool IsRawCodestream(byte[] data)
         {
             return data != null

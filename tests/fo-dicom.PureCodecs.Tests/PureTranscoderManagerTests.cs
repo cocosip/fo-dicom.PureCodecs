@@ -27,6 +27,16 @@ public sealed class PureTranscoderManagerTests
         { DicomTransferSyntax.HTJ2K, typeof(DicomHtJpeg2000LossyCodec) },
     };
 
+    public static TheoryData<DicomTransferSyntax> ExplicitlyUnsupportedJpeg2000Syntaxes => new()
+    {
+        DicomTransferSyntax.JPEG2000Part2MultiComponentLosslessOnly,
+        DicomTransferSyntax.JPEG2000Part2MultiComponent,
+        DicomTransferSyntax.JPIPReferenced,
+        DicomTransferSyntax.JPIPReferencedDeflate,
+        DicomTransferSyntax.JPIPHTJ2KReferenced,
+        DicomTransferSyntax.JPIPHTJ2KReferencedDeflate,
+    };
+
     [Fact]
     public void Constructor_creates_transcoder_manager()
     {
@@ -76,4 +86,25 @@ public sealed class PureTranscoderManagerTests
         Assert.True(manager.CanTranscode(syntax, DicomTransferSyntax.ExplicitVRLittleEndian));
     }
 
+    [Theory]
+    [MemberData(nameof(ExplicitlyUnsupportedJpeg2000Syntaxes))]
+    public void Phase_1_excludes_part2_multicomponent_and_jpip_transfer_syntaxes(DicomTransferSyntax syntax)
+    {
+        var manager = new PureTranscoderManager();
+
+        Assert.False(manager.HasCodec(syntax));
+        Assert.False(manager.CanTranscode(DicomTransferSyntax.ExplicitVRLittleEndian, syntax));
+        Assert.False(manager.CanTranscode(syntax, DicomTransferSyntax.ExplicitVRLittleEndian));
+    }
+
+    [Theory]
+    [MemberData(nameof(ExplicitlyUnsupportedJpeg2000Syntaxes))]
+    public void Phase_1_exclusions_apply_through_transcoder_manager_interface(DicomTransferSyntax syntax)
+    {
+        ITranscoderManager manager = new PureTranscoderManager();
+
+        Assert.False(manager.HasCodec(syntax));
+        Assert.False(manager.CanTranscode(DicomTransferSyntax.ExplicitVRLittleEndian, syntax));
+        Assert.False(manager.CanTranscode(syntax, DicomTransferSyntax.ExplicitVRLittleEndian));
+    }
 }

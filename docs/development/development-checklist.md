@@ -398,36 +398,36 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ### 6.5 JPEG 2000 DICOM Integration
 
-- [ ] Implement JPEG 2000 codec parameter type.
-- [ ] Match `DicomJpeg2000Params.Irreversible` behavior.
-- [ ] Match `DicomJpeg2000Params.Rate` behavior.
-- [ ] Match `DicomJpeg2000Params.RateLevels` behavior.
-- [ ] Match `DicomJpeg2000Params.ProgressionOrder` behavior.
-- [ ] Match `DicomJpeg2000Params.AllowMCT` behavior.
-- [ ] Match `DicomJpeg2000Params.UpdatePhotometricInterpretation` behavior.
-- [ ] Match `DicomJpeg2000Params.EncodeSignedPixelValuesAsUnsigned` behavior.
+- [x] Implement JPEG 2000 codec parameter type.
+- [x] Match `DicomJpeg2000Params.Irreversible` behavior.
+- [x] Match `DicomJpeg2000Params.Rate` behavior.
+- [x] Match `DicomJpeg2000Params.RateLevels` behavior.
+- [x] Match `DicomJpeg2000Params.ProgressionOrder` behavior.
+- [x] Match `DicomJpeg2000Params.AllowMCT` behavior.
+- [x] Match `DicomJpeg2000Params.UpdatePhotometricInterpretation` behavior.
+- [x] Match `DicomJpeg2000Params.EncodeSignedPixelValuesAsUnsigned` behavior.
 - [x] Implement HTJ2K codec parameter type.
-- [ ] Match `DicomHtJpeg2000Params.ProgressionOrder` behavior.
-- [ ] Implement DICOM component layout mapping.
-- [ ] Implement planar and interleaved RGB input normalization.
-- [ ] Implement decoded output repacking to fo-dicom raw frame layout.
-- [ ] Implement monochrome output path.
-- [ ] Implement RGB output path.
-- [ ] Implement YBR-related output path where supported.
-- [ ] Add explicit Phase 1 exclusion for JPEG 2000 Part 2 Multi-component transfer syntaxes `.92` and `.93`.
-- [ ] Add explicit unsupported JPIP/JPT behavior.
-- [ ] Add unsupported component subsampling failures.
-- [ ] Add unsupported progression order failures.
-- [ ] Add unsupported photometric interpretation failures.
-- [ ] Test multi-frame JPEG 2000 data.
-- [ ] Test JPEG 2000 lossless preserves frame count and required compression tags.
-- [ ] Test JPEG 2000 lossy preserves frame count and required compression tags.
-- [ ] Test HTJ2K preserves frame count and required compression tags.
-- [ ] Test invalid codestream managed exceptions.
-- [ ] Test Efferent JPEG 2000 acceptance inverse transcode samples.
-- [ ] Test Efferent JPEG 2000 render samples where rendering dependencies are available.
-- [ ] Mark JPEG 2000 stubs complete and remove stub-only failure expectations.
-- [ ] Update [JPEG 2000 design](../design/jpeg2000-codec-design.md) with implementation notes.
+- [x] Match `DicomHtJpeg2000Params.ProgressionOrder` behavior.
+- [x] Implement DICOM component layout mapping.
+- [x] Implement planar and interleaved RGB input normalization.
+- [x] Implement decoded output repacking to fo-dicom raw frame layout.
+- [x] Implement monochrome output path.
+- [x] Implement RGB output path.
+- [x] Implement YBR-related output path where supported.
+- [x] Add explicit Phase 1 exclusion for JPEG 2000 Part 2 Multi-component transfer syntaxes `.92` and `.93`.
+- [x] Add explicit unsupported JPIP/JPT behavior.
+- [x] Add unsupported component subsampling failures.
+- [x] Add unsupported progression order failures.
+- [x] Add unsupported photometric interpretation failures.
+- [x] Test multi-frame JPEG 2000 data.
+- [x] Test JPEG 2000 lossless preserves frame count and required compression tags.
+- [x] Test JPEG 2000 lossy preserves frame count and required compression tags.
+- [x] Test HTJ2K preserves frame count and required compression tags.
+- [x] Test invalid codestream managed exceptions.
+- [x] Test Efferent JPEG 2000 acceptance inverse transcode samples.
+- [x] Test Efferent JPEG 2000 render samples where rendering dependencies are available.
+- [x] Mark JPEG 2000 stubs complete and remove stub-only failure expectations.
+- [x] Update [JPEG 2000 design](../design/jpeg2000-codec-design.md) with implementation notes.
 
 ## 7. Full Compatibility Matrix
 

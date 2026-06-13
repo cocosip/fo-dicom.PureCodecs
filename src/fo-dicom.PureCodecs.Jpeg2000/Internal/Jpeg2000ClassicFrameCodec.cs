@@ -9,7 +9,15 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
     {
         private static readonly byte[] PayloadMagic = { (byte)'P', (byte)'C', (byte)'J', (byte)'2', 0x01 };
 
-        public byte[] EncodeFrame(DicomPixelData pixelData, byte[] frame, bool irreversible, int qualityTolerance)
+        public byte[] EncodeFrame(
+            DicomPixelData pixelData,
+            byte[] frame,
+            bool irreversible,
+            int qualityTolerance,
+            Jpeg2000ProgressionOrder progressionOrder,
+            int layerCount,
+            bool usesMultipleComponentTransform,
+            bool encodeSignedPixelValuesAsUnsigned)
         {
             ValidatePixelData(pixelData, frame);
 
@@ -17,17 +25,17 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var height = pixelData.Height;
             var bitsAllocated = pixelData.BitsAllocated;
             var bitsStored = pixelData.BitsStored;
-            var isSigned = pixelData.PixelRepresentation == PixelRepresentation.Signed;
+            var isSigned = pixelData.PixelRepresentation == PixelRepresentation.Signed && !encodeSignedPixelValuesAsUnsigned;
             var samplesPerPixel = pixelData.SamplesPerPixel;
             var encodedFrame = irreversible && bitsAllocated == 8
                 ? QuantizeLossy(frame, qualityTolerance)
                 : Copy(frame);
 
-            var payload = EncodePayload(width, height, bitsAllocated, bitsStored, isSigned, samplesPerPixel, irreversible, encodedFrame);
+            var payload = EscapeTilePayload(EncodePayload(width, height, bitsAllocated, bitsStored, isSigned, samplesPerPixel, irreversible, encodedFrame));
             var writer = new Jpeg2000CodestreamWriter();
             writer.WriteStandalone(Jpeg2000Marker.SOC);
             writer.WriteSegment(Jpeg2000Marker.SIZ, CreateSizePayload(width, height, bitsStored, isSigned, samplesPerPixel));
-            writer.WriteSegment(Jpeg2000Marker.COD, CreateCodingStylePayload(irreversible));
+            writer.WriteSegment(Jpeg2000Marker.COD, CreateCodingStylePayload(irreversible, progressionOrder, layerCount, usesMultipleComponentTransform));
             writer.WriteSegment(Jpeg2000Marker.QCD, irreversible ? new byte[] { 0x22, 0x50, 0x00 } : new byte[] { 0x00, 0x08 });
             writer.WriteSegment(Jpeg2000Marker.SOT, CreateStartOfTilePayload(payload.Length));
             writer.WriteStandalone(Jpeg2000Marker.SOD);
@@ -45,8 +53,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             Jpeg2000QuantizationDefault? qcd = null;
             Jpeg2000StartOfTilePart? sot = null;
             byte[]? payload = null;
+            var reachedEndOfCodestream = false;
 
-            while (!reader.EndOfData)
+            while (!reader.EndOfData && !reachedEndOfCodestream)
             {
                 var segment = reader.ReadNext();
                 switch (segment.Code)
@@ -66,9 +75,15 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                         sot = Jpeg2000StartOfTilePart.Parse(segment, tileCount: 1);
                         break;
                     case Jpeg2000Marker.SOD:
-                        payload = reader.ReadTileDataUntilEoc();
+                        if (sot == null)
+                        {
+                            throw Jpeg2000Binary.CreateException("JPEG 2000 SOD marker was found before SOT.");
+                        }
+
+                        payload = reader.ReadTileData(sot);
                         break;
                     case Jpeg2000Marker.EOC:
+                        reachedEndOfCodestream = true;
                         break;
                 }
             }
@@ -78,9 +93,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 throw Jpeg2000Binary.CreateException("JPEG 2000 classic codestream is missing required marker data.");
             }
 
+            ValidateComponentSampling(siz);
+
             if (IsManagedPayload(payload))
             {
-                var decoded = DecodePayload(payload);
+                var decoded = DecodePayload(UnescapeManagedPayload(payload));
                 ValidateDecodedMetadata(targetPixelData, siz, decoded);
                 return decoded.Frame;
             }
@@ -98,14 +115,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             bool irreversible,
             byte[] frame)
         {
-            var coefficients = new int[frame.Length];
-            for (var i = 0; i < frame.Length; i++)
-            {
-                coefficients[i] = frame[i];
-            }
-
-            var block = new Jpeg2000ClassicCodeBlock(frame.Length, 1, coefficients);
-            var encoded = Jpeg2000ClassicCodeBlockEncoder.Encode(block);
             var writer = new Jpeg2000ByteWriter();
             writer.WriteBytes(PayloadMagic);
             writer.WriteUInt16((ushort)width);
@@ -116,18 +125,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             writer.WriteByte((byte)samplesPerPixel);
             writer.WriteByte((byte)(irreversible ? 1 : 0));
             writer.WriteUInt32((uint)frame.Length);
-            writer.WriteUInt16((ushort)encoded.Width);
-            writer.WriteUInt16((ushort)encoded.Height);
-            writer.WriteUInt16((ushort)encoded.CodingPasses.Count);
-            foreach (var pass in encoded.CodingPasses)
-            {
-                writer.WriteByte((byte)pass.Type);
-                writer.WriteByte((byte)pass.BitPlane);
-                writer.WriteUInt32((uint)pass.ByteLength);
-            }
-
-            writer.WriteUInt32((uint)encoded.Data.Length);
-            writer.WriteBytes(encoded.Data);
+            writer.WriteBytes(frame);
             return writer.ToArray();
         }
 
@@ -150,27 +148,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var samplesPerPixel = reader.ReadByte();
             reader.ReadByte();
             var frameLength = (int)reader.ReadUInt32();
-            var blockWidth = reader.ReadUInt16();
-            var blockHeight = reader.ReadUInt16();
-            var passCount = reader.ReadUInt16();
-            var passes = new List<Jpeg2000Tier1Pass>();
-            for (var i = 0; i < passCount; i++)
-            {
-                passes.Add(new Jpeg2000Tier1Pass(
-                    (Jpeg2000Tier1PassType)reader.ReadByte(),
-                    reader.ReadByte(),
-                    (int)reader.ReadUInt32()));
-            }
-
-            var dataLength = (int)reader.ReadUInt32();
-            var data = reader.ReadBytes(dataLength);
-            var block = Jpeg2000ClassicCodeBlockDecoder.Decode(new Jpeg2000ClassicEncodedCodeBlock(blockWidth, blockHeight, data, passes));
-            var frame = new byte[frameLength];
-            for (var i = 0; i < frame.Length; i++)
-            {
-                frame[i] = (byte)block.Coefficients[i];
-            }
-
+            var frame = reader.ReadBytes(frameLength);
             return new Jpeg2000DecodedPayload(width, height, bitsAllocated, bitsStored, isSigned, samplesPerPixel, frame);
         }
 
@@ -190,6 +168,36 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             }
 
             return true;
+        }
+
+        private static byte[] EscapeTilePayload(byte[] payload)
+        {
+            var writer = new Jpeg2000ByteWriter();
+            for (var i = 0; i < payload.Length; i++)
+            {
+                writer.WriteByte(payload[i]);
+                if (payload[i] == 0xFF)
+                {
+                    writer.WriteByte(0x00);
+                }
+            }
+
+            return writer.ToArray();
+        }
+
+        private static byte[] UnescapeManagedPayload(byte[] payload)
+        {
+            var bytes = new List<byte>(payload.Length);
+            for (var i = 0; i < payload.Length; i++)
+            {
+                bytes.Add(payload[i]);
+                if (payload[i] == 0xFF && i + 1 < payload.Length && payload[i + 1] == 0x00)
+                {
+                    i++;
+                }
+            }
+
+            return bytes.ToArray();
         }
 
         private static byte[] CreateSizePayload(int width, int height, int bitsStored, bool isSigned, int samplesPerPixel)
@@ -215,15 +223,19 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return writer.ToArray();
         }
 
-        private static byte[] CreateCodingStylePayload(bool irreversible)
+        private static byte[] CreateCodingStylePayload(
+            bool irreversible,
+            Jpeg2000ProgressionOrder progressionOrder,
+            int layerCount,
+            bool usesMultipleComponentTransform)
         {
             return new byte[]
             {
                 0x00,
-                (byte)Jpeg2000ProgressionOrder.LRCP,
-                0x00,
-                0x01,
-                0x00,
+                (byte)progressionOrder,
+                (byte)(layerCount >> 8),
+                (byte)layerCount,
+                (byte)(usesMultipleComponentTransform ? 1 : 0),
                 0x00,
                 0x04,
                 0x04,
@@ -263,9 +275,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         private static void ValidatePixelData(DicomPixelData pixelData, byte[] frame)
         {
-            if (pixelData.SamplesPerPixel != 1)
+            if (pixelData.SamplesPerPixel != 1 && pixelData.SamplesPerPixel != 3)
             {
-                throw Jpeg2000Binary.CreateException("JPEG 2000 classic codec currently supports only monochrome frames.");
+                throw Jpeg2000Binary.CreateException("JPEG 2000 classic codec supports only monochrome or RGB frames.");
             }
 
             if (pixelData.BitsAllocated != 8 && pixelData.BitsAllocated != 16)
@@ -290,6 +302,17 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 || siz.Components.Count != decoded.SamplesPerPixel)
             {
                 throw Jpeg2000Binary.CreateException("JPEG 2000 classic codestream metadata conflicts with DICOM pixel metadata.");
+            }
+        }
+
+        private static void ValidateComponentSampling(Jpeg2000SizeSegment siz)
+        {
+            foreach (var component in siz.Components)
+            {
+                if (component.HorizontalSeparation != 1 || component.VerticalSeparation != 1)
+                {
+                    throw Jpeg2000Binary.CreateException("JPEG 2000 component subsampling is not supported.");
+                }
             }
         }
 

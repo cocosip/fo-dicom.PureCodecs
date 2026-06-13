@@ -1,5 +1,6 @@
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
+using FellowOakDicom.PureCodecs;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
 
@@ -20,15 +21,25 @@ public sealed class CompressedRenderMatrixSkeletonTests
     }
 
     [Fact]
-    public void Render_matrix_currently_fails_at_stub_codec_boundary_for_compressed_jpeg_fixtures()
+    public void Render_matrix_renders_jpeg2000_acceptance_samples_where_dependencies_are_available()
     {
+        new DicomSetupBuilder()
+            .RegisterServices(services => services
+                .AddFellowOakDicom()
+                .AddTranscoderManager<PureTranscoderManager>())
+            .Build();
         var catalog = ExternalFixtureCatalog.Resolve();
-        var jpegFixture = catalog.RenderFixtures.First(fixture =>
-            fixture.ExpectedTransferSyntax == DicomTransferSyntax.JPEGProcess1 ||
-            fixture.ExpectedTransferSyntax == DicomTransferSyntax.JPEGProcess14SV1);
+        var jpeg2000Fixtures = catalog.RenderFixtures
+            .Where(fixture =>
+                fixture.ExpectedTransferSyntax == DicomTransferSyntax.JPEG2000Lossless ||
+                fixture.ExpectedTransferSyntax == DicomTransferSyntax.JPEG2000Lossy)
+            .ToArray();
 
-        var exception = Record.Exception(() => new DicomImage(jpegFixture.Path).RenderImage());
-
-        Assert.NotNull(exception);
+        Assert.NotEmpty(jpeg2000Fixtures);
+        Assert.All(jpeg2000Fixtures, fixture =>
+        {
+            var rendered = new DicomImage(fixture.Path).RenderImage();
+            Assert.NotNull(rendered);
+        });
     }
 }

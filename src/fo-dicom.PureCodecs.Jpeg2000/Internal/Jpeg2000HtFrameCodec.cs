@@ -46,8 +46,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             Jpeg2000QuantizationDefault? qcd = null;
             Jpeg2000StartOfTilePart? sot = null;
             byte[]? payload = null;
+            var reachedEndOfCodestream = false;
 
-            while (!reader.EndOfData)
+            while (!reader.EndOfData && !reachedEndOfCodestream)
             {
                 var segment = reader.ReadNext();
                 switch (segment.Code)
@@ -67,9 +68,15 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                         sot = Jpeg2000StartOfTilePart.Parse(segment, tileCount: 1);
                         break;
                     case Jpeg2000Marker.SOD:
-                        payload = reader.ReadTileDataUntilEoc();
+                        if (sot == null)
+                        {
+                            throw Jpeg2000Binary.CreateException("HTJ2K SOD marker was found before SOT.");
+                        }
+
+                        payload = reader.ReadTileData(sot);
                         break;
                     case Jpeg2000Marker.EOC:
+                        reachedEndOfCodestream = true;
                         break;
                 }
             }

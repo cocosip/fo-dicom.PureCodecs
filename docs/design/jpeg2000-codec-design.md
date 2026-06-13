@@ -345,6 +345,52 @@ or OpenJPEG HTJ2K codestream output. The independent vector covers the first
 standard block path; broader standard codestream import, non-initial quad
 rows, and refinement passes remain future compatibility work.
 
+## Current DICOM Integration Coverage
+
+The DICOM adapter now matches the `fo-dicom.Codecs` public JPEG 2000
+parameter contract for phase 1 integration:
+
+- `DicomJpeg2000Params` derives from fo-dicom's JPEG 2000 parameter type and
+  preserves `Irreversible`, `Rate`, `RateLevels`, `AllowMCT`,
+  `UpdatePhotometricInterpretation`, and
+  `EncodeSignedPixelValuesAsUnsigned` behavior.
+- The pure parameter type adds managed `Jpeg2000ProgressionOrder`; HTJ2K
+  parameters derive from fo-dicom's HTJ2K type and map core
+  `ProgressionOrder` values to the internal progression enum.
+- Classic JPEG 2000 encoding writes COD progression order, layer count,
+  multiple-component transform use, transform type, and SIZ component
+  signedness from the requested parameters.
+- RGB input is normalized to interleaved component order for encoding and
+  decoded frames are repacked to the target fo-dicom raw layout, including
+  planar RGB targets. Monochrome, RGB, and supported YBR-related photometric
+  interpretations have explicit paths; unsupported photometric values fail
+  with managed `DicomCodecException`.
+- Component subsampling and unsupported standard progression orders fail with
+  explicit managed exceptions.
+- JPEG 2000 Part 2 multi-component syntaxes `.92` and `.93`, JPIP, and JPT
+  transfer syntaxes are explicitly outside phase 1 and are not registered by
+  `PureTranscoderManager`.
+
+The project-managed classic and HTJ2K encoders write a raw codestream envelope
+with SIZ, COD, QCD, SOT, SOD, and EOC markers and store the managed frame
+payload in a marker-safe tile data section. The classic decoder still uses the
+standard JPEG 2000 path for external codestreams that are not marked as
+project-managed payloads.
+
+The standard reader now honors SOT tile-part lengths before falling back to
+EOC scanning for unknown-length tile-parts, and stops parsing a frame at EOC
+so DICOM item padding is not interpreted as another marker.
+
+Verified DICOM integration coverage includes:
+
+- Multi-frame JPEG 2000 round-trips with frame count preservation.
+- Required DICOM compression tag checks for JPEG 2000 lossless, JPEG 2000
+  lossy, and HTJ2K.
+- Managed exceptions for invalid JPEG 2000 and HTJ2K codestreams.
+- Efferent JPEG 2000 acceptance sample decode baselines, inverse transcode
+  round-trips for unit and RGB samples, and render smoke tests where rendering
+  dependencies are available.
+
 ## Implementation Risk
 
 This is the highest-risk codec family in phase 1.

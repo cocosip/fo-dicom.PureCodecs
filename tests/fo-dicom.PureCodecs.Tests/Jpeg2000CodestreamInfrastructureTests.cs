@@ -216,6 +216,30 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
     }
 
     [Fact]
+    public void Reader_uses_sot_length_for_tile_data_that_contains_eoc_like_bytes()
+    {
+        var reader = new Jpeg2000CodestreamReader(new byte[]
+        {
+            0xFF, Jpeg2000Marker.SOT,
+            0x00, 0x0A,
+            0x00, 0x00,
+            0x00, 0x00, 0x00, 0x12,
+            0x00,
+            0x01,
+            0xFF, Jpeg2000Marker.SOD,
+            0x01, 0xFF, Jpeg2000Marker.EOC, 0x02,
+            0xFF, Jpeg2000Marker.EOC
+        });
+        var sot = Jpeg2000StartOfTilePart.Parse(reader.ReadNext(), tileCount: 1);
+        Assert.Equal(Jpeg2000Marker.SOD, reader.ReadNext().Code);
+
+        var tileData = reader.ReadTileData(sot);
+
+        Assert.Equal(new byte[] { 0x01, 0xFF, Jpeg2000Marker.EOC, 0x02 }, tileData);
+        Assert.Equal(Jpeg2000Marker.EOC, reader.ReadNext().Code);
+    }
+
+    [Fact]
     public void Reader_detects_raw_j2k_codestreams()
     {
         Assert.True(Jpeg2000CodestreamReader.IsRawCodestream(new byte[] { 0xFF, Jpeg2000Marker.SOC }));
