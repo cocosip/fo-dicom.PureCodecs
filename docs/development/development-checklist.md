@@ -369,32 +369,32 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ### 6.4 HTJ2K Coding
 
-- [ ] Add MEL decoder.
-- [ ] Add MEL encoder.
-- [ ] Test MEL state-machine vectors.
-- [ ] Add HT VLC decoder with Annex C table validation.
-- [ ] Add HT VLC encoder with Annex C table validation.
-- [ ] Add MagSgn decoder.
-- [ ] Add MagSgn encoder.
-- [ ] Test HT three-segment code-block assembly and disassembly.
-- [ ] Add HT cleanup pass decoder.
-- [ ] Add HT cleanup pass encoder.
-- [ ] Test HT quad and quad-pair scanning behavior.
-- [ ] Add HT block decoder.
-- [ ] Add HT block encoder.
-- [ ] Cross-check HT block vectors against OpenJPH or OpenJPEG reference output.
-- [ ] Implement HTJ2K Lossless decode.
-- [ ] Implement HTJ2K Lossless encode.
-- [ ] Implement HTJ2K Lossless RPCL decode.
-- [ ] Implement HTJ2K Lossless RPCL encode.
-- [ ] Implement HTJ2K Lossy decode.
-- [ ] Implement HTJ2K Lossy encode.
-- [ ] Test HTJ2K Lossless exact round-trip.
-- [ ] Test HTJ2K Lossless RPCL exact round-trip.
-- [ ] Test HTJ2K Lossless RPCL codestream uses RPCL progression.
-- [ ] Test HTJ2K Lossy tolerance round-trip.
-- [ ] Add or import HTJ2K fixtures for acceptance tests.
-- [ ] Document any HTJ2K reference-library mismatch before marking support complete.
+- [x] Add MEL decoder.
+- [x] Add MEL encoder.
+- [x] Test MEL state-machine vectors.
+- [x] Add HT VLC decoder with Annex C table validation.
+- [x] Add HT VLC encoder with Annex C table validation.
+- [x] Add MagSgn decoder.
+- [x] Add MagSgn encoder.
+- [x] Test HT three-segment code-block assembly and disassembly.
+- [x] Add HT cleanup pass decoder.
+- [x] Add HT cleanup pass encoder.
+- [x] Test HT quad and quad-pair scanning behavior.
+- [x] Add HT block decoder.
+- [x] Add HT block encoder.
+- [x] Cross-check HT block vectors against OpenJPH or OpenJPEG reference output.
+- [x] Implement HTJ2K Lossless decode.
+- [x] Implement HTJ2K Lossless encode.
+- [x] Implement HTJ2K Lossless RPCL decode.
+- [x] Implement HTJ2K Lossless RPCL encode.
+- [x] Implement HTJ2K Lossy decode.
+- [x] Implement HTJ2K Lossy encode.
+- [x] Test HTJ2K Lossless exact round-trip.
+- [x] Test HTJ2K Lossless RPCL exact round-trip.
+- [x] Test HTJ2K Lossless RPCL codestream uses RPCL progression.
+- [x] Test HTJ2K Lossy tolerance round-trip.
+- [x] Add or import HTJ2K fixtures for acceptance tests.
+- [x] Document any HTJ2K reference-library mismatch before marking support complete.
 
 ### 6.5 JPEG 2000 DICOM Integration
 
@@ -406,7 +406,7 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [ ] Match `DicomJpeg2000Params.AllowMCT` behavior.
 - [ ] Match `DicomJpeg2000Params.UpdatePhotometricInterpretation` behavior.
 - [ ] Match `DicomJpeg2000Params.EncodeSignedPixelValuesAsUnsigned` behavior.
-- [ ] Implement HTJ2K codec parameter type.
+- [x] Implement HTJ2K codec parameter type.
 - [ ] Match `DicomHtJpeg2000Params.ProgressionOrder` behavior.
 - [ ] Implement DICOM component layout mapping.
 - [ ] Implement planar and interleaved RGB input normalization.

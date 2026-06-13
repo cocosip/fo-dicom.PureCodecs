@@ -27,13 +27,6 @@ public sealed class PureTranscoderManagerTests
         { DicomTransferSyntax.HTJ2K, typeof(DicomHtJpeg2000LossyCodec) },
     };
 
-    public static TheoryData<DicomTransferSyntax, Type> UnimplementedPhase1Codecs => new()
-    {
-        { DicomTransferSyntax.HTJ2KLossless, typeof(DicomHtJpeg2000LosslessCodec) },
-        { DicomTransferSyntax.HTJ2KLosslessRPCL, typeof(DicomHtJpeg2000LosslessRpclCodec) },
-        { DicomTransferSyntax.HTJ2K, typeof(DicomHtJpeg2000LossyCodec) },
-    };
-
     [Fact]
     public void Constructor_creates_transcoder_manager()
     {
@@ -83,20 +76,4 @@ public sealed class PureTranscoderManagerTests
         Assert.True(manager.CanTranscode(syntax, DicomTransferSyntax.ExplicitVRLittleEndian));
     }
 
-    [Theory]
-    [MemberData(nameof(UnimplementedPhase1Codecs))]
-    public void Stub_codecs_throw_dicom_codec_exception_for_encode_and_decode(DicomTransferSyntax syntax, Type _)
-    {
-        var codec = new PureTranscoderManager().GetCodec(syntax);
-
-        var encode = Assert.Throws<DicomCodecException>(
-            () => codec.Encode(oldPixelData: null!, newPixelData: null!, parameters: null!));
-        var decode = Assert.Throws<DicomCodecException>(
-            () => codec.Decode(oldPixelData: null!, newPixelData: null!, parameters: null!));
-
-        Assert.Contains(syntax.UID.Name, encode.Message);
-        Assert.Contains("encode", encode.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(syntax.UID.Name, decode.Message);
-        Assert.Contains("decode", decode.Message, StringComparison.OrdinalIgnoreCase);
-    }
 }
