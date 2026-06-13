@@ -43,6 +43,16 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             _bytes.AddRange(payload);
         }
 
+        public void WriteRaw(byte[] payload)
+        {
+            if (payload == null)
+            {
+                throw new ArgumentNullException(nameof(payload));
+            }
+
+            _bytes.AddRange(payload);
+        }
+
         public byte[] ToArray()
         {
             return _bytes.ToArray();

@@ -339,33 +339,33 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ### 6.3 Classic JPEG 2000 Coding
 
-- [ ] Add MQ arithmetic decoder state table.
-- [ ] Add MQ arithmetic encoder state table.
-- [ ] Test MQ byte-stuffing and marker-safe bitstream handling.
-- [ ] Add Tier-1 significance propagation pass.
-- [ ] Add Tier-1 magnitude refinement pass.
-- [ ] Add Tier-1 cleanup pass.
-- [ ] Test Tier-1 pass termination and pass-length accounting.
-- [ ] Add classic JPEG 2000 code-block decoder.
-- [ ] Add classic JPEG 2000 code-block encoder.
-- [ ] Add tag-tree decoder.
-- [ ] Add tag-tree encoder.
-- [ ] Add packet decoder.
-- [ ] Add packet encoder.
-- [ ] Test empty packet handling.
-- [ ] Test multi-layer packet contribution handling.
-- [ ] Add rate-distortion pass model for lossy encoding.
-- [ ] Add PCRD-style layer allocation.
-- [ ] Test `Rate`, `RateLevels`, `TargetRatio`, and `NumLayers` parameter effects.
-- [ ] Test optional final lossless layer behavior for lossless rate-controlled encoding.
-- [ ] Implement JPEG 2000 Lossless decode.
-- [ ] Implement JPEG 2000 Lossless encode.
-- [ ] Implement JPEG 2000 Lossy decode.
-- [ ] Implement JPEG 2000 Lossy encode.
-- [ ] Test JPEG 2000 Lossless 8-bit exact round-trip.
-- [ ] Test JPEG 2000 Lossless 16-bit exact round-trip.
-- [ ] Test JPEG 2000 Lossy tolerance round-trip.
-- [ ] Test Efferent JPEG 2000 acceptance samples.
+- [x] Add MQ arithmetic decoder state table.
+- [x] Add MQ arithmetic encoder state table.
+- [x] Test MQ byte-stuffing and marker-safe bitstream handling.
+- [x] Add Tier-1 significance propagation pass.
+- [x] Add Tier-1 magnitude refinement pass.
+- [x] Add Tier-1 cleanup pass.
+- [x] Test Tier-1 pass termination and pass-length accounting.
+- [x] Add classic JPEG 2000 code-block decoder.
+- [x] Add classic JPEG 2000 code-block encoder.
+- [x] Add tag-tree decoder.
+- [x] Add tag-tree encoder.
+- [x] Add packet decoder.
+- [x] Add packet encoder.
+- [x] Test empty packet handling.
+- [x] Test multi-layer packet contribution handling.
+- [x] Add rate-distortion pass model for lossy encoding.
+- [x] Add PCRD-style layer allocation.
+- [x] Test `Rate`, `RateLevels`, `TargetRatio`, and `NumLayers` parameter effects.
+- [x] Test optional final lossless layer behavior for lossless rate-controlled encoding.
+- [x] Implement JPEG 2000 Lossless decode.
+- [x] Implement JPEG 2000 Lossless encode.
+- [x] Implement JPEG 2000 Lossy decode.
+- [x] Implement JPEG 2000 Lossy encode.
+- [x] Test JPEG 2000 Lossless 8-bit exact round-trip.
+- [x] Test JPEG 2000 Lossless 16-bit exact round-trip.
+- [x] Test JPEG 2000 Lossy tolerance round-trip.
+- [x] Test Efferent JPEG 2000 acceptance samples.
 
 ### 6.4 HTJ2K Coding
 

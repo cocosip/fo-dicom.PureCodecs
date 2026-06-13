@@ -29,8 +29,6 @@ public sealed class PureTranscoderManagerTests
 
     public static TheoryData<DicomTransferSyntax, Type> UnimplementedPhase1Codecs => new()
     {
-        { DicomTransferSyntax.JPEG2000Lossless, typeof(DicomJpeg2000LosslessCodec) },
-        { DicomTransferSyntax.JPEG2000Lossy, typeof(DicomJpeg2000LossyCodec) },
         { DicomTransferSyntax.HTJ2KLossless, typeof(DicomHtJpeg2000LosslessCodec) },
         { DicomTransferSyntax.HTJ2KLosslessRPCL, typeof(DicomHtJpeg2000LosslessRpclCodec) },
         { DicomTransferSyntax.HTJ2K, typeof(DicomHtJpeg2000LossyCodec) },

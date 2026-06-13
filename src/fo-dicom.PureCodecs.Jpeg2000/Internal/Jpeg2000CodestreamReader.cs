@@ -67,6 +67,25 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return new Jpeg2000MarkerSegment(code, payload);
         }
 
+        public byte[] ReadTileDataUntilEoc()
+        {
+            var end = _offset;
+            while (end + 1 < _data.Length)
+            {
+                if (_data[end] == 0xFF && _data[end + 1] == Jpeg2000Marker.EOC)
+                {
+                    var payload = new byte[end - _offset];
+                    Buffer.BlockCopy(_data, _offset, payload, 0, payload.Length);
+                    _offset = end;
+                    return payload;
+                }
+
+                end++;
+            }
+
+            throw Jpeg2000Binary.CreateException("JPEG 2000 tile data was not terminated by EOC.");
+        }
+
         public static bool IsRawCodestream(byte[] data)
         {
             return data != null
