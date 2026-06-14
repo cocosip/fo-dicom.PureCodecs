@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="fo-dicom.PureCodecs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\SmokeApp\ConsumerSmokeRunner.cs" Link="ConsumerSmokeRunner.cs" />
+  </ItemGroup>
+</Project>

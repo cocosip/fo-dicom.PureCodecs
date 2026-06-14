@@ -1,0 +1,7 @@
+<Project>
+  <Import Project="..\..\Directory.Packages.props" />
+
+  <ItemGroup>
+    <PackageVersion Include="fo-dicom.PureCodecs" Version="0.1.0-alpha.1" />
+  </ItemGroup>
+</Project>

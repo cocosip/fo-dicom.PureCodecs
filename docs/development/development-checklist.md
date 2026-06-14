@@ -447,17 +447,17 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ## 8. Packaging and Consumer Validation
 
-- [ ] Pack one `fo-dicom.PureCodecs` NuGet package.
-- [ ] Confirm package contains all codec-family DLLs under `lib/netstandard2.0`.
-- [ ] Confirm package does not contain native codec DLLs.
-- [ ] Create .NET Framework 4.7.2 consumer smoke test.
-- [ ] Register only `PureTranscoderManager` in .NET Framework smoke test.
-- [ ] Decode at least one compressed sample in .NET Framework smoke test.
-- [ ] Create modern .NET consumer smoke test.
-- [ ] Register only `PureTranscoderManager` in modern .NET smoke test.
-- [ ] Decode at least one compressed sample in modern .NET smoke test.
-- [ ] Verify package install does not require per-family registration.
-- [ ] Verify package install does not require native runtime dependencies.
+- [x] Pack one `fo-dicom.PureCodecs` NuGet package.
+- [x] Confirm package contains all codec-family DLLs under `lib/netstandard2.0`.
+- [x] Confirm package does not contain native codec DLLs.
+- [x] Create .NET Framework 4.7.2 consumer smoke test.
+- [x] Register only `PureTranscoderManager` in .NET Framework smoke test.
+- [x] Decode at least one compressed sample in .NET Framework smoke test.
+- [x] Create modern .NET consumer smoke test.
+- [x] Register only `PureTranscoderManager` in modern .NET smoke test.
+- [x] Decode at least one compressed sample in modern .NET smoke test.
+- [x] Verify package install does not require per-family registration.
+- [x] Verify package install does not require native runtime dependencies.
 
 ## 9. Documentation and Release Readiness
 
