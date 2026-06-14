@@ -449,10 +449,17 @@ The key Efferent implementation files are:
 
 ## Open Decisions
 
-These decisions must be resolved before or during implementation planning:
+Phase 1 alpha release readiness resolved the initial packaging decisions:
 
-- Exact NuGet package id.
-- Whether assemblies should be strong-named.
-- Whether fo-dicom 4.x compatibility is required in the first NuGet release.
-- Whether to vendor or port any existing managed codec implementation, subject to license review.
+- The NuGet package id is `fo-dicom.PureCodecs`.
+- The first alpha package version is `0.1.0-alpha.1`.
+- The package contains the entry assembly and codec-family assemblies under `lib/netstandard2.0`.
+- The first alpha targets fo-dicom 5.x through the centrally managed `fo-dicom` package reference.
+- fo-dicom 4.x compatibility is not claimed for the first alpha.
+- The assemblies are not strong-named in the first alpha package.
+
+The remaining future-release decisions are:
+
 - Performance goals for large multi-frame studies.
+- Whether later releases should add strong-named assemblies.
+- Whether later releases should add fo-dicom 4.x compatibility.

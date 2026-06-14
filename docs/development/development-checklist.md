@@ -461,27 +461,27 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ## 9. Documentation and Release Readiness
 
-- [ ] Update README usage instructions.
-- [ ] Document phase 1 supported transfer syntaxes.
-- [ ] Document package assembly layout.
-- [ ] Document managed error behavior.
-- [ ] Document known limitations.
-- [ ] Document compatibility with `fo-dicom.Codecs`.
-- [ ] Update design docs with final implementation notes.
-- [ ] Update this checklist so completed items are checked.
-- [ ] Prepare release notes for first alpha package.
+- [x] Update README usage instructions.
+- [x] Document phase 1 supported transfer syntaxes.
+- [x] Document package assembly layout.
+- [x] Document managed error behavior.
+- [x] Document known limitations.
+- [x] Document compatibility with `fo-dicom.Codecs`.
+- [x] Update design docs with final implementation notes.
+- [x] Update this checklist so completed items are checked.
+- [x] Prepare release notes for first alpha package.
 
 ## Completion Definition
 
 The first replacement phase is complete only when:
 
-- [ ] All phase 1 transfer syntaxes are registered.
-- [ ] All phase 1 transfer syntaxes support encode and decode.
-- [ ] No production project targets anything except `netstandard2.0`.
-- [ ] No codec path uses native DLLs or P/Invoke.
-- [ ] One NuGet package contains all required DLLs.
-- [ ] Lossless round-trips pass exact byte equality checks.
-- [ ] Lossy round-trips pass agreed tolerance checks.
-- [ ] Compatibility tests based on `fo-dicom.Codecs` pass.
-- [ ] Consumer smoke tests pass on .NET Framework 4.7.2+ and modern .NET.
-- [ ] Documentation reflects the implemented behavior.
+- [x] All phase 1 transfer syntaxes are registered.
+- [x] All phase 1 transfer syntaxes support encode and decode.
+- [x] No production project targets anything except `netstandard2.0`.
+- [x] No codec path uses native DLLs or P/Invoke.
+- [x] One NuGet package contains all required DLLs.
+- [x] Lossless round-trips pass exact byte equality checks.
+- [x] Lossy round-trips pass agreed tolerance checks.
+- [x] Compatibility tests based on `fo-dicom.Codecs` pass.
+- [x] Consumer smoke tests pass on .NET Framework 4.7.2+ and modern .NET.
+- [x] Documentation reflects the implemented behavior.

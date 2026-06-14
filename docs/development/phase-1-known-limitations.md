@@ -8,6 +8,13 @@ This document records compatibility edges that are intentionally outside the pha
 - JPEG 2000 Part 2 multi-component and JPIP referenced transfer syntaxes are not registered by `PureTranscoderManager`.
 - Native codec fallback is intentionally unsupported. Codec execution is pure managed C# only.
 
+## Explicit Managed Rejections
+
+- JPEG Process 2/4 12-bit sequential DCT codestream encode/decode is not implemented by the current managed JPEG path. The test suite records this as an explicit managed exception until fixture-backed support is added.
+- Progressive JPEG, arithmetic-coded JPEG, CMYK/YCCK JPEG color spaces, and broader restart interval MCU resynchronization are not implemented.
+- JPEG 2000 JP2 wrapper frames are detected and rejected unless a raw J2K codestream is supplied.
+- JPEG 2000 packed packet headers, unsupported ROI behavior, unsupported component subsampling, and unsupported progression order combinations fail with managed exceptions.
+
 ## Fixture Availability
 
 - The Efferent acceptance fixture set included in the test support data does not include HTJ2K compressed DICOM samples. HTJ2K is validated through raw round-trip, RGB, multi-frame, compression tag, and invalid stream matrix tests.
