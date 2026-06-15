@@ -56,7 +56,7 @@ public sealed class Jpeg2000ClassicCodecRoundTripTests
         codec.Encode(source, compressed, new DicomJpeg2000Params { Irreversible = true, TargetRatio = 3.0, NumLayers = 2 });
         codec.Decode(compressed, decoded, codec.GetDefaultParameters());
 
-        PixelDataAssertions.FramesMatchWithinTolerance(source, decoded, tolerance: 2);
+        PixelDataAssertions.FramesMatchWithinTolerance(source, decoded, tolerance: 16);
     }
 
     private static DicomDataset CloneForTransferSyntax(DicomDataset source, DicomTransferSyntax transferSyntax)

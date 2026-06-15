@@ -43,8 +43,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         private static void DecodeMelVlc(byte[] cleanupPass, int width, int height, int lcup, int scup, int sstr, ushort[] scratch)
         {
-            var mel = new OpenJphMelReader(cleanupPass, lcup, scup);
-            var vlc = new OpenJphReverseReader(cleanupPass, lcup, scup);
+            var mel = new HtMelSegmentReader(cleanupPass, lcup, scup);
+            var vlc = new HtReverseSegmentReader(cleanupPass, lcup, scup);
             var run = mel.GetRun();
             var context = 0u;
             var sp = 0;
@@ -121,7 +121,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         private static int[] DecodeMagSgn(byte[] cleanupPass, int width, int height, int lcup, int scup, int sstr, ushort[] scratch, int bitPlane, int mmsbp2)
         {
-            var reader = new OpenJphForwardReader(cleanupPass, lcup - scup, 0xFF);
+            var reader = new HtForwardSegmentReader(cleanupPass, lcup - scup, 0xFF);
             var coefficients = new int[width * height];
             var sp = 0;
             var dp = 0;
@@ -160,7 +160,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return coefficients;
         }
 
-        private static void DecodeSample(OpenJphForwardReader reader, int[] coefficients, int index, int inf, int uq, int bit, int bitPlane)
+        private static void DecodeSample(HtForwardSegmentReader reader, int[] coefficients, int index, int inf, int uq, int bit, int bitPlane)
         {
             if ((inf & (1 << (4 + bit))) == 0)
             {
@@ -179,7 +179,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             coefficients[index] = sign ? -magnitude : magnitude;
         }
 
-        private sealed class OpenJphMelReader
+        private sealed class HtMelSegmentReader
         {
             private static readonly int[] MelExponents = { 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5 };
 
@@ -193,7 +193,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             private int _numRuns;
             private ulong _runs;
 
-            public OpenJphMelReader(byte[] data, int lcup, int scup)
+            public HtMelSegmentReader(byte[] data, int lcup, int scup)
             {
                 _data = data;
                 _offset = lcup - scup;
@@ -320,7 +320,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             }
         }
 
-        private sealed class OpenJphReverseReader
+        private sealed class HtReverseSegmentReader
         {
             private readonly byte[] _data;
             private int _offset;
@@ -329,7 +329,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             private int _size;
             private bool _unstuff;
 
-            public OpenJphReverseReader(byte[] data, int lcup, int scup)
+            public HtReverseSegmentReader(byte[] data, int lcup, int scup)
             {
                 _data = data;
                 _offset = lcup - 2;
@@ -404,7 +404,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             }
         }
 
-        private sealed class OpenJphForwardReader
+        private sealed class HtForwardSegmentReader
         {
             private readonly byte[] _data;
             private int _offset;
@@ -414,7 +414,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             private int _bits;
             private int _lastByte = -1;
 
-            public OpenJphForwardReader(byte[] data, int size, byte unstuffLimit)
+            public HtForwardSegmentReader(byte[] data, int size, byte unstuffLimit)
             {
                 _data = data;
                 _size = size;

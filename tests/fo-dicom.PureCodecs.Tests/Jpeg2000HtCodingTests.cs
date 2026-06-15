@@ -104,7 +104,7 @@ public sealed class Jpeg2000HtCodingTests
         // 8,0,4,0 / 0,2,0,1, with missing_msbs=28 and one cleanup pass.
         var cleanupPass = new byte[] { 0xFC, 0x01, 0xE7, 0x74, 0x00 };
 
-        var decoded = Jpeg2000HtCodeBlockDecoder.DecodeOpenJphCleanupPass(
+        var decoded = Jpeg2000HtCodeBlockDecoder.DecodeStandardCleanupPass(
             cleanupPass,
             width: 4,
             height: 2,

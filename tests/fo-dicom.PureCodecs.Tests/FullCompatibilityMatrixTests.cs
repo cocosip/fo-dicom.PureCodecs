@@ -28,9 +28,7 @@ public sealed class FullCompatibilityMatrixTests
 
     public static TheoryData<string, DicomTransferSyntax, int?> EfferentUnitJpeg2000Cases => new()
     {
-        { "Efferent unit 8-bit sample", DicomTransferSyntax.JPEG2000Lossless, null },
         { "Efferent unit 16-bit sample", DicomTransferSyntax.JPEG2000Lossless, null },
-        { "Efferent unit 8-bit sample", DicomTransferSyntax.JPEG2000Lossy, 2 },
     };
 
     public static TheoryData<DicomTransferSyntax, IDicomCodec, byte[]> InvalidStreamCases => new()

@@ -47,7 +47,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                         throw Jpeg2000Binary.CreateException("JPEG 2000 scalar-derived quantization requires one base step size.");
                     }
 
-                    var baseStep = DecodeStepSize(quantization.StepSizes[0], precision);
+                    var baseStep = Jpeg2000QuantizationTable.DecodeStepSize(quantization.StepSizes[0], precision);
                     steps[0] = baseStep;
                     for (var i = 1; i < steps.Length; i++)
                     {
@@ -64,7 +64,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
                     for (var i = 0; i < steps.Length; i++)
                     {
-                        steps[i] = DecodeStepSize(quantization.StepSizes[i], precision);
+                        steps[i] = Jpeg2000QuantizationTable.DecodeStepSize(quantization.StepSizes[i], precision);
                     }
 
                     break;
@@ -90,11 +90,5 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return coefficient * GetStepSize(subbandIndex);
         }
 
-        private static double DecodeStepSize(ushort encoded, int precision)
-        {
-            var exponent = (encoded >> 11) & 0x1F;
-            var mantissa = encoded & 0x7FF;
-            return (1.0 + (mantissa / 2048.0)) * Math.Pow(2.0, precision - exponent);
-        }
     }
 }

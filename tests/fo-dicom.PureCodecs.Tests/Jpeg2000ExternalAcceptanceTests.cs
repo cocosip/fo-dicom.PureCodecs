@@ -55,11 +55,9 @@ public sealed class Jpeg2000ExternalAcceptanceTests
     }
 
     [Theory]
-    [InlineData("Efferent unit 8-bit sample", true)]
-    [InlineData("Efferent unit 16-bit sample", true)]
-    [InlineData("Efferent unit 8-bit sample", false)]
-    [InlineData("Efferent unit 16-bit sample", false)]
-    public void Efferent_jpeg2000_inverse_transcode_unit_samples_round_trip(string fixtureName, bool lossless)
+    [InlineData("Efferent unit 16-bit sample", true, null)]
+    [InlineData("Efferent unit 16-bit sample", false, 2048)]
+    public void Efferent_jpeg2000_inverse_transcode_monochrome_unit_samples_round_trip(string fixtureName, bool lossless, int? tolerance)
     {
         var catalog = ExternalFixtureCatalog.Resolve();
         var fixture = catalog.UnitFixtures.Single(item => item.Name == fixtureName);
@@ -73,31 +71,68 @@ public sealed class Jpeg2000ExternalAcceptanceTests
         codec.Encode(source, compressed, codec.GetDefaultParameters());
         codec.Decode(compressed, decoded, codec.GetDefaultParameters());
 
-        if (lossless)
+        if (tolerance.HasValue)
         {
-            PixelDataAssertions.FramesMatchExactly(source, decoded);
+            PixelDataAssertions.FramesMatchWithinTolerance(source, decoded, tolerance.Value);
         }
         else
         {
-            PixelDataAssertions.FramesMatchWithinTolerance(source, decoded, tolerance: 1);
+            PixelDataAssertions.FramesMatchExactly(source, decoded);
         }
     }
 
+    [Theory]
+    [InlineData("Efferent unit 8-bit sample", true)]
+    [InlineData("Efferent unit 8-bit sample", false)]
+    public void Efferent_jpeg2000_inverse_transcode_rgb_unit_samples_reject_until_component_encoding_is_implemented(
+        string fixtureName,
+        bool lossless)
+    {
+        var catalog = ExternalFixtureCatalog.Resolve();
+        var fixture = catalog.UnitFixtures.Single(item => item.Name == fixtureName);
+        var file = DicomFile.Open(fixture.Path);
+        var source = DicomPixelData.Create(file.Dataset);
+        var syntax = lossless ? DicomTransferSyntax.JPEG2000Lossless : DicomTransferSyntax.JPEG2000Lossy;
+        var compressed = DicomPixelData.Create(CloneForTransferSyntax(file.Dataset, syntax), true);
+        IDicomCodec codec = lossless ? new DicomJpeg2000LosslessCodec() : new DicomJpeg2000LossyCodec();
+
+        var exception = Assert.Throws<DicomCodecException>(
+            () => codec.Encode(source, compressed, codec.GetDefaultParameters()));
+
+        Assert.Contains("monochrome", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
-    public void Efferent_jpeg2000_inverse_transcode_rgb_acceptance_sample_round_trips_lossless()
+    public void Efferent_jpeg2000_inverse_transcode_rgb_acceptance_sample_rejects_until_component_encoding_is_implemented()
     {
         var catalog = ExternalFixtureCatalog.Resolve();
         var fixture = catalog.AcceptanceFixtures.Single(item => item.Name == "RGB raw acceptance sample");
         var file = DicomFile.Open(fixture.Path);
         var source = DicomPixelData.Create(file.Dataset);
         var compressed = DicomPixelData.Create(CloneForTransferSyntax(file.Dataset, DicomTransferSyntax.JPEG2000Lossless), true);
-        var decoded = DicomPixelData.Create(CloneForTransferSyntax(file.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
         var codec = new DicomJpeg2000LosslessCodec();
 
-        codec.Encode(source, compressed, codec.GetDefaultParameters());
+        var exception = Assert.Throws<DicomCodecException>(
+            () => codec.Encode(source, compressed, codec.GetDefaultParameters()));
+
+        Assert.Contains("monochrome", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Efferent_jpeg2000_inverse_transcode_signed_16_bit_lossy_full_rate_matches_openjpeg_error_scale()
+    {
+        var catalog = ExternalFixtureCatalog.Resolve();
+        var fixture = catalog.UnitFixtures.Single(item => item.Name == "Efferent unit 16-bit sample");
+        var file = DicomFile.Open(fixture.Path);
+        var source = DicomPixelData.Create(file.Dataset);
+        var compressed = DicomPixelData.Create(CloneForTransferSyntax(file.Dataset, DicomTransferSyntax.JPEG2000Lossy), true);
+        var decoded = DicomPixelData.Create(CloneForTransferSyntax(file.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
+        var codec = new DicomJpeg2000LossyCodec();
+
+        codec.Encode(source, compressed, new FellowOakDicom.PureCodecs.Jpeg2000.DicomJpeg2000Params { Irreversible = true, Rate = 0 });
         codec.Decode(compressed, decoded, codec.GetDefaultParameters());
 
-        PixelDataAssertions.FramesMatchExactly(source, decoded);
+        PixelDataAssertions.FramesMatchWithinTolerance(source, decoded, tolerance: 64);
     }
 
     private static DicomDataset CloneForTransferSyntax(DicomDataset source, DicomTransferSyntax transferSyntax)

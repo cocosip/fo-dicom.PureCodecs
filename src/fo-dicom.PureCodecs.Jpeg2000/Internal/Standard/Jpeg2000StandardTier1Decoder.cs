@@ -7,6 +7,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         private const int ContextMagnitudeRefinementStart = 14;
         private const int ContextRunLength = 17;
         private const int ContextUniform = 18;
+        private const int Tier1FractionalBits = 6;
         private const uint Significant = 0x0001;
         private const uint Refined = 0x0002;
         private const uint Visited = 0x0004;
@@ -52,6 +53,16 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         public int[] Decode(byte[] bytes, int passCount, int bitPlaneCount)
         {
+            return DecodeInternal(bytes, passCount, bitPlaneCount, preserveFractionalBits: false);
+        }
+
+        public int[] DecodeScaled(byte[] bytes, int passCount, int bitPlaneCount)
+        {
+            return DecodeInternal(bytes, passCount, bitPlaneCount, preserveFractionalBits: true);
+        }
+
+        private int[] DecodeInternal(byte[] bytes, int passCount, int bitPlaneCount, bool preserveFractionalBits)
+        {
             if (bytes == null || bytes.Length == 0 || passCount <= 0 || bitPlaneCount <= 0)
             {
                 return new int[_width * _height];
@@ -65,7 +76,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
             var pass = 0;
             var passType = 2;
-            var maxBitPlane = bitPlaneCount - 1;
+            var maxBitPlane = bitPlaneCount + Tier1FractionalBits - 1;
             for (_bitPlane = maxBitPlane; _bitPlane >= 0 && pass < passCount;)
             {
                 if (passType == 0 || (passType == 2 && pass == 0))
@@ -107,7 +118,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 }
             }
 
-            return GetResult();
+            return GetResult(preserveFractionalBits);
         }
 
         private void DecodeSignificancePropagation(bool raw)
@@ -559,14 +570,19 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             return passIndexFromMsb >= 10 && passType != 2;
         }
 
-        private int[] GetResult()
+        private int[] GetResult(bool preserveFractionalBits)
         {
             var result = new int[_width * _height];
             for (var y = 0; y < _height; y++)
             {
                 for (var x = 0; x < _width; x++)
                 {
-                    result[(y * _width) + x] = _data[ToIndex(x, y)] / 2;
+                    var value = _data[ToIndex(x, y)];
+                    result[(y * _width) + x] = preserveFractionalBits
+                        ? value
+                        : value >= 0
+                        ? value >> Tier1FractionalBits
+                        : -((-value) >> Tier1FractionalBits);
                 }
             }
 

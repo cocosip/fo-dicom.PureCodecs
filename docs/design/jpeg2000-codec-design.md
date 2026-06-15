@@ -67,6 +67,39 @@ The JPEG 2000 assembly should be split internally into:
 
 Classic JPEG 2000 and HTJ2K should share codestream infrastructure where the standard allows it, but their block coding paths should remain separate.
 
+### Shared Family Boundary
+
+Classic JPEG 2000 and HTJ2K are part of the same JPEG 2000 codestream family.
+They must not be implemented as two unrelated mini-codecs. The implementation
+must share code for:
+
+- Raw codestream marker reading and writing.
+- SIZ, COD, QCD, SOT, SOD, EOC, COM, and related marker payload construction
+  and parsing when the marker syntax is the same.
+- Image, tile, component, precinct, code-block, packet, and progression-order
+  model types.
+- DICOM pixel metadata validation, Ssiz precision/sign mapping, frame-size
+  validation, and decoded-metadata validation.
+- Reversible 5/3 and irreversible 9/7 wavelet transform helpers.
+- Quantization step-size encode/decode, guard-bit handling, subband indexing,
+  and inverse quantization helpers.
+- Big-endian byte I/O and marker-safe payload utilities.
+
+The implementation must keep only the entropy/block-coding layer split:
+
+- Classic JPEG 2000 `.90` and `.91` use classic Tier-1 EBCOT/MQ code-block
+  coding and classic packet contribution handling.
+- HTJ2K `.201`, `.202`, and `.203` use Part 15 HT block coding: MEL, VLC,
+  MagSgn, cleanup/refinement handling, and HT-specific segment assembly.
+
+Shared code must be named after the JPEG 2000 standard concept, not after a
+reference implementation. Names such as `OpenJpeg*` or `OpenJph*` are allowed
+only in tests, fixture provenance, comments that cite reference vectors, or
+adapter code for inspecting external baselines. Production implementation types
+must use names such as `Jpeg2000StandardWavelet`,
+`Jpeg2000StandardIrreversibleWavelet`, `Jpeg2000QuantizationTable`, or
+`Jpeg2000MarkerPayloadBuilder`.
+
 ## Marker Support
 
 Decoder must handle required JPEG 2000 codestream markers, including:
@@ -182,6 +215,13 @@ HTJ2K parameters should cover:
 - Quality or rate target for lossy encoding.
 
 The compatibility baseline is the public behavior of `fo-dicom.Codecs`, not its native implementation details. Do not expose native-library concepts such as OpenJPEG handles, OpenJPH tables, or native stream objects.
+
+For classic JPEG 2000 `.90` and `.91`, `fo-dicom.Codecs` currently reaches
+that public behavior through OpenJPEG. When validating output compatibility,
+prefer a locally generated `fo-dicom.Codecs`/OpenJPEG DICOM baseline over
+third-party managed or Go codec output. Reference-library names belong in
+tests, diagnostics, and provenance notes only; production implementation names
+must stay standard-oriented.
 
 ## Encoding Design
 
@@ -360,6 +400,18 @@ parameter contract for phase 1 integration:
 - Classic JPEG 2000 encoding writes COD progression order, layer count,
   multiple-component transform use, transform type, and SIZ component
   signedness from the requested parameters.
+- Classic JPEG 2000 lossy encoding uses OpenJPEG-compatible irreversible QCD
+  step-size generation and a managed single-layer rate-control path. The
+  managed rate-control targets `DicomJpeg2000Params.Rate` and may differ from
+  OpenJPEG PCRD by a small byte delta, so compatibility tests compare against
+  the generated `fo-dicom.Codecs` baseline with a narrow size window and a
+  decoded-pixel tolerance rather than requiring byte-for-byte codestream
+  equality.
+- Classic lossy Tier-1 bit-plane depth must be derived from the encoded QCD
+  step-size exponent plus guard bits, matching OpenJPEG's band `numbps`
+  calculation. Do not infer irreversible band depth only from component
+  precision and subband gain; signed 16-bit fixtures expose that error as a
+  large reconstruction offset even when packet truncation is disabled.
 - RGB input is normalized to interleaved component order for encoding and
   decoded frames are repacked to the target fo-dicom raw layout, including
   planar RGB targets. Monochrome, RGB, and supported YBR-related photometric

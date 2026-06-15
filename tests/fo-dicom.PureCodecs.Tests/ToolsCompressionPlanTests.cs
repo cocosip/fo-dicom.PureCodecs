@@ -322,6 +322,55 @@ public sealed class ToolsCompressionPlanTests
         Assert.NotNull(rendered);
     }
 
+    [Theory]
+    [InlineData("JPEG 2000 Lossless", @"D:\1_transcoded\1_j2k_lossless.dcm", 0, 64)]
+    [InlineData("JPEG 2000 Lossy", @"artifacts\fo-dicom-codecs-baseline\fo_dicom_codecs_j2k_lossy.dcm", 16, 64)]
+    public void CompressAll_jpeg2000_classic_outputs_from_local_real_fixture_use_standard_codestream_and_match_reference_size(
+        string formatName,
+        string referencePath,
+        int tolerance,
+        int allowedFrameSizeDifference)
+    {
+        const string inputPath = @"D:\1.dcm";
+        referencePath = Path.GetFullPath(referencePath);
+        if (!File.Exists(inputPath) || !File.Exists(referencePath))
+        {
+            return;
+        }
+
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-j2k");
+        if (Directory.Exists(outputDirectory))
+        {
+            Directory.Delete(outputDirectory, recursive: true);
+        }
+
+        var sourcePixelData = DicomPixelData.Create(DicomFile.Open(inputPath, FileReadOption.ReadAll).Dataset);
+        var result = new DicomCompressionTool().CompressAll(inputPath, outputDirectory)
+            .Single(item => item.Item.Format.Name == formatName);
+
+        Assert.Equal(CompressionResultStatus.Success, result.Status);
+        var referencePixelData = DicomPixelData.Create(DicomFile.Open(referencePath, FileReadOption.ReadAll).Dataset);
+        var compressedFile = DicomFile.Open(result.Item.OutputPath, FileReadOption.ReadAll);
+        var compressedPixelData = DicomPixelData.Create(compressedFile.Dataset);
+        var frame = compressedPixelData.GetFrame(0).Data;
+        var decoded = new DicomTranscoder(compressedPixelData.Syntax, DicomTransferSyntax.ExplicitVRLittleEndian)
+            .Transcode(compressedFile.Dataset);
+        var decodedPixelData = DicomPixelData.Create(decoded);
+
+        Assert.Equal(referencePixelData.Syntax, compressedPixelData.Syntax);
+        var referenceFrameSize = referencePixelData.GetFrame(0).Size;
+        Assert.InRange(Math.Abs(referenceFrameSize - frame.Length), 0, allowedFrameSizeDifference);
+        Assert.DoesNotContain(new byte[] { (byte)'P', (byte)'C', (byte)'J', (byte)'2' }, frame);
+        if (tolerance == 0)
+        {
+            PixelDataAssertions.FramesMatchExactly(sourcePixelData, decodedPixelData);
+        }
+        else
+        {
+            PixelDataAssertions.FramesMatchWithinTolerance(sourcePixelData, decodedPixelData, tolerance);
+        }
+    }
+
     private static void AssertSequentialJpegSkipped(CompressionPlan plan, string reason)
     {
         foreach (var syntax in new[] { DicomTransferSyntax.JPEGProcess1, DicomTransferSyntax.JPEGProcess2_4 })

@@ -71,30 +71,80 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 return;
             }
 
-            throw Jpeg2000Binary.CreateException("JPEG 2000 irreversible 9/7 decoding is not implemented in the standard decoder yet.");
+            if (cod.Transformation == 0)
+            {
+                var samples = DequantizeIrreversible(component, cod, qcd);
+                Jpeg2000StandardIrreversibleWavelet.Inverse97(samples, component.Width, component.Height, component.Levels);
+                component.Samples = Round(samples);
+                return;
+            }
+
+            throw Jpeg2000Binary.CreateException("JPEG 2000 transformation type is unsupported.");
+        }
+
+        private static double[] DequantizeIrreversible(Jpeg2000StandardComponent component, Jpeg2000CodingStyleDefault cod, Jpeg2000QuantizationDefault qcd)
+        {
+            var samples = new double[component.Coefficients.Length];
+            foreach (var block in component.AllCodeBlocks())
+            {
+                var resolution = ResolutionForBlock(cod.DecompositionLevels, block.Orientation, block.X0, block.Y0, component.Width, component.Height);
+                var index = SubbandIndex(cod.DecompositionLevels, resolution, block.Orientation);
+                var step = 1.0;
+                if (index >= 0 && index < qcd.StepSizes.Count)
+                {
+                    step = Jpeg2000QuantizationTable.DecodeStepSize(qcd.StepSizes[index], component.Precision);
+                }
+
+                for (var y = block.Y0; y < block.Y0 + block.Height; y++)
+                {
+                    for (var x = block.X0; x < block.X0 + block.Width; x++)
+                    {
+                        var offset = (y * component.Width) + x;
+                        samples[offset] = component.Coefficients[offset] * step;
+                    }
+                }
+            }
+
+            return samples;
+        }
+
+        private static int[] Round(double[] values)
+        {
+            var result = new int[values.Length];
+            for (var i = 0; i < values.Length; i++)
+            {
+                result[i] = values[i] >= 0 ? (int)(values[i] + 0.5) : (int)(values[i] - 0.5);
+            }
+
+            return result;
         }
 
         private static int EstimateBitPlaneCount(Jpeg2000StandardComponent component, Jpeg2000CodingStyleDefault cod, Jpeg2000QuantizationDefault qcd, Jpeg2000StandardCodeBlock block)
         {
             var zeroBitPlanes = block.ZeroBitPlanes;
-            var subbandBits = component.Precision + GainBits(block.Orientation);
-            if (qcd.Style == Jpeg2000QuantizationStyle.None && qcd.StepSizes.Count > 0)
-            {
-                var resolution = ResolutionForBlock(cod.DecompositionLevels, block.Orientation, block.X0, block.Y0, component.Width, component.Height);
-                var index = SubbandIndex(cod.DecompositionLevels, resolution, block.Orientation);
-                if (index >= 0 && index < qcd.StepSizes.Count)
-                {
-                    subbandBits = ((int)qcd.StepSizes[index] >> 3) + qcd.GuardBits - 1;
-                }
-            }
-
-            var codeBlockBits = subbandBits + 1 - zeroBitPlanes;
+            var subbandBits = EstimateBandBitPlaneDepth(component, cod, qcd, block);
+            var codeBlockBits = subbandBits - zeroBitPlanes;
             if (codeBlockBits <= 0)
             {
                 return -1;
             }
 
             return codeBlockBits;
+        }
+
+        private static int EstimateBandBitPlaneDepth(Jpeg2000StandardComponent component, Jpeg2000CodingStyleDefault cod, Jpeg2000QuantizationDefault qcd, Jpeg2000StandardCodeBlock block)
+        {
+            if (qcd.Style != Jpeg2000QuantizationStyle.None)
+            {
+                var resolution = ResolutionForBlock(cod.DecompositionLevels, block.Orientation, block.X0, block.Y0, component.Width, component.Height);
+                var index = SubbandIndex(cod.DecompositionLevels, resolution, block.Orientation);
+                if (index >= 0 && index < qcd.StepSizes.Count)
+                {
+                    return Jpeg2000QuantizationTable.BitPlaneDepth(qcd.StepSizes[index], qcd.GuardBits);
+                }
+            }
+
+            return component.Precision + GainBits(block.Orientation) + qcd.GuardBits - 1;
         }
 
         private static int SubbandIndex(int levels, int resolution, int orientation)
@@ -222,13 +272,31 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 for (var component = 0; component < components.Length; component++)
                 {
                     var value = components[component].Samples[pixel];
-                    if (value < 0)
+                    if (components[component].IsSigned)
                     {
-                        value = 0;
+                        var min = -(1 << (components[component].Precision - 1));
+                        var signedMax = (1 << (components[component].Precision - 1)) - 1;
+                        if (value < min)
+                        {
+                            value = min;
+                        }
+                        else if (value > signedMax)
+                        {
+                            value = signedMax;
+                        }
+
+                        value &= max;
                     }
-                    else if (value > max)
+                    else
                     {
-                        value = max;
+                        if (value < 0)
+                        {
+                            value = 0;
+                        }
+                        else if (value > max)
+                        {
+                            value = max;
+                        }
                     }
 
                     var offset = ((pixel * components.Length) + component) * bytesPerSample;

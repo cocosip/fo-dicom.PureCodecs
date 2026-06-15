@@ -2,6 +2,7 @@ using System;
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
+using FellowOakDicom.PureCodecs.Internal;
 using FellowOakDicom.IO.Buffer;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
@@ -46,18 +47,19 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 {
                     var encoded = _frameCodec.EncodeFrame(
                         oldPixelData,
-                        NormalizeFrameForEncode(oldPixelData, ToArray(oldPixelData.GetFrame(frame))),
+                        NormalizeFrameForEncode(oldPixelData, oldPixelData.GetFrame(frame).ToArrayCopy()),
                         irreversible,
                         tolerance,
                         jpeg2000Parameters.ProgressionOrder,
                         layerCount,
                         usesMct,
-                        jpeg2000Parameters.EncodeSignedPixelValuesAsUnsigned);
+                        jpeg2000Parameters.EncodeSignedPixelValuesAsUnsigned,
+                        jpeg2000Parameters.Rate);
                     newPixelData.AddFrame(new MemoryByteBuffer(encoded));
                 }
                 catch (Exception exception)
                 {
-                    throw Wrap("encode", frame, exception);
+                    throw CodecFailure.Wrap(TransferSyntax, "encode", frame, exception);
                 }
             }
         }
@@ -68,13 +70,13 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             {
                 try
                 {
-                    var decoded = _frameCodec.DecodeFrame(newPixelData, ToArray(oldPixelData.GetFrame(frame)));
+                    var decoded = _frameCodec.DecodeFrame(newPixelData, oldPixelData.GetFrame(frame).ToArrayCopy());
                     decoded = NormalizeFrameForDecode(newPixelData, decoded);
                     newPixelData.AddFrame(new MemoryByteBuffer(decoded));
                 }
                 catch (Exception exception)
                 {
-                    throw Wrap("decode", frame, exception);
+                    throw CodecFailure.Wrap(TransferSyntax, "decode", frame, exception);
                 }
             }
         }
@@ -101,22 +103,20 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         private int ResolveLayerCount(DicomJpeg2000Params parameters)
         {
-            var layerCount = 1;
-            if (parameters.RateLevels != null)
+            var layerCount = 0;
+            var rateLevels = parameters.RateLevels ?? new int[0];
+            foreach (var rateLevel in rateLevels)
             {
-                layerCount = 0;
-                foreach (var rateLevel in parameters.RateLevels)
+                if (rateLevel <= parameters.Rate)
                 {
-                    if (rateLevel > parameters.Rate)
-                    {
-                        layerCount++;
-                    }
-                    else
-                    {
-                        break;
-                    }
+                    break;
                 }
 
+                layerCount++;
+            }
+
+            if (parameters.Rate > 0)
+            {
                 layerCount++;
             }
 
@@ -237,21 +237,5 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return planar;
         }
 
-        private DicomCodecException Wrap(string operation, int frame, Exception exception)
-        {
-            if (exception is DicomCodecException codecException)
-            {
-                return codecException;
-            }
-
-            return new DicomCodecException($"{TransferSyntax.UID.Name} {operation} frame {frame} failed.", exception);
-        }
-
-        private static byte[] ToArray(IByteBuffer buffer)
-        {
-            var bytes = new byte[buffer.Size];
-            Buffer.BlockCopy(buffer.Data, 0, bytes, 0, bytes.Length);
-            return bytes;
-        }
     }
 }

@@ -69,7 +69,7 @@ public sealed class Jpeg2000DicomIntegrationTests
     }
 
     [Fact]
-    public void Jpeg2000_pure_parameters_write_progression_order()
+    public void Jpeg2000_pure_parameters_reject_unsupported_progression_order()
     {
         var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 4, columns: 4);
         var source = DicomPixelData.Create(dataset);
@@ -82,9 +82,9 @@ public sealed class Jpeg2000DicomIntegrationTests
             ProgressionOrder = Jpeg2000ProgressionOrder.RPCL
         };
 
-        codec.Encode(source, compressed, parameters);
+        var exception = Assert.Throws<DicomCodecException>(() => codec.Encode(source, compressed, parameters));
 
-        Assert.Equal(Jpeg2000ProgressionOrder.RPCL, ReadProgressionOrder(compressed.GetFrame(0).Data));
+        Assert.Contains("LRCP", exception.Message);
     }
 
     [Fact]
@@ -118,14 +118,14 @@ public sealed class Jpeg2000DicomIntegrationTests
     [Fact]
     public void Jpeg2000_rate_controls_lossy_quantization_tolerance()
     {
-        var sourceFrame = new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
-        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 4, columns: 4, frame: sourceFrame);
+        var sourceFrame = Enumerable.Range(0, 64 * 64).Select(index => (byte)((index * 13) % 251)).ToArray();
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 64, columns: 64, frame: sourceFrame);
         var source = DicomPixelData.Create(dataset);
-        var lowQualityDecoded = EncodeDecodeJpeg2000Lossy(source, new PureJpeg2000Params { Irreversible = true, Rate = 5 });
-        var highQualityDecoded = EncodeDecodeJpeg2000Lossy(source, new PureJpeg2000Params { Irreversible = true, Rate = 20 });
+        var lowerCompressionDecoded = EncodeDecodeJpeg2000Lossy(source, new PureJpeg2000Params { Irreversible = true, Rate = 5 });
+        var higherCompressionDecoded = EncodeDecodeJpeg2000Lossy(source, new PureJpeg2000Params { Irreversible = true, Rate = 20 });
 
-        Assert.True(MaxByteDifference(source.GetFrame(0).Data, lowQualityDecoded.GetFrame(0).Data) >
-            MaxByteDifference(source.GetFrame(0).Data, highQualityDecoded.GetFrame(0).Data));
+        Assert.True(MaxByteDifference(source.GetFrame(0).Data, higherCompressionDecoded.GetFrame(0).Data) >
+            MaxByteDifference(source.GetFrame(0).Data, lowerCompressionDecoded.GetFrame(0).Data));
     }
 
     [Fact]
@@ -148,14 +148,42 @@ public sealed class Jpeg2000DicomIntegrationTests
     }
 
     [Fact]
-    public void Jpeg2000_lossless_round_trips_rgb_interleaved_and_planar_layouts()
+    public void Jpeg2000_default_lossy_rate_levels_write_fo_dicom_codecs_layer_count()
     {
-        AssertRgbRoundTrip(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 2, columns: 2));
-        AssertRgbRoundTrip(DicomPixelDataFixtures.CreateRgbPlanar(rows: 2, columns: 2));
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 64, columns: 64);
+        var source = DicomPixelData.Create(dataset);
+        var compressedDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.JPEG2000Lossy);
+        var compressed = DicomPixelData.Create(compressedDataset, true);
+        var codec = new DicomJpeg2000LossyCodec();
+
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+
+        Assert.Equal(7, ReadLayerCount(compressed.GetFrame(0).Data));
     }
 
     [Fact]
-    public void Jpeg2000_allow_mct_and_photometric_update_write_ybr_photometric_for_rgb()
+    public void Jpeg2000_default_lossless_rate_levels_include_final_lossless_layer()
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 64, columns: 64);
+        var source = DicomPixelData.Create(dataset);
+        var compressedDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.JPEG2000Lossless);
+        var compressed = DicomPixelData.Create(compressedDataset, true);
+        var codec = new DicomJpeg2000LosslessCodec();
+
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+
+        Assert.Equal(8, ReadLayerCount(compressed.GetFrame(0).Data));
+    }
+
+    [Fact]
+    public void Jpeg2000_standard_encoder_rejects_rgb_round_trips_until_component_encoding_is_implemented()
+    {
+        AssertRgbEncodeUnsupported(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 2, columns: 2));
+        AssertRgbEncodeUnsupported(DicomPixelDataFixtures.CreateRgbPlanar(rows: 2, columns: 2));
+    }
+
+    [Fact]
+    public void Jpeg2000_allow_mct_rgb_encode_is_rejected_until_component_encoding_is_implemented()
     {
         var dataset = DicomPixelDataFixtures.CreateRgbInterleaved(rows: 2, columns: 2);
         var source = DicomPixelData.Create(dataset);
@@ -163,20 +191,18 @@ public sealed class Jpeg2000DicomIntegrationTests
         var compressed = DicomPixelData.Create(compressedDataset, true);
         var codec = new DicomJpeg2000LossyCodec();
 
-        codec.Encode(source, compressed, new PureJpeg2000Params
+        var exception = Assert.Throws<DicomCodecException>(() => codec.Encode(source, compressed, new PureJpeg2000Params
         {
             Irreversible = true,
             AllowMCT = true,
             UpdatePhotometricInterpretation = true
-        });
+        }));
 
-        Assert.Equal(PhotometricInterpretation.YbrIct.Value, compressed.PhotometricInterpretation.Value);
-        Assert.Equal(PlanarConfiguration.Interleaved, compressed.PlanarConfiguration);
-        Assert.True(ReadUsesMultipleComponentTransform(compressed.GetFrame(0).Data));
+        Assert.Contains("monochrome", exception.Message, System.StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void Jpeg2000_allow_mct_false_preserves_rgb_photometric()
+    public void Jpeg2000_allow_mct_false_rgb_encode_is_rejected_until_component_encoding_is_implemented()
     {
         var dataset = DicomPixelDataFixtures.CreateRgbInterleaved(rows: 2, columns: 2);
         var source = DicomPixelData.Create(dataset);
@@ -184,10 +210,10 @@ public sealed class Jpeg2000DicomIntegrationTests
         var compressed = DicomPixelData.Create(compressedDataset, true);
         var codec = new DicomJpeg2000LosslessCodec();
 
-        codec.Encode(source, compressed, new PureJpeg2000Params { Irreversible = false, AllowMCT = false });
+        var exception = Assert.Throws<DicomCodecException>(
+            () => codec.Encode(source, compressed, new PureJpeg2000Params { Irreversible = false, AllowMCT = false }));
 
-        Assert.Equal(PhotometricInterpretation.Rgb.Value, compressed.PhotometricInterpretation.Value);
-        Assert.False(ReadUsesMultipleComponentTransform(compressed.GetFrame(0).Data));
+        Assert.Contains("monochrome", exception.Message, System.StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -364,7 +390,7 @@ public sealed class Jpeg2000DicomIntegrationTests
             var segment = reader.ReadNext();
             if (segment.Code == Jpeg2000Marker.COD)
             {
-                return Jpeg2000CodingStyleDefault.Parse(segment).Transformation == 1;
+                return Jpeg2000CodingStyleDefault.Parse(segment).Transformation == 0;
             }
         }
 
@@ -438,17 +464,16 @@ public sealed class Jpeg2000DicomIntegrationTests
         PixelDataAssertions.AssertRequiredCompressionTags(compressedDataset, syntax);
     }
 
-    private static void AssertRgbRoundTrip(DicomDataset dataset)
+    private static void AssertRgbEncodeUnsupported(DicomDataset dataset)
     {
         var source = DicomPixelData.Create(dataset);
         var compressed = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.JPEG2000Lossless), true);
-        var decoded = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
         var codec = new DicomJpeg2000LosslessCodec();
 
-        codec.Encode(source, compressed, codec.GetDefaultParameters());
-        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
+        var exception = Assert.Throws<DicomCodecException>(
+            () => codec.Encode(source, compressed, codec.GetDefaultParameters()));
 
-        PixelDataAssertions.FramesMatchExactly(source, decoded);
+        Assert.Contains("monochrome", exception.Message, System.StringComparison.OrdinalIgnoreCase);
     }
 
     private static int MaxByteDifference(byte[] expected, byte[] actual)

@@ -278,6 +278,10 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ### 6.1 Codestream Infrastructure
 
+- [x] Consolidate JPEG 2000 family shared infrastructure before further `.90`, `.91`, or HTJ2K repairs.
+- [x] Ensure shared codestream marker, marker payload, byte I/O, metadata validation, DWT, and quantization helpers are used by both classic JPEG 2000 and HTJ2K where the standard syntax is the same.
+- [x] Keep only entropy/block-coding implementations split between classic Tier-1 EBCOT/MQ and HTJ2K Part 15 HT block coding.
+- [x] Remove production implementation type names that imply native/reference-library dependency, such as `OpenJpeg*` or `OpenJph*`, unless the file is a test/reference-vector adapter.
 - [x] Add JPEG 2000 marker constants.
 - [x] Add codestream marker reader.
 - [x] Add codestream marker writer.
@@ -477,18 +481,36 @@ Tracked batch: [tool compression regression](tool-compression-regression-log.md)
 
 - [x] Reproduce `fo-dicom.PureCodecs.Tools` output from a real DICOM input.
 - [x] Preserve or regenerate the matching `fo-dicom.Codecs` reference output for the same input.
-- [ ] Add a fixture-backed regression harness that compares PureCodecs output against the `fo-dicom.Codecs` baseline for every available reference format.
+- [x] Add a fixture-backed regression harness that compares PureCodecs output against the `fo-dicom.Codecs` baseline for every available reference format.
 - [x] RLE Lossless: explain the output file-size difference or fix the underlying DICOM/tag/encapsulation discrepancy.
 - [x] JPEG Lossless Process 14: fix viewer-open/render compatibility.
 - [x] JPEG Lossless Process 14 SV1: fix viewer-open/render compatibility.
 - [x] JPEG-LS Lossless: fix viewer-open/render compatibility.
 - [x] JPEG-LS Near-Lossless: fix viewer-open/render compatibility.
-- [ ] JPEG 2000 Lossless: fix viewer-open/render compatibility and the large output-size mismatch.
-- [ ] JPEG 2000 Lossy: fix viewer-open/render compatibility and the large output-size mismatch.
+- [x] JPEG 2000 Lossless: fix viewer-open/render compatibility and the large output-size mismatch.
+- [x] JPEG 2000 Lossy: fix viewer-open/render compatibility and the large output-size mismatch.
 - [ ] HTJ2K Lossless: create or obtain a reference baseline, then fix viewer-open/render compatibility.
 - [ ] HTJ2K Lossless RPCL: create or obtain a reference baseline, then fix viewer-open/render compatibility.
 - [ ] HTJ2K Lossy: create or obtain a reference baseline, then fix viewer-open/render compatibility.
 - [ ] Re-run the full solution test suite after the format-specific repairs.
+
+JPEG 2000 regression note: `fo-dicom.Codecs` 5.16.5.1/OpenJPEG is the
+compatibility baseline for classic `.90` and `.91`. Do not treat the local
+`D:\1_transcoded\1_j2k_lossy.dcm` file as that baseline unless its provenance
+is revalidated; the current known native baseline generated from `D:\1.dcm` is
+`artifacts\fo-dicom-codecs-baseline\fo_dicom_codecs_j2k_lossy.dcm`, with a
+40774-byte codestream frame and OpenJPEG QCD payload
+`42 B7 20 B6 F0 B6 F0 B6 C0 AF 00 AF 00 AE E0 A7 50 A7 50 A7 68 90 05 90 05 90 47 97 D3 97 D3 97 62`.
+Pure C# lossy output is allowed a small frame-size delta because its current
+managed multi-layer rate-control is not byte-for-byte OpenJPEG PCRD, but it
+must decode within the agreed tolerance against the original image.
+
+Classic JPEG 2000 lossy repair note: OpenJPEG derives each irreversible band
+bit-plane depth from the encoded QCD step-size exponent plus guard bits
+(`band->numbps`), not from component precision and subband gain alone. Keep the
+managed Tier-1 encoder and decoder on the same QCD-exponent-derived calculation;
+otherwise signed 16-bit lossy fixtures can decode with a large DC-scale offset
+even when `Rate = 0` disables packet truncation.
 
 ## Completion Definition
 

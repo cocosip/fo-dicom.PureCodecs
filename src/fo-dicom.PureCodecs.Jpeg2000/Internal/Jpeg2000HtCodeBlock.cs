@@ -187,7 +187,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return new Jpeg2000ClassicCodeBlock(encoded.Width, encoded.Height, coefficients);
         }
 
-        public static Jpeg2000ClassicCodeBlock DecodeOpenJphCleanupPass(byte[] cleanupPass, int width, int height, int missingMostSignificantBits)
+        public static Jpeg2000ClassicCodeBlock DecodeStandardCleanupPass(byte[] cleanupPass, int width, int height, int missingMostSignificantBits)
         {
             return Jpeg2000HtStandardCleanupPassDecoder.Decode(cleanupPass, width, height, missingMostSignificantBits);
         }
