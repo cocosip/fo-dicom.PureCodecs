@@ -36,7 +36,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                 try
                 {
                     var encoded = _frameCodec.EncodeFrame(oldPixelData, ToArray(oldPixelData.GetFrame(frame)), nearLossless);
-                    newPixelData.AddFrame(new MemoryByteBuffer(encoded));
+                    newPixelData.AddFrame(new MemoryByteBuffer(PadToEvenLength(encoded)));
                 }
                 catch (Exception exception)
                 {
@@ -76,6 +76,18 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             var bytes = new byte[buffer.Size];
             Buffer.BlockCopy(buffer.Data, 0, bytes, 0, bytes.Length);
             return bytes;
+        }
+
+        private static byte[] PadToEvenLength(byte[] frame)
+        {
+            if ((frame.Length & 1) == 0)
+            {
+                return frame;
+            }
+
+            var padded = new byte[frame.Length + 1];
+            Buffer.BlockCopy(frame, 0, padded, 0, frame.Length);
+            return padded;
         }
     }
 }

@@ -11,6 +11,15 @@ namespace FellowOakDicom.PureCodecs.Tests;
 public sealed class JpegLsCodecRoundTripTests
 {
     [Fact]
+    public void Default_parameters_match_fo_dicom_codecs_near_lossless_error()
+    {
+        var parameters = new DicomJpegLsNearLosslessCodec().GetDefaultParameters();
+        var jpegLsParameters = Assert.IsType<DicomJpegLsParams>(parameters);
+
+        Assert.Equal(2, jpegLsParameters.AllowedError);
+    }
+
+    [Fact]
     public void Lossless_round_trip_preserves_8_bit_monochrome_samples()
     {
         AssertLosslessRoundTrip(DicomPixelDataFixtures.CreateMonochrome8(frame: new byte[] { 10, 12, 18, 21, 30, 31, 32, 40, 41, 55, 60, 63 }));
@@ -49,6 +58,37 @@ public sealed class JpegLsCodecRoundTripTests
     public void Near_lossless_round_trip_preserves_16_bit_samples_within_allowed_error()
     {
         AssertNearLosslessRoundTrip(DicomPixelDataFixtures.CreateMonochrome16(frame: CreateUInt16Frame(1000, 1010, 1025, 1030, 2048, 2050, 3000, 3002, 4000, 4001, 5000, 5002)), allowedError: 2);
+    }
+
+    [Fact]
+    public void Near_lossless_encode_pads_odd_length_jpeg_ls_frames_to_even_length()
+    {
+        const string inputPath = @"D:\1.dcm";
+        if (!File.Exists(inputPath))
+        {
+            return;
+        }
+
+        var codec = new DicomJpegLsNearLosslessCodec();
+        var rawPixelData = DicomPixelData.Create(DicomFile.Open(inputPath, FileReadOption.ReadAll).Dataset);
+        var compressedPixelData = CreateTargetPixelData(rawPixelData, DicomTransferSyntax.JPEGLSNearLossless);
+
+        codec.Encode(rawPixelData, compressedPixelData, codec.GetDefaultParameters());
+        var frame = compressedPixelData.GetFrame(0).Data;
+
+        Assert.Equal(0, frame.Length % 2);
+        Assert.Equal(0, frame[frame.Length - 1]);
+        Assert.Equal(0xD9, frame[frame.Length - 2]);
+        Assert.Equal(0xFF, frame[frame.Length - 3]);
+    }
+
+    [Fact]
+    public void Near_lossless_tolerance_assertion_compares_16_bit_sample_values()
+    {
+        var expected = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome16(frame: CreateUInt16Frame(0x0100)));
+        var actual = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome16(frame: CreateUInt16Frame(0x00FF)));
+
+        PixelDataAssertions.FramesMatchWithinTolerance(expected, actual, tolerance: 1);
     }
 
     [Fact]

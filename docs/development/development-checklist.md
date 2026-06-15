@@ -481,8 +481,8 @@ Tracked batch: [tool compression regression](tool-compression-regression-log.md)
 - [x] RLE Lossless: explain the output file-size difference or fix the underlying DICOM/tag/encapsulation discrepancy.
 - [x] JPEG Lossless Process 14: fix viewer-open/render compatibility.
 - [x] JPEG Lossless Process 14 SV1: fix viewer-open/render compatibility.
-- [ ] JPEG-LS Lossless: fix viewer-open/render compatibility.
-- [ ] JPEG-LS Near-Lossless: fix viewer-open/render compatibility.
+- [x] JPEG-LS Lossless: fix viewer-open/render compatibility.
+- [x] JPEG-LS Near-Lossless: fix viewer-open/render compatibility.
 - [ ] JPEG 2000 Lossless: fix viewer-open/render compatibility and the large output-size mismatch.
 - [ ] JPEG 2000 Lossy: fix viewer-open/render compatibility and the large output-size mismatch.
 - [ ] HTJ2K Lossless: create or obtain a reference baseline, then fix viewer-open/render compatibility.

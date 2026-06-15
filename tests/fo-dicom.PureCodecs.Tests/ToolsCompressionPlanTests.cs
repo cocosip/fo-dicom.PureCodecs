@@ -275,14 +275,15 @@ public sealed class ToolsCompressionPlanTests
     }
 
     [Theory]
-    [InlineData("JPEG-LS Lossless", 0)]
-    [InlineData("JPEG-LS Near-Lossless", 3)]
-    public void CompressAll_jpegls_outputs_from_local_real_fixture_round_trip_with_expected_tolerance(
+    [InlineData("JPEG-LS Lossless", @"D:\1_transcoded\1_jpegls_lossless.dcm", 0)]
+    [InlineData("JPEG-LS Near-Lossless", @"D:\1_transcoded\1_jpegls_near_lossless.dcm", 2)]
+    public void CompressAll_jpegls_outputs_from_local_real_fixture_match_reference_frame_size_and_round_trip(
         string formatName,
+        string referencePath,
         int tolerance)
     {
         const string inputPath = @"D:\1.dcm";
-        if (!File.Exists(inputPath))
+        if (!File.Exists(inputPath) || !File.Exists(referencePath))
         {
             return;
         }
@@ -298,13 +299,16 @@ public sealed class ToolsCompressionPlanTests
             .Single(item => item.Item.Format.Name == formatName);
 
         Assert.Equal(CompressionResultStatus.Success, result.Status);
+        var referencePixelData = DicomPixelData.Create(DicomFile.Open(referencePath, FileReadOption.ReadAll).Dataset);
         var compressedFile = DicomFile.Open(result.Item.OutputPath, FileReadOption.ReadAll);
         var compressedPixelData = DicomPixelData.Create(compressedFile.Dataset);
         var decoded = new DicomTranscoder(compressedPixelData.Syntax, DicomTransferSyntax.ExplicitVRLittleEndian)
             .Transcode(compressedFile.Dataset);
         var decodedPixelData = DicomPixelData.Create(decoded);
 
+        Assert.Equal(referencePixelData.Syntax, compressedPixelData.Syntax);
         Assert.Equal(sourcePixelData.NumberOfFrames, compressedPixelData.NumberOfFrames);
+        Assert.Equal(referencePixelData.GetFrame(0).Size, compressedPixelData.GetFrame(0).Size);
         if (tolerance == 0)
         {
             PixelDataAssertions.FramesMatchExactly(sourcePixelData, decodedPixelData);

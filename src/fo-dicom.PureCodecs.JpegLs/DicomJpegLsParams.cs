@@ -15,7 +15,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs
     {
         public DicomJpegLsParams()
         {
-            AllowedError = 3;
+            AllowedError = 2;
             InterleaveMode = JpegLsInterleaveMode.Line;
             ColorTransform = DicomJpegLsColorTransform.HP1;
         }

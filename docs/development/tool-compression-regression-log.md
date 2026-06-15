@@ -88,6 +88,43 @@ Regression coverage:
 - `ToolsCompressionPlanTests.CompressAll_jpeg_lossless_outputs_from_local_real_fixture_match_reference_frame_size_and_round_trip`
 - `ToolsCompressionPlanTests.CompressAll_outputs_from_local_real_fixture_decode_and_render`
 
+### JPEG-LS Lossless and Near-Lossless
+
+Reference preserved from the `fo-dicom.Codecs` output in `D:\1_transcoded`:
+
+- Reference JPEG-LS Lossless file size: 188,332 bytes.
+- Reference JPEG-LS Lossless compressed frame size: 183,914 bytes.
+- Reference JPEG-LS Near-Lossless file size: 77,696 bytes.
+- Reference JPEG-LS Near-Lossless compressed frame size: 73,278 bytes.
+- Reference JPEG-LS Near-Lossless SOS `NEAR`: 2.
+
+Initial PureCodecs output:
+
+- Pure JPEG-LS Lossless file size: 187,920 bytes.
+- Pure JPEG-LS Lossless compressed frame size: 183,914 bytes.
+- Pure JPEG-LS Near-Lossless file size: 56,425 bytes.
+- Pure JPEG-LS Near-Lossless compressed frame size: 52,375 bytes.
+- Pure JPEG-LS Near-Lossless SOS `NEAR`: 3.
+
+Repaired PureCodecs output matches the reference compressed frame sizes for both
+JPEG-LS transfer syntaxes. Lossless already produced the same codestream payload;
+the 412-byte `.dcm` file-size difference is outside the JPEG-LS frame. Near-
+lossless was smaller because the managed default `AllowedError` was 3 while the
+`fo-dicom.Codecs` baseline uses `NEAR=2`. After changing the default to 2, the
+remaining one-byte frame-size gap was DICOM encapsulation padding: the JPEG-LS
+codestream ended on an odd byte count and needed a trailing `00` padding byte
+after EOI. The tolerance assertion now compares 16-bit sample values instead of
+individual bytes so signed 16-bit near-lossless output is checked against the
+actual DICOM pixel semantics.
+
+Regression coverage:
+
+- `JpegLsCodecRoundTripTests.Default_parameters_match_fo_dicom_codecs_near_lossless_error`
+- `JpegLsCodecRoundTripTests.Near_lossless_encode_pads_odd_length_jpeg_ls_frames_to_even_length`
+- `JpegLsCodecRoundTripTests.Near_lossless_tolerance_assertion_compares_16_bit_sample_values`
+- `ToolsCompressionPlanTests.CompressAll_jpegls_outputs_from_local_real_fixture_match_reference_frame_size_and_round_trip`
+- `ToolsCompressionPlanTests.CompressAll_outputs_from_local_real_fixture_decode_and_render`
+
 ### HTJ2K Note
 
 While collecting the format matrix, HTJ2K outputs from the same input failed

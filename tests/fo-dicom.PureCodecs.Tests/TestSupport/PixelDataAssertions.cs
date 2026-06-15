@@ -28,12 +28,19 @@ internal static class PixelDataAssertions
             var actualBytes = ToArray(actual.GetFrame(frame));
 
             Assert.Equal(expectedBytes.Length, actualBytes.Length);
-            for (var i = 0; i < expectedBytes.Length; i++)
+            Assert.Equal(expected.BitsAllocated, actual.BitsAllocated);
+            Assert.Equal(expected.PixelRepresentation, actual.PixelRepresentation);
+
+            var bytesPerSample = expected.BitsAllocated / 8;
+            Assert.True(bytesPerSample == 1 || bytesPerSample == 2, $"Unsupported BitsAllocated {expected.BitsAllocated}.");
+            for (var i = 0; i < expectedBytes.Length; i += bytesPerSample)
             {
-                var difference = Math.Abs(expectedBytes[i] - actualBytes[i]);
+                var expectedSample = ReadSample(expectedBytes, i, expected.BitsAllocated, expected.PixelRepresentation);
+                var actualSample = ReadSample(actualBytes, i, actual.BitsAllocated, actual.PixelRepresentation);
+                var difference = Math.Abs(expectedSample - actualSample);
                 Assert.True(
                     difference <= tolerance,
-                    $"Frame {frame} byte {i} differed by {difference}, which is greater than tolerance {tolerance}.");
+                    $"Frame {frame} sample {i / bytesPerSample} differed by {difference}, which is greater than tolerance {tolerance}.");
             }
         }
     }
@@ -68,5 +75,16 @@ internal static class PixelDataAssertions
         var bytes = new byte[buffer.Size];
         Buffer.BlockCopy(buffer.Data, 0, bytes, 0, bytes.Length);
         return bytes;
+    }
+
+    private static int ReadSample(byte[] bytes, int offset, int bitsAllocated, PixelRepresentation pixelRepresentation)
+    {
+        if (bitsAllocated == 8)
+        {
+            return pixelRepresentation == PixelRepresentation.Signed ? unchecked((sbyte)bytes[offset]) : bytes[offset];
+        }
+
+        var value = bytes[offset] | (bytes[offset + 1] << 8);
+        return pixelRepresentation == PixelRepresentation.Signed ? unchecked((short)value) : value;
     }
 }
