@@ -1,5 +1,6 @@
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
+using FellowOakDicom.Imaging.Codec;
 using FellowOakDicom.PureCodecs.Tools;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
@@ -153,6 +154,170 @@ public sealed class ToolsCompressionPlanTests
         AssertSequentialJpegSkipped(plan, "JPEG sequential DCT does not support photometric interpretation HSV.");
     }
 
+    [Fact]
+    public void CompressAll_outputs_from_local_real_fixture_decode_and_render()
+    {
+        const string inputPath = @"D:\1.dcm";
+        if (!File.Exists(inputPath))
+        {
+            return;
+        }
+
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression");
+        if (Directory.Exists(outputDirectory))
+        {
+            Directory.Delete(outputDirectory, recursive: true);
+        }
+
+        var results = new DicomCompressionTool().CompressAll(inputPath, outputDirectory);
+
+        Assert.Contains(results, result => result.Status == CompressionResultStatus.Success);
+        var failures = new List<string>();
+        foreach (var result in results.Where(result => result.Status == CompressionResultStatus.Success))
+        {
+            try
+            {
+                var file = DicomFile.Open(result.Item.OutputPath, FileReadOption.ReadAll);
+                var pixelData = DicomPixelData.Create(file.Dataset);
+                var raw = new DicomTranscoder(pixelData.Syntax, DicomTransferSyntax.ExplicitVRLittleEndian)
+                    .Transcode(file.Dataset);
+                var rawPixelData = DicomPixelData.Create(raw);
+
+                Assert.Equal(pixelData.NumberOfFrames, rawPixelData.NumberOfFrames);
+                Assert.True(rawPixelData.GetFrame(0).Size > 0);
+                using var rendered = new DicomImage(result.Item.OutputPath).RenderImage();
+                Assert.NotNull(rendered);
+            }
+            catch (Exception exception)
+            {
+                failures.Add($"{result.Item.Format.Name}: {exception.GetType().Name}: {exception.Message}");
+            }
+        }
+
+        Assert.Empty(failures);
+    }
+
+    [Fact]
+    public void CompressAll_rle_output_from_local_real_fixture_round_trips_exactly()
+    {
+        const string inputPath = @"D:\1.dcm";
+        if (!File.Exists(inputPath))
+        {
+            return;
+        }
+
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-rle");
+        if (Directory.Exists(outputDirectory))
+        {
+            Directory.Delete(outputDirectory, recursive: true);
+        }
+
+        var sourcePixelData = DicomPixelData.Create(DicomFile.Open(inputPath, FileReadOption.ReadAll).Dataset);
+        var result = new DicomCompressionTool().CompressAll(inputPath, outputDirectory)
+            .Single(item => item.Item.Format.TransferSyntax == DicomTransferSyntax.RLELossless);
+
+        Assert.Equal(CompressionResultStatus.Success, result.Status);
+        var compressedFile = DicomFile.Open(result.Item.OutputPath, FileReadOption.ReadAll);
+        var compressedPixelData = DicomPixelData.Create(compressedFile.Dataset);
+        var decoded = new DicomTranscoder(DicomTransferSyntax.RLELossless, DicomTransferSyntax.ExplicitVRLittleEndian)
+            .Transcode(compressedFile.Dataset);
+        var decodedPixelData = DicomPixelData.Create(decoded);
+
+        Assert.Equal(DicomTransferSyntax.RLELossless, compressedPixelData.Syntax);
+        Assert.Equal(sourcePixelData.NumberOfFrames, compressedPixelData.NumberOfFrames);
+        Assert.Equal(sourcePixelData.Width, compressedPixelData.Width);
+        Assert.Equal(sourcePixelData.Height, compressedPixelData.Height);
+        Assert.Equal(sourcePixelData.BitsAllocated, compressedPixelData.BitsAllocated);
+        Assert.Equal(sourcePixelData.BitsStored, compressedPixelData.BitsStored);
+        Assert.Equal(sourcePixelData.HighBit, compressedPixelData.HighBit);
+        Assert.Equal(sourcePixelData.PixelRepresentation, compressedPixelData.PixelRepresentation);
+        Assert.Equal(2, ReadRleSegmentCount(compressedPixelData.GetFrame(0).Data));
+        PixelDataAssertions.FramesMatchExactly(sourcePixelData, decodedPixelData);
+    }
+
+    [Theory]
+    [InlineData("JPEG Lossless Process 14", @"D:\1_transcoded\1_jpeg_lossless.dcm")]
+    [InlineData("JPEG Lossless Process 14 SV1", @"D:\1_transcoded\1_jpeg_lossless_sv1.dcm")]
+    public void CompressAll_jpeg_lossless_outputs_from_local_real_fixture_match_reference_frame_size_and_round_trip(
+        string formatName,
+        string referencePath)
+    {
+        const string inputPath = @"D:\1.dcm";
+        if (!File.Exists(inputPath) || !File.Exists(referencePath))
+        {
+            return;
+        }
+
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-jpeg");
+        if (Directory.Exists(outputDirectory))
+        {
+            Directory.Delete(outputDirectory, recursive: true);
+        }
+
+        var sourcePixelData = DicomPixelData.Create(DicomFile.Open(inputPath, FileReadOption.ReadAll).Dataset);
+        var result = new DicomCompressionTool().CompressAll(inputPath, outputDirectory)
+            .Single(item => item.Item.Format.Name == formatName);
+
+        Assert.Equal(CompressionResultStatus.Success, result.Status);
+        var referencePixelData = DicomPixelData.Create(DicomFile.Open(referencePath, FileReadOption.ReadAll).Dataset);
+        var compressedFile = DicomFile.Open(result.Item.OutputPath, FileReadOption.ReadAll);
+        var compressedPixelData = DicomPixelData.Create(compressedFile.Dataset);
+        var decoded = new DicomTranscoder(compressedPixelData.Syntax, DicomTransferSyntax.ExplicitVRLittleEndian)
+            .Transcode(compressedFile.Dataset);
+        var decodedPixelData = DicomPixelData.Create(decoded);
+
+        Assert.Equal(referencePixelData.Syntax, compressedPixelData.Syntax);
+        Assert.Equal(sourcePixelData.NumberOfFrames, compressedPixelData.NumberOfFrames);
+        Assert.Equal(referencePixelData.GetFrame(0).Size, compressedPixelData.GetFrame(0).Size);
+        PixelDataAssertions.FramesMatchExactly(sourcePixelData, decodedPixelData);
+        using var rendered = new DicomImage(result.Item.OutputPath).RenderImage();
+        Assert.NotNull(rendered);
+    }
+
+    [Theory]
+    [InlineData("JPEG-LS Lossless", 0)]
+    [InlineData("JPEG-LS Near-Lossless", 3)]
+    public void CompressAll_jpegls_outputs_from_local_real_fixture_round_trip_with_expected_tolerance(
+        string formatName,
+        int tolerance)
+    {
+        const string inputPath = @"D:\1.dcm";
+        if (!File.Exists(inputPath))
+        {
+            return;
+        }
+
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-jpegls");
+        if (Directory.Exists(outputDirectory))
+        {
+            Directory.Delete(outputDirectory, recursive: true);
+        }
+
+        var sourcePixelData = DicomPixelData.Create(DicomFile.Open(inputPath, FileReadOption.ReadAll).Dataset);
+        var result = new DicomCompressionTool().CompressAll(inputPath, outputDirectory)
+            .Single(item => item.Item.Format.Name == formatName);
+
+        Assert.Equal(CompressionResultStatus.Success, result.Status);
+        var compressedFile = DicomFile.Open(result.Item.OutputPath, FileReadOption.ReadAll);
+        var compressedPixelData = DicomPixelData.Create(compressedFile.Dataset);
+        var decoded = new DicomTranscoder(compressedPixelData.Syntax, DicomTransferSyntax.ExplicitVRLittleEndian)
+            .Transcode(compressedFile.Dataset);
+        var decodedPixelData = DicomPixelData.Create(decoded);
+
+        Assert.Equal(sourcePixelData.NumberOfFrames, compressedPixelData.NumberOfFrames);
+        if (tolerance == 0)
+        {
+            PixelDataAssertions.FramesMatchExactly(sourcePixelData, decodedPixelData);
+        }
+        else
+        {
+            PixelDataAssertions.FramesMatchWithinTolerance(sourcePixelData, decodedPixelData, tolerance);
+        }
+
+        using var rendered = new DicomImage(result.Item.OutputPath).RenderImage();
+        Assert.NotNull(rendered);
+    }
+
     private static void AssertSequentialJpegSkipped(CompressionPlan plan, string reason)
     {
         foreach (var syntax in new[] { DicomTransferSyntax.JPEGProcess1, DicomTransferSyntax.JPEGProcess2_4 })
@@ -161,5 +326,10 @@ public sealed class ToolsCompressionPlanTests
             Assert.True(item.IsUnsupported);
             Assert.Equal(reason, item.SkipReason);
         }
+    }
+
+    private static int ReadRleSegmentCount(byte[] frame)
+    {
+        return frame[0] | (frame[1] << 8) | (frame[2] << 16) | (frame[3] << 24);
     }
 }

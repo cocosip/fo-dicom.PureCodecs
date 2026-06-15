@@ -59,7 +59,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                         ValidateSample(sample, samplePrecision);
 
                         var prediction = PredictInterleaved(samples, width, componentCount, x, y, component, samplePrecision, selectionValue);
-                        var difference = sample - prediction;
+                        var difference = NormalizeDifference(sample - prediction, samplePrecision);
                         var category = GetCategory(difference);
                         _table.Encode(writer, category);
                         if (category > 0)
@@ -112,7 +112,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                             ? 0
                             : DecodeMagnitude(reader.ReadBits(category), category);
                         var prediction = PredictInterleaved(samples, width, componentCount, x, y, component, samplePrecision, selectionValue);
-                        var sample = prediction + difference;
+                        var sample = NormalizeSample(prediction + difference, samplePrecision);
                         ValidateSample(sample, samplePrecision);
                         samples[GetInterleavedIndex(width, componentCount, x, y, component)] = sample;
                     }
@@ -202,6 +202,39 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             return encoded - ((1 << category) - 1);
+        }
+
+        private static int NormalizeDifference(int difference, int samplePrecision)
+        {
+            var modulus = 1 << samplePrecision;
+            var halfModulus = modulus >> 1;
+            if (difference >= halfModulus)
+            {
+                return difference - modulus;
+            }
+
+            if (difference < -halfModulus)
+            {
+                return difference + modulus;
+            }
+
+            return difference;
+        }
+
+        private static int NormalizeSample(int sample, int samplePrecision)
+        {
+            var modulus = 1 << samplePrecision;
+            if (sample < 0)
+            {
+                return sample + modulus;
+            }
+
+            if (sample >= modulus)
+            {
+                return sample - modulus;
+            }
+
+            return sample;
         }
 
         private static void ValidateShape(int[] samples, int width, int height, int samplePrecision, int expectedLength)

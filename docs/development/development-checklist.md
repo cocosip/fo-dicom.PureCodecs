@@ -475,12 +475,12 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 Tracked batch: [tool compression regression](tool-compression-regression-log.md).
 
-- [ ] Reproduce `fo-dicom.PureCodecs.Tools` output from a real DICOM input.
-- [ ] Preserve or regenerate the matching `fo-dicom.Codecs` reference output for the same input.
+- [x] Reproduce `fo-dicom.PureCodecs.Tools` output from a real DICOM input.
+- [x] Preserve or regenerate the matching `fo-dicom.Codecs` reference output for the same input.
 - [ ] Add a fixture-backed regression harness that compares PureCodecs output against the `fo-dicom.Codecs` baseline for every available reference format.
-- [ ] RLE Lossless: explain the output file-size difference or fix the underlying DICOM/tag/encapsulation discrepancy.
-- [ ] JPEG Lossless Process 14: fix viewer-open/render compatibility.
-- [ ] JPEG Lossless Process 14 SV1: fix viewer-open/render compatibility.
+- [x] RLE Lossless: explain the output file-size difference or fix the underlying DICOM/tag/encapsulation discrepancy.
+- [x] JPEG Lossless Process 14: fix viewer-open/render compatibility.
+- [x] JPEG Lossless Process 14 SV1: fix viewer-open/render compatibility.
 - [ ] JPEG-LS Lossless: fix viewer-open/render compatibility.
 - [ ] JPEG-LS Near-Lossless: fix viewer-open/render compatibility.
 - [ ] JPEG 2000 Lossless: fix viewer-open/render compatibility and the large output-size mismatch.

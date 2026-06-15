@@ -5,7 +5,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
     public sealed class Jpeg2000HtFrameCodec
     {
-        private static readonly byte[] PayloadMagic = { (byte)'P', (byte)'H', (byte)'T', (byte)'J', 0x01 };
+        private static readonly byte[] PayloadMagicV1 = { (byte)'P', (byte)'H', (byte)'T', (byte)'J', 0x01 };
+        private static readonly byte[] PayloadMagicV2 = { (byte)'P', (byte)'H', (byte)'T', (byte)'J', 0x02 };
 
         public byte[] EncodeFrame(
             DicomPixelData pixelData,
@@ -109,7 +110,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
             var block = Jpeg2000HtCodeBlockEncoder.Encode(new Jpeg2000ClassicCodeBlock(frame.Length, 1, coefficients));
             var writer = new Jpeg2000ByteWriter();
-            writer.WriteBytes(PayloadMagic);
+            writer.WriteBytes(PayloadMagicV2);
             writer.WriteUInt16((ushort)width);
             writer.WriteUInt16((ushort)height);
             writer.WriteByte((byte)bitsAllocated);
@@ -118,8 +119,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             writer.WriteByte((byte)samplesPerPixel);
             writer.WriteByte((byte)(lossy ? 1 : 0));
             writer.WriteUInt32((uint)frame.Length);
-            writer.WriteUInt16((ushort)block.Width);
-            writer.WriteUInt16((ushort)block.Height);
+            writer.WriteUInt32((uint)block.Width);
+            writer.WriteUInt32((uint)block.Height);
             writer.WriteUInt32((uint)block.MagSgnLength);
             writer.WriteUInt32((uint)block.MelLength);
             writer.WriteUInt32((uint)block.VlcLength);
@@ -132,12 +133,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         private static Jpeg2000DecodedPayload DecodePayload(byte[] payload)
         {
             var reader = new Jpeg2000ByteReader(payload);
-            foreach (var expected in PayloadMagic)
+            var version = ReadPayloadVersion(reader);
+            if (version != 1 && version != 2)
             {
-                if (reader.ReadByte() != expected)
-                {
-                    throw Jpeg2000Binary.CreateException("HTJ2K managed payload signature is invalid.");
-                }
+                throw Jpeg2000Binary.CreateException("HTJ2K managed payload signature is invalid.");
             }
 
             var width = reader.ReadUInt16();
@@ -148,8 +147,12 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var samplesPerPixel = reader.ReadByte();
             reader.ReadByte();
             var frameLength = (int)reader.ReadUInt32();
-            var blockWidth = reader.ReadUInt16();
-            var blockHeight = reader.ReadUInt16();
+            var blockWidth = version == 1
+                ? reader.ReadUInt16()
+                : checked((int)reader.ReadUInt32());
+            var blockHeight = version == 1
+                ? reader.ReadUInt16()
+                : checked((int)reader.ReadUInt32());
             var magSgnLength = (int)reader.ReadUInt32();
             var melLength = (int)reader.ReadUInt32();
             var vlcLength = (int)reader.ReadUInt32();
@@ -161,12 +164,34 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 reader.ReadBytes(vlcLength)));
 
             var frame = new byte[frameLength];
+            if (block.Coefficients.Count < frame.Length)
+            {
+                throw Jpeg2000Binary.CreateException("HTJ2K managed payload code-block data is shorter than the declared frame length.");
+            }
+
             for (var i = 0; i < frame.Length; i++)
             {
                 frame[i] = (byte)block.Coefficients[i];
             }
 
             return new Jpeg2000DecodedPayload(width, height, bitsAllocated, bitsStored, isSigned, samplesPerPixel, frame);
+        }
+
+        private static int ReadPayloadVersion(Jpeg2000ByteReader reader)
+        {
+            for (var i = 0; i < PayloadMagicV2.Length - 1; i++)
+            {
+                if (reader.ReadByte() != PayloadMagicV2[i])
+                {
+                    return -1;
+                }
+            }
+
+            var version = reader.ReadByte();
+            return version == PayloadMagicV1[PayloadMagicV1.Length - 1] ||
+                version == PayloadMagicV2[PayloadMagicV2.Length - 1]
+                ? version
+                : -1;
         }
 
         private static byte[] CreateSizePayload(int width, int height, int bitsStored, bool isSigned, int samplesPerPixel)

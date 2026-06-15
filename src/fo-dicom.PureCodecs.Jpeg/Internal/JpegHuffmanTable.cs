@@ -7,11 +7,19 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
     {
         private readonly Dictionary<int, int> _decodeValues;
         private readonly Dictionary<int, HuffmanCode> _encodeCodes;
+        private readonly byte[] _codeLengthCounts;
+        private readonly byte[] _values;
 
-        private JpegHuffmanTable(Dictionary<int, int> decodeValues, Dictionary<int, HuffmanCode> encodeCodes)
+        private JpegHuffmanTable(
+            Dictionary<int, int> decodeValues,
+            Dictionary<int, HuffmanCode> encodeCodes,
+            byte[] codeLengthCounts,
+            byte[] values)
         {
             _decodeValues = decodeValues;
             _encodeCodes = encodeCodes;
+            _codeLengthCounts = codeLengthCounts;
+            _values = values;
         }
 
         public static JpegHuffmanTable Build(byte[] codeLengthCounts, byte[] values)
@@ -56,7 +64,30 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 throw JpegMarkerReader.CreateException("JPEG Huffman table has unused values.");
             }
 
-            return new JpegHuffmanTable(decodeValues, encodeCodes);
+            var countsCopy = new byte[codeLengthCounts.Length];
+            Buffer.BlockCopy(codeLengthCounts, 0, countsCopy, 0, countsCopy.Length);
+            var valuesCopy = new byte[values.Length];
+            Buffer.BlockCopy(values, 0, valuesCopy, 0, valuesCopy.Length);
+            return new JpegHuffmanTable(decodeValues, encodeCodes, countsCopy, valuesCopy);
+        }
+
+        public byte[] CreateDhtPayload(int tableClass, int tableId)
+        {
+            if (tableClass < 0 || tableClass > 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(tableClass));
+            }
+
+            if (tableId < 0 || tableId > 15)
+            {
+                throw new ArgumentOutOfRangeException(nameof(tableId));
+            }
+
+            var payload = new byte[1 + _codeLengthCounts.Length + _values.Length];
+            payload[0] = (byte)((tableClass << 4) | tableId);
+            Buffer.BlockCopy(_codeLengthCounts, 0, payload, 1, _codeLengthCounts.Length);
+            Buffer.BlockCopy(_values, 0, payload, 1 + _codeLengthCounts.Length, _values.Length);
+            return payload;
         }
 
         public int Decode(JpegEntropyBitReader reader)

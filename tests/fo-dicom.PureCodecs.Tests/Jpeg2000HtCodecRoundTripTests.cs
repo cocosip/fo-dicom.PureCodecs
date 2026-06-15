@@ -87,6 +87,24 @@ public sealed class Jpeg2000HtCodecRoundTripTests
         }
     }
 
+    [Theory]
+    [InlineData((ushort)888, (ushort)459)]
+    public void Htj2k_lossless_round_trips_16_bit_frames_larger_than_ushort_exactly(ushort columns, ushort rows)
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome16(rows, columns);
+        var source = DicomPixelData.Create(dataset);
+        var compressedDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.HTJ2KLossless);
+        var compressed = DicomPixelData.Create(compressedDataset, true);
+        var decodedDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var decoded = DicomPixelData.Create(decodedDataset, true);
+        var codec = new DicomHtJpeg2000LosslessCodec();
+
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
+
+        Assert.Equal(source.GetFrame(0).Data, decoded.GetFrame(0).Data);
+    }
+
     private static Jpeg2000ProgressionOrder ReadProgressionOrder(byte[] codestream)
     {
         var reader = new Jpeg2000CodestreamReader(codestream);

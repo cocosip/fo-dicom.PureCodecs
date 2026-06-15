@@ -28,9 +28,15 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 throw CreateException($"JPEG Lossless raw frame sample count {samples.Length} does not match dimensions {pixelData.Width}x{pixelData.Height}.");
             }
 
-            var scanCodec = JpegLosslessScanCodec.CreateDefault();
+            var interleavedSamples = ToInterleavedComponentSamples(
+                samples,
+                pixelCount,
+                pixelData.SamplesPerPixel,
+                pixelData.PlanarConfiguration);
+            var huffmanTable = CreateReferenceLosslessHuffmanTable(pixelData.BitsStored);
+            var scanCodec = JpegLosslessScanCodec.Create(huffmanTable);
             var scan = scanCodec.EncodeInterleaved(
-                ToInterleavedComponentSamples(samples, pixelCount, pixelData.SamplesPerPixel, pixelData.PlanarConfiguration),
+                interleavedSamples,
                 pixelData.Width,
                 pixelData.Height,
                 pixelData.SamplesPerPixel,
@@ -39,8 +45,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
             var writer = new JpegMarkerWriter();
             writer.WriteStandalone(JpegMarker.SOI);
+            writer.WriteSegment(JpegMarker.APP0, CreateJfifPayload());
             writer.WriteSegment(JpegMarker.SOF3, CreateStartOfFramePayload(pixelData));
-            writer.WriteSegment(JpegMarker.DHT, CreateDefaultHuffmanPayload());
+            writer.WriteSegment(JpegMarker.DHT, huffmanTable.CreateDhtPayload(tableClass: 0, tableId: 0));
             writer.WriteSegment(JpegMarker.SOS, CreateStartOfScanPayload(pixelData.SamplesPerPixel, selectionValue));
             writer.WriteRaw(scan);
             writer.WriteStandalone(JpegMarker.EOI);
@@ -185,19 +192,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return payload;
         }
 
-        private static byte[] CreateDefaultHuffmanPayload()
-        {
-            var payload = new byte[1 + 16 + 17];
-            payload[0] = 0;
-            payload[8] = 17;
-            for (var index = 0; index < 17; index++)
-            {
-                payload[17 + index] = (byte)index;
-            }
-
-            return payload;
-        }
-
         private static byte[] CreateStartOfScanPayload(int samplesPerPixel, int selectionValue)
         {
             var payload = new byte[1 + samplesPerPixel * 2 + 3];
@@ -213,6 +207,39 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             payload[offset++] = 0;
             payload[offset] = 0;
             return payload;
+        }
+
+        private static byte[] CreateJfifPayload()
+        {
+            return new byte[]
+            {
+                (byte)'J',
+                (byte)'F',
+                (byte)'I',
+                (byte)'F',
+                0,
+                1,
+                1,
+                0,
+                0,
+                1,
+                0,
+                1,
+                0,
+                0
+            };
+        }
+
+        private static JpegHuffmanTable CreateReferenceLosslessHuffmanTable(int bitsStored)
+        {
+            if (bitsStored >= 12)
+            {
+                return JpegHuffmanTable.Build(
+                    new byte[] { 0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 2 },
+                    new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 });
+            }
+
+            return JpegLosslessScanCodec.CreateDefaultHuffmanTableForFrame();
         }
 
         private static void ParseHuffmanTables(byte[] payload, JpegHuffmanTable?[] tables)
