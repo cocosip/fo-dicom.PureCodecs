@@ -2,6 +2,10 @@
 
 This document records compatibility edges that are intentionally outside the phase 1 replacement matrix or are not covered by available external fixtures.
 
+## Open Tool Compression Regression
+
+- `fo-dicom.PureCodecs.Tools` outputs produced from a real DICOM input are not release-ready. Except for RLE, the reported compressed files either cannot be opened by viewers or render incorrectly. RLE opens but has a file-size mismatch against the `fo-dicom.Codecs` reference output that still requires validation. Track and close this batch in [tool-compression-regression-log.md](tool-compression-regression-log.md) before making any Phase 1 compatibility claim.
+
 ## Outside Phase 1 Scope
 
 - JPEG XL transfer syntaxes are not implemented in phase 1 because `fo-dicom.Codecs` marks them as in development.

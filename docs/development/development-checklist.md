@@ -471,6 +471,25 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Update this checklist so completed items are checked.
 - [x] Prepare release notes for first alpha package.
 
+## 10. Real Tool Compression Regression Repairs
+
+Tracked batch: [tool compression regression](tool-compression-regression-log.md).
+
+- [ ] Reproduce `fo-dicom.PureCodecs.Tools` output from a real DICOM input.
+- [ ] Preserve or regenerate the matching `fo-dicom.Codecs` reference output for the same input.
+- [ ] Add a fixture-backed regression harness that compares PureCodecs output against the `fo-dicom.Codecs` baseline for every available reference format.
+- [ ] RLE Lossless: explain the output file-size difference or fix the underlying DICOM/tag/encapsulation discrepancy.
+- [ ] JPEG Lossless Process 14: fix viewer-open/render compatibility.
+- [ ] JPEG Lossless Process 14 SV1: fix viewer-open/render compatibility.
+- [ ] JPEG-LS Lossless: fix viewer-open/render compatibility.
+- [ ] JPEG-LS Near-Lossless: fix viewer-open/render compatibility.
+- [ ] JPEG 2000 Lossless: fix viewer-open/render compatibility and the large output-size mismatch.
+- [ ] JPEG 2000 Lossy: fix viewer-open/render compatibility and the large output-size mismatch.
+- [ ] HTJ2K Lossless: create or obtain a reference baseline, then fix viewer-open/render compatibility.
+- [ ] HTJ2K Lossless RPCL: create or obtain a reference baseline, then fix viewer-open/render compatibility.
+- [ ] HTJ2K Lossy: create or obtain a reference baseline, then fix viewer-open/render compatibility.
+- [ ] Re-run the full solution test suite after the format-specific repairs.
+
 ## Completion Definition
 
 The first replacement phase is complete only when:
