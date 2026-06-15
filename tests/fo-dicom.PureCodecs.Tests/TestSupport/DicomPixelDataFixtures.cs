@@ -138,7 +138,7 @@ internal static class DicomPixelDataFixtures
         return DicomPixelData.Create(dataset, true);
     }
 
-    private static DicomDataset CreateBaseDataset(
+    internal static DicomDataset CreateBaseDataset(
         ushort rows,
         ushort columns,
         ushort samplesPerPixel,
@@ -148,7 +148,8 @@ internal static class DicomPixelDataFixtures
         ushort highBit,
         PlanarConfiguration? planarConfiguration,
         int numberOfFrames,
-        DicomTransferSyntax transferSyntax)
+        DicomTransferSyntax transferSyntax,
+        byte[]? frame = null)
     {
         var dataset = new DicomDataset(transferSyntax)
         {
@@ -175,6 +176,11 @@ internal static class DicomPixelDataFixtures
         if (planarConfiguration.HasValue)
         {
             dataset.Add(DicomTag.PlanarConfiguration, (ushort)planarConfiguration.Value);
+        }
+
+        if (frame is not null)
+        {
+            DicomPixelData.Create(dataset, true).AddFrame(new MemoryByteBuffer(frame));
         }
 
         return dataset;
