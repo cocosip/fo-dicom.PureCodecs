@@ -23,10 +23,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var samplesPerPixel = pixelData.SamplesPerPixel;
             var decompositionLevels = EffectiveDecompositionLevels(width, height);
             var encodedSteps = lossy
-                ? Jpeg2000HtIrreversibleQuantization.CreateOpenJphScalarExpoundedSteps(
+                ? Jpeg2000HtIrreversibleQuantization.CreateQualityScalarExpoundedSteps(
                     decompositionLevels,
                     bitsStored,
-                    CreateLossyBaseDelta(bitsStored, qualityTolerance))
+                    CreateLossyQuality(qualityTolerance))
                 : Array.Empty<ushort>();
             var payload = lossy
                 ? new Jpeg2000HtTileEncoder().EncodeLossy(pixelData, frame, progressionOrder, decompositionLevels, encodedSteps)
@@ -91,9 +91,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return levels;
         }
 
-        private static float CreateLossyBaseDelta(int bitsStored, int tolerance)
+        private static int CreateLossyQuality(int tolerance)
         {
-            return Math.Max(1, tolerance) / (float)Math.Pow(2.0, bitsStored + 18);
+            return Math.Max(30, Math.Min(95, 96 - (Math.Max(1, tolerance) * 4)));
         }
 
         private static void ValidatePixelData(DicomPixelData pixelData, byte[] frame)

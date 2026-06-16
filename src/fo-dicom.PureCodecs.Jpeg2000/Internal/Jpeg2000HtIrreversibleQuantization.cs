@@ -29,6 +29,28 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return steps;
         }
 
+        public static ushort[] CreateQualityScalarExpoundedSteps(int decompositionLevels, int bitDepth, int quality)
+        {
+            var scale = QualityScale(quality);
+            var steps = new ushort[(3 * decompositionLevels) + 1];
+            for (var index = 0; index < steps.Length; index++)
+            {
+                var resolution = index == 0 ? 0 : ((index - 1) / 3) + 1;
+                var orientation = index == 0 ? 0 : ((index - 1) % 3) + 1;
+                var level = decompositionLevels - resolution;
+                if (level < 0)
+                {
+                    level = 0;
+                }
+
+                var norm = DwtNorm97(level, orientation);
+                var step = norm <= 0 ? scale : scale / norm;
+                steps[index] = Jpeg2000QuantizationTable.EncodeStepSize(step, bitDepth);
+            }
+
+            return steps;
+        }
+
         public static int Kmax(ushort encodedStep, int guardBits)
         {
             return ((encodedStep >> 11) & 0x1F) - 1 + guardBits;
@@ -119,6 +141,50 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return orientation == 3 ? 4.0 : orientation == 0 ? 1.0 : 2.0;
         }
 
+        private static double QualityScale(int quality)
+        {
+            if (quality < 1)
+            {
+                quality = 1;
+            }
+            else if (quality > 100)
+            {
+                quality = 100;
+            }
+
+            var scale = Math.Pow(2.0, (100.0 - quality) / 12.5);
+            if (scale < 0.01)
+            {
+                scale = 0.01;
+            }
+
+            return scale * 0.18;
+        }
+
+        private static double DwtNorm97(int level, int orientation)
+        {
+            if (orientation < 0 || orientation > 3)
+            {
+                return 1.0;
+            }
+
+            if (orientation == 0 && level >= DwtNorms97.GetLength(1))
+            {
+                level = DwtNorms97.GetLength(1) - 1;
+            }
+            else if (orientation > 0 && level >= DwtNorms97.GetLength(1) - 1)
+            {
+                level = DwtNorms97.GetLength(1) - 2;
+            }
+
+            if (level < 0)
+            {
+                level = 0;
+            }
+
+            return DwtNorms97[orientation, level];
+        }
+
         private static float GetGainL(int decompositions)
         {
             if (decompositions < 0)
@@ -173,6 +239,14 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             4.8696e+03f, 6.8323e+03f, 9.5861e+03f, 1.3450e+04f,
             1.8872e+04f, 2.6479e+04f, 3.7152e+04f, 5.2127e+04f,
             7.3138e+04f, 1.0262e+05f
+        };
+
+        private static readonly double[,] DwtNorms97 =
+        {
+            { 1.000, 1.965, 4.177, 8.403, 16.90, 33.84, 67.69, 135.3, 270.6, 540.9 },
+            { 2.022, 3.989, 8.355, 17.04, 34.27, 68.63, 137.3, 274.6, 549.0, 0.0 },
+            { 2.022, 3.989, 8.355, 17.04, 34.27, 68.63, 137.3, 274.6, 549.0, 0.0 },
+            { 2.080, 3.865, 8.307, 17.18, 34.71, 69.59, 139.3, 278.6, 557.2, 0.0 }
         };
     }
 }

@@ -2,6 +2,7 @@ using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 using PureJpeg2000Params = FellowOakDicom.PureCodecs.Jpeg2000.DicomJpeg2000Params;
+using PureHtJpeg2000Params = FellowOakDicom.PureCodecs.Jpeg2000.DicomHtJpeg2000Params;
 
 namespace FellowOakDicom.PureCodecs.Tools;
 
@@ -70,6 +71,15 @@ public sealed class DicomCompressionTool
             {
                 Irreversible = true,
                 Rate = 16
+            };
+        }
+
+        if (targetSyntax == DicomTransferSyntax.HTJ2K)
+        {
+            return new PureHtJpeg2000Params
+            {
+                Irreversible = true,
+                TargetRatio = 16
             };
         }
 

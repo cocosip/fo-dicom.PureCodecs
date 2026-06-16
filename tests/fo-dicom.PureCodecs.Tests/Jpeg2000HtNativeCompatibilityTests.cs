@@ -110,6 +110,32 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
     }
 
     [Fact]
+    public void Htj2k_lossless_large_monochrome_16_bit_output_decodes_with_fo_dicom_codecs_native_decoder()
+    {
+        var source = DicomPixelData.Create(CreateSmoothMonochrome16(rows: 459, columns: 888));
+        var compressedDataset = CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.HTJ2KLossless);
+        var compressedPixelData = DicomPixelData.Create(compressedDataset, true);
+        var codec = new PureHtJpeg2000LosslessCodec();
+
+        codec.Encode(source, compressedPixelData, codec.GetDefaultParameters());
+
+        new DicomSetupBuilder()
+            .RegisterServices(services => services
+                .AddFellowOakDicom()
+                .AddTranscoderManager<NativeTranscoderManager>())
+            .SkipValidation()
+            .Build();
+
+        var decodedDataset = new DicomTranscoder(
+                DicomTransferSyntax.HTJ2KLossless,
+                DicomTransferSyntax.ExplicitVRLittleEndian)
+            .Transcode(compressedDataset);
+        var decodedPixelData = DicomPixelData.Create(decodedDataset);
+
+        PixelDataAssertions.FramesMatchExactly(source, decodedPixelData);
+    }
+
+    [Fact]
     public void Htj2k_lossless_rpcl_output_decodes_with_fo_dicom_codecs_native_decoder()
     {
         var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8(rows: 32, columns: 32));
@@ -188,6 +214,23 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
         PixelDataAssertions.FramesMatchWithinTolerance(source, decodedPixelData, tolerance: 8);
     }
 
+    [Fact]
+    public void Htj2k_lossy_large_monochrome_16_bit_output_is_smaller_than_lossless()
+    {
+        var source = DicomPixelData.Create(CreateSmoothMonochrome16(rows: 459, columns: 888));
+        var losslessDataset = CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.HTJ2KLossless);
+        var losslessPixelData = DicomPixelData.Create(losslessDataset, true);
+        var lossyDataset = CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.HTJ2K);
+        var lossyPixelData = DicomPixelData.Create(lossyDataset, true);
+
+        new PureHtJpeg2000LosslessCodec().Encode(source, losslessPixelData, new Jpeg2000.DicomHtJpeg2000Params());
+        new PureHtJpeg2000LossyCodec().Encode(source, lossyPixelData, new Jpeg2000.DicomHtJpeg2000Params { TargetRatio = 16 });
+
+        Assert.True(
+            lossyPixelData.GetFrame(0).Size < losslessPixelData.GetFrame(0).Size,
+            $"HTJ2K lossy frame should be smaller than lossless. Lossy={lossyPixelData.GetFrame(0).Size}, lossless={losslessPixelData.GetFrame(0).Size}.");
+    }
+
     private static DicomDataset CloneForTransferSyntax(DicomDataset source, DicomTransferSyntax transferSyntax)
     {
         var clone = new DicomDataset(transferSyntax);
@@ -198,6 +241,23 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
 
         clone.Remove(DicomTag.PixelData);
         return clone;
+    }
+
+    private static DicomDataset CreateSmoothMonochrome16(ushort rows, ushort columns)
+    {
+        var frame = new byte[rows * columns * 2];
+        var offset = 0;
+        for (var y = 0; y < rows; y++)
+        {
+            for (var x = 0; x < columns; x++)
+            {
+                var value = (ushort)((x * 17 + y * 11 + ((x * y) >> 5)) & 0xFFFF);
+                frame[offset++] = (byte)value;
+                frame[offset++] = (byte)(value >> 8);
+            }
+        }
+
+        return DicomPixelDataFixtures.CreateMonochrome16(rows, columns, frame);
     }
 
     private static bool ReadUsesReversibleTransform(byte[] codestream)

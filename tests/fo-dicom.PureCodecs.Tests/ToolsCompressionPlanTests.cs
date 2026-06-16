@@ -1,6 +1,7 @@
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
+using FellowOakDicom.Imaging.NativeCodec;
 using FellowOakDicom.PureCodecs.Tools;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
@@ -438,6 +439,46 @@ public sealed class ToolsCompressionPlanTests
         PixelDataAssertions.FramesMatchWithinTolerance(sourcePixelData, decodedPixelData, tolerance: 16);
     }
 
+    [Fact]
+    public void CompressAll_htj2k_outputs_from_local_real_fixture_decode_with_native_codecs_and_lossy_is_smaller()
+    {
+        const string inputPath = @"D:\1.dcm";
+        if (!File.Exists(inputPath))
+        {
+            return;
+        }
+
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-htj2k-native");
+        if (Directory.Exists(outputDirectory))
+        {
+            Directory.Delete(outputDirectory, recursive: true);
+        }
+
+        var sourcePixelData = DicomPixelData.Create(DicomFile.Open(inputPath, FileReadOption.ReadAll).Dataset);
+        var results = new DicomCompressionTool().CompressAll(inputPath, outputDirectory);
+        var lossless = Assert.Single(results, item => item.Item.Format.TransferSyntax == DicomTransferSyntax.HTJ2KLossless);
+        var losslessRpcl = Assert.Single(results, item => item.Item.Format.TransferSyntax == DicomTransferSyntax.HTJ2KLosslessRPCL);
+        var lossy = Assert.Single(results, item => item.Item.Format.TransferSyntax == DicomTransferSyntax.HTJ2K);
+
+        Assert.Equal(CompressionResultStatus.Success, lossless.Status);
+        Assert.Equal(CompressionResultStatus.Success, losslessRpcl.Status);
+        Assert.Equal(CompressionResultStatus.Success, lossy.Status);
+        Assert.True(
+            lossy.OutputSize < lossless.OutputSize,
+            $"HTJ2K lossy file should be smaller than lossless. Lossy={lossy.OutputSize}, lossless={lossless.OutputSize}.");
+
+        new DicomSetupBuilder()
+            .RegisterServices(services => services
+                .AddFellowOakDicom()
+                .AddTranscoderManager<NativeTranscoderManager>())
+            .SkipValidation()
+            .Build();
+
+        AssertNativeDecode(lossless.Item.OutputPath, sourcePixelData, tolerance: 0);
+        AssertNativeDecode(losslessRpcl.Item.OutputPath, sourcePixelData, tolerance: 0);
+        AssertNativeDecode(lossy.Item.OutputPath, sourcePixelData, tolerance: 512);
+    }
+
     private static void AssertSequentialJpegSkipped(CompressionPlan plan, string reason)
     {
         foreach (var syntax in new[] { DicomTransferSyntax.JPEGProcess1, DicomTransferSyntax.JPEGProcess2_4 })
@@ -445,6 +486,24 @@ public sealed class ToolsCompressionPlanTests
             var item = Assert.Single(plan.Items, item => item.Format.TransferSyntax == syntax);
             Assert.True(item.IsUnsupported);
             Assert.Equal(reason, item.SkipReason);
+        }
+    }
+
+    private static void AssertNativeDecode(string path, DicomPixelData sourcePixelData, int tolerance)
+    {
+        var compressedFile = DicomFile.Open(path, FileReadOption.ReadAll);
+        var compressedPixelData = DicomPixelData.Create(compressedFile.Dataset);
+        var decoded = new DicomTranscoder(compressedPixelData.Syntax, DicomTransferSyntax.ExplicitVRLittleEndian)
+            .Transcode(compressedFile.Dataset);
+        var decodedPixelData = DicomPixelData.Create(decoded);
+
+        if (tolerance == 0)
+        {
+            PixelDataAssertions.FramesMatchExactly(sourcePixelData, decodedPixelData);
+        }
+        else
+        {
+            PixelDataAssertions.FramesMatchWithinTolerance(sourcePixelData, decodedPixelData, tolerance);
         }
     }
 
