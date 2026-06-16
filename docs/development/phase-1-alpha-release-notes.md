@@ -29,11 +29,8 @@ This release is intended for compatibility testing against applications that cur
 | JPEG-LS | JPEG-LS Near-Lossless | `1.2.840.10008.1.2.4.81` |
 | JPEG 2000 | JPEG 2000 Lossless | `1.2.840.10008.1.2.4.90` |
 | JPEG 2000 | JPEG 2000 Lossy | `1.2.840.10008.1.2.4.91` |
-| JPEG 2000 / HTJ2K | HTJ2K Lossless | `1.2.840.10008.1.2.4.201` |
-| JPEG 2000 / HTJ2K | HTJ2K Lossless RPCL | `1.2.840.10008.1.2.4.202` |
-| JPEG 2000 / HTJ2K | HTJ2K Lossy | `1.2.840.10008.1.2.4.203` |
 
-JPEG XL is intentionally excluded from phase 1 because `fo-dicom.Codecs` marks it as in development.
+JPEG XL is intentionally excluded from phase 1 because `fo-dicom.Codecs` marks it as in development. HTJ2K `.201`, `.202`, and `.203` remain phase 1 goals, but are temporarily unregistered in this alpha until the managed encoder emits a standard OpenJPH/`fo-dicom.Codecs` compatible codestream.
 
 ## Package Contents
 
@@ -66,9 +63,10 @@ See [`phase-1-known-limitations.md`](phase-1-known-limitations.md) for the maint
 Limitations that remain outside this alpha are compatibility edges or fixture gaps, not native dependency work:
 
 - JPEG XL remains outside phase 1.
+- HTJ2K transfer syntaxes `.201`, `.202`, and `.203` are temporarily unregistered until standard codestream compatibility is complete.
 - JPEG 2000 Part 2 multi-component and JPIP/JPT transfer syntaxes remain unregistered.
 - Some rare JPEG/JPEG 2000 marker combinations fail with explicit managed exceptions.
-- HTJ2K external compressed fixture coverage is limited by fixture availability.
+- HTJ2K internal block-coding tests are present, but they are not a public interoperability claim.
 
 ## Upgrade Notes
 

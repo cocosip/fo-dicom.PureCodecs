@@ -9,6 +9,7 @@ This document records compatibility edges that are intentionally outside the pha
 ## Outside Phase 1 Scope
 
 - JPEG XL transfer syntaxes are not implemented in phase 1 because `fo-dicom.Codecs` marks them as in development.
+- HTJ2K transfer syntaxes `.201`, `.202`, and `.203` are temporarily not registered by `PureTranscoderManager` because the current managed encoder writes a project-managed payload, not a standard OpenJPH/`fo-dicom.Codecs` compatible HTJ2K codestream.
 - JPEG 2000 Part 2 multi-component and JPIP referenced transfer syntaxes are not registered by `PureTranscoderManager`.
 - Native codec fallback is intentionally unsupported. Codec execution is pure managed C# only.
 
@@ -16,12 +17,13 @@ This document records compatibility edges that are intentionally outside the pha
 
 - JPEG Process 2/4 12-bit sequential DCT codestream encode/decode is not implemented by the current managed JPEG path. The test suite records this as an explicit managed exception until fixture-backed support is added.
 - Progressive JPEG, arithmetic-coded JPEG, CMYK/YCCK JPEG color spaces, and broader restart interval MCU resynchronization are not implemented.
+- HTJ2K tool output is reported as unsupported until the managed encoder emits a standard codestream that native `fo-dicom.Codecs`/OpenJPH can decode.
 - JPEG 2000 JP2 wrapper frames are detected and rejected unless a raw J2K codestream is supplied.
 - JPEG 2000 packed packet headers, unsupported ROI behavior, unsupported component subsampling, and unsupported progression order combinations fail with managed exceptions.
 
 ## Fixture Availability
 
-- The Efferent acceptance fixture set included in the test support data does not include HTJ2K compressed DICOM samples. HTJ2K is validated through raw round-trip, RGB, multi-frame, compression tag, and invalid stream matrix tests.
+- The Efferent acceptance fixture set included in the test support data does not include HTJ2K compressed DICOM samples. Existing HTJ2K tests exercise internal block-coding experiments only and do not establish public DICOM interoperability.
 - The Efferent unit fixture matrix is represented by the available 8-bit and 16-bit raw unit samples. Lossy byte tolerance is applied to 8-bit unit samples only; 16-bit lossy behavior is validated by the smaller raw fixture matrix where byte-level tolerance is meaningful.
 
 ## Codec Behavior Notes

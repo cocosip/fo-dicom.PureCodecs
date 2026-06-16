@@ -122,6 +122,27 @@ public sealed class ToolsCompressionPlanTests
     }
 
     [Fact]
+    public void CreateOutputPlan_skips_htj2k_until_standard_codestream_alignment_is_complete()
+    {
+        var plan = CompressionPlan.Create(
+            @"D:\dicom\sample.dcm",
+            outputDirectory: null,
+            DicomPixelDataFixtures.CreateMonochrome8());
+
+        foreach (var syntax in new[]
+        {
+            DicomTransferSyntax.HTJ2KLossless,
+            DicomTransferSyntax.HTJ2KLosslessRPCL,
+            DicomTransferSyntax.HTJ2K
+        })
+        {
+            var item = Assert.Single(plan.Items, item => item.Format.TransferSyntax == syntax);
+            Assert.True(item.IsUnsupported);
+            Assert.Equal("HTJ2K output is disabled until the managed encoder writes a standard OpenJPH/fo-dicom.Codecs compatible codestream.", item.SkipReason);
+        }
+    }
+
+    [Fact]
     public void CreateOutputPlan_skips_jpeg_sequential_dct_for_unsupported_8_bit_samples_per_pixel()
     {
         var plan = CompressionPlan.Create(
