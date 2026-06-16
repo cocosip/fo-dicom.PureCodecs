@@ -15,9 +15,6 @@ namespace FellowOakDicom.PureCodecs
         private static readonly HashSet<DicomTransferSyntax> UnsupportedJpeg2000TransferSyntaxes =
             new HashSet<DicomTransferSyntax>
             {
-                DicomTransferSyntax.HTJ2KLossless,
-                DicomTransferSyntax.HTJ2KLosslessRPCL,
-                DicomTransferSyntax.HTJ2K,
                 DicomTransferSyntax.JPEG2000Part2MultiComponentLosslessOnly,
                 DicomTransferSyntax.JPEG2000Part2MultiComponent,
                 DicomTransferSyntax.JPIPReferenced,
@@ -84,6 +81,9 @@ namespace FellowOakDicom.PureCodecs
 
             AddCodec(new DicomJpeg2000LosslessCodec());
             AddCodec(new DicomJpeg2000LossyCodec());
+            AddCodec(new DicomHtJpeg2000LosslessCodec());
+            AddCodec(new DicomHtJpeg2000LosslessRpclCodec());
+            AddCodec(new DicomHtJpeg2000LossyCodec());
         }
 
         private void AddCodec(IDicomCodec codec)

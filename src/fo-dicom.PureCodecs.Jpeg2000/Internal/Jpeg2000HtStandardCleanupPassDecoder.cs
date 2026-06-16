@@ -6,14 +6,30 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
     {
         public static Jpeg2000ClassicCodeBlock Decode(byte[] cleanupPass, int width, int height, int missingMostSignificantBits)
         {
+            return Decode(cleanupPass, Array.Empty<byte>(), passCount: 1, width, height, missingMostSignificantBits);
+        }
+
+        public static Jpeg2000ClassicCodeBlock Decode(byte[] cleanupPass, byte[] refinementPasses, int passCount, int width, int height, int missingMostSignificantBits)
+        {
             if (cleanupPass == null)
             {
                 throw new ArgumentNullException(nameof(cleanupPass));
             }
 
+            refinementPasses = refinementPasses ?? Array.Empty<byte>();
             if (width <= 0 || height <= 0)
             {
                 throw Jpeg2000Binary.CreateException("HTJ2K cleanup pass dimensions are invalid.");
+            }
+
+            if (passCount > 1 && refinementPasses.Length == 0)
+            {
+                passCount = 1;
+            }
+
+            if (passCount > 3)
+            {
+                throw Jpeg2000Binary.CreateException("HTJ2K pure decoder currently supports up to three HT coding passes.");
             }
 
             if (cleanupPass.Length < 2)
@@ -38,7 +54,300 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var scratch = new ushort[sstr * (((height + 1) / 2) + 1)];
             DecodeMelVlc(cleanupPass, width, height, lcup, scup, sstr, scratch);
             var coefficients = DecodeMagSgn(cleanupPass, width, height, lcup, scup, sstr, scratch, p, missingMostSignificantBits + 2);
+            if (passCount > 1)
+            {
+                DecodeRefinementPasses(cleanupPass, refinementPasses, passCount, coefficients, width, height, p, sstr, scratch);
+            }
+
             return new Jpeg2000ClassicCodeBlock(width, height, coefficients);
+        }
+
+        private static void DecodeRefinementPasses(
+            byte[] cleanupPass,
+            byte[] refinementPasses,
+            int passCount,
+            int[] coefficients,
+            int width,
+            int height,
+            int bitPlane,
+            int sstr,
+            ushort[] scratch)
+        {
+            if (bitPlane < 2)
+            {
+                return;
+            }
+
+            var mstr = (((width + 3) >> 2) + 2 + 7) & ~7;
+            var sigma = new ushort[mstr * (((height + 3) >> 2) + 1)];
+            BuildSigmaFromCleanup(scratch, sstr, sigma, mstr, width, height);
+            DecodeSignificancePropagation(refinementPasses, coefficients, sigma, mstr, width, height, bitPlane);
+            if (passCount > 2)
+            {
+                DecodeMagnitudeRefinement(cleanupPass, refinementPasses, coefficients, sigma, mstr, width, height, bitPlane);
+            }
+        }
+
+        private static void BuildSigmaFromCleanup(ushort[] scratch, int sstr, ushort[] sigma, int mstr, int width, int height)
+        {
+            int y;
+            for (y = 0; y < height; y += 4)
+            {
+                var sp = (y >> 1) * sstr;
+                var dp = (y >> 2) * mstr;
+                for (var x = 0; x < width; x += 4, sp += 4, dp++)
+                {
+                    var t0 = ((scratch[sp] & 0x30u) >> 4) | ((scratch[sp] & 0xC0u) >> 2);
+                    t0 |= ((scratch[sp + 2] & 0x30u) << 4) | ((scratch[sp + 2] & 0xC0u) << 6);
+                    uint t1 = 0;
+                    if (y + 2 < height)
+                    {
+                        t1 = ((scratch[sp + sstr] & 0x30u) >> 2) | (scratch[sp + sstr] & 0xC0u);
+                        t1 |= ((scratch[sp + sstr + 2] & 0x30u) << 6) | ((scratch[sp + sstr + 2] & 0xC0u) << 8);
+                    }
+
+                    sigma[dp] = (ushort)(t0 | t1);
+                }
+
+                sigma[dp] = 0;
+            }
+
+            var reset = (y >> 2) * mstr;
+            for (var x = 0; x < width; x += 4, reset++)
+            {
+                sigma[reset] = 0;
+            }
+
+            sigma[reset] = 0;
+        }
+
+        private static void DecodeSignificancePropagation(byte[] refinementPasses, int[] coefficients, ushort[] sigma, int mstr, int width, int height, int bitPlane)
+        {
+            var prevRowSig = new ushort[((width + 3) >> 2) + 8];
+            var reader = new HtForwardSegmentReader(refinementPasses, refinementPasses.Length, 0x00);
+            for (var y = 0; y < height; y += 4)
+            {
+                var pattern = 0xFFFFu;
+                if (height - y < 4)
+                {
+                    pattern = 0x7777u;
+                    if (height - y < 3)
+                    {
+                        pattern = 0x3333u;
+                        if (height - y < 2)
+                        {
+                            pattern = 0x1111u;
+                        }
+                    }
+                }
+
+                var prev = 0u;
+                for (var x = 0; x < width; x += 4)
+                {
+                    var currentPattern = pattern;
+                    var outside = x + 4 - width;
+                    if (outside > 0)
+                    {
+                        currentPattern >>= outside * 4;
+                    }
+
+                    var sigmaIndex = (y >> 2) * mstr + (x >> 2);
+                    var ps = ReadTwoUShorts(prevRowSig, x >> 2);
+                    var ns = ReadTwoUShorts(sigma, sigmaIndex + mstr);
+                    var u = (ps & 0x88888888u) >> 3;
+                    u |= (ns & 0x11111111u) << 3;
+
+                    var cs = ReadTwoUShorts(sigma, sigmaIndex);
+                    var mbr = cs;
+                    mbr |= (cs & 0x77777777u) << 1;
+                    mbr |= (cs & 0xEEEEEEEEu) >> 1;
+                    mbr |= u;
+                    var t = mbr;
+                    mbr |= t << 4;
+                    mbr |= t >> 4;
+                    mbr |= prev >> 12;
+                    mbr &= currentPattern;
+                    mbr &= ~cs;
+
+                    var newSig = mbr;
+                    if (newSig != 0)
+                    {
+                        var codeword = reader.Fetch();
+                        var consumed = 0;
+                        var colMask = 0xFu;
+                        var invSig = ~cs & currentPattern;
+                        for (var i = 0; i < 16; i += 4, colMask <<= 4)
+                        {
+                            if ((colMask & newSig) == 0)
+                            {
+                                continue;
+                            }
+
+                            var sampleMask = 0x1111u & colMask;
+                            if ((newSig & sampleMask) != 0)
+                            {
+                                newSig &= ~sampleMask;
+                                if ((codeword & 1) != 0)
+                                {
+                                    newSig |= (0x33u << i) & invSig;
+                                }
+
+                                codeword >>= 1;
+                                consumed++;
+                            }
+
+                            sampleMask <<= 1;
+                            if ((newSig & sampleMask) != 0)
+                            {
+                                newSig &= ~sampleMask;
+                                if ((codeword & 1) != 0)
+                                {
+                                    newSig |= (0x76u << i) & invSig;
+                                }
+
+                                codeword >>= 1;
+                                consumed++;
+                            }
+
+                            sampleMask <<= 1;
+                            if ((newSig & sampleMask) != 0)
+                            {
+                                newSig &= ~sampleMask;
+                                if ((codeword & 1) != 0)
+                                {
+                                    newSig |= (0xECu << i) & invSig;
+                                }
+
+                                codeword >>= 1;
+                                consumed++;
+                            }
+
+                            sampleMask <<= 1;
+                            if ((newSig & sampleMask) != 0)
+                            {
+                                newSig &= ~sampleMask;
+                                if ((codeword & 1) != 0)
+                                {
+                                    newSig |= (0xC8u << i) & invSig;
+                                }
+
+                                codeword >>= 1;
+                                consumed++;
+                            }
+                        }
+
+                        if (newSig != 0)
+                        {
+                            var value = 3u << (bitPlane - 2);
+                            colMask = 0xFu;
+                            for (var i = 0; i < 4; i++, colMask <<= 4)
+                            {
+                                if ((colMask & newSig) == 0)
+                                {
+                                    continue;
+                                }
+
+                                var column = x + i;
+                                if (column >= width)
+                                {
+                                    break;
+                                }
+
+                                var sampleMask = 0x1111u & colMask;
+                                if ((newSig & sampleMask) != 0 && y < height)
+                                {
+                                    coefficients[(y * width) + column] = unchecked((int)(((codeword & 1) << 31) | value));
+                                    codeword >>= 1;
+                                    consumed++;
+                                }
+
+                                sampleMask <<= 1;
+                                if ((newSig & sampleMask) != 0 && y + 1 < height)
+                                {
+                                    coefficients[((y + 1) * width) + column] = unchecked((int)(((codeword & 1) << 31) | value));
+                                    codeword >>= 1;
+                                    consumed++;
+                                }
+
+                                sampleMask <<= 1;
+                                if ((newSig & sampleMask) != 0 && y + 2 < height)
+                                {
+                                    coefficients[((y + 2) * width) + column] = unchecked((int)(((codeword & 1) << 31) | value));
+                                    codeword >>= 1;
+                                    consumed++;
+                                }
+
+                                sampleMask <<= 1;
+                                if ((newSig & sampleMask) != 0 && y + 3 < height)
+                                {
+                                    coefficients[((y + 3) * width) + column] = unchecked((int)(((codeword & 1) << 31) | value));
+                                    codeword >>= 1;
+                                    consumed++;
+                                }
+                            }
+                        }
+
+                        reader.Advance(consumed);
+                    }
+
+                    newSig |= cs;
+                    WriteLowUShort(prevRowSig, x >> 2, newSig);
+                    var integrated = newSig;
+                    integrated |= (integrated & 0x7777u) << 1;
+                    integrated |= (integrated & 0xEEEEu) >> 1;
+                    prev = (integrated | u) & 0xF000u;
+                }
+            }
+        }
+
+        private static void DecodeMagnitudeRefinement(byte[] cleanupPass, byte[] refinementPasses, int[] coefficients, ushort[] sigma, int mstr, int width, int height, int bitPlane)
+        {
+            var reader = new HtReverseMrpReader(refinementPasses);
+            var half = 1u << (bitPlane - 2);
+            for (var y = 0; y < height; y += 4)
+            {
+                var sigmaIndex = (y >> 2) * mstr;
+                for (var x = 0; x < width; x += 8, sigmaIndex += 2)
+                {
+                    var codeword = reader.Fetch();
+                    var sig = ReadTwoUShorts(sigma, sigmaIndex);
+                    var colMask = 0xFu;
+                    if (sig != 0)
+                    {
+                        for (var columnOffset = 0; columnOffset < 8; columnOffset++, colMask <<= 4)
+                        {
+                            if ((sig & colMask) == 0)
+                            {
+                                continue;
+                            }
+
+                            var column = x + columnOffset;
+                            if (column >= width)
+                            {
+                                break;
+                            }
+
+                            var sampleMask = 0x11111111u & colMask;
+                            for (var rowOffset = 0; rowOffset < 4; rowOffset++)
+                            {
+                                if ((sig & sampleMask) != 0 && y + rowOffset < height)
+                                {
+                                    var symbol = codeword & 1u;
+                                    symbol = (1u - symbol) << (bitPlane - 1);
+                                    symbol |= half;
+                                    var index = ((y + rowOffset) * width) + column;
+                                    coefficients[index] = unchecked((int)((uint)coefficients[index] ^ symbol));
+                                    codeword >>= 1;
+                                }
+
+                                sampleMask <<= 1;
+                            }
+                        }
+                    }
+
+                    reader.Advance(PopCount(sig));
+                }
+            }
         }
 
         private static void DecodeMelVlc(byte[] cleanupPass, int width, int height, int lcup, int scup, int sstr, ushort[] scratch)
@@ -344,6 +653,33 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return count;
         }
 
+        private static uint ReadTwoUShorts(ushort[] data, int index)
+        {
+            var low = index >= 0 && index < data.Length ? data[index] : 0;
+            var high = index + 1 >= 0 && index + 1 < data.Length ? data[index + 1] : 0;
+            return (uint)(low | (high << 16));
+        }
+
+        private static void WriteLowUShort(ushort[] data, int index, uint value)
+        {
+            if (index >= 0 && index < data.Length)
+            {
+                data[index] = (ushort)value;
+            }
+        }
+
+        private static int PopCount(uint value)
+        {
+            var count = 0;
+            while (value != 0)
+            {
+                value &= value - 1;
+                count++;
+            }
+
+            return count;
+        }
+
         private sealed class HtMelSegmentReader
         {
             private static readonly int[] MelExponents = { 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5 };
@@ -628,6 +964,96 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 {
                     ReadByte();
                 }
+            }
+        }
+
+        private sealed class HtReverseMrpReader
+        {
+            private readonly byte[] _data;
+            private int _offset;
+            private int _size;
+            private ulong _tmp;
+            private int _bits;
+            private bool _unstuff;
+
+            public HtReverseMrpReader(byte[] data)
+            {
+                _data = data ?? Array.Empty<byte>();
+                _offset = _data.Length - 1;
+                _size = _data.Length;
+                _unstuff = true;
+                var num = Math.Min(4, _size);
+                for (var i = 0; i < num; i++)
+                {
+                    var d = _size-- > 0 ? _data[_offset--] : 0;
+                    var bits = 8 - ((_unstuff && (d & 0x7F) == 0x7F) ? 1 : 0);
+                    _tmp |= (ulong)d << _bits;
+                    _bits += bits;
+                    _unstuff = d > 0x8F;
+                }
+
+                Read();
+            }
+
+            public uint Fetch()
+            {
+                if (_bits < 32)
+                {
+                    Read();
+                    if (_bits < 32)
+                    {
+                        Read();
+                    }
+                }
+
+                return (uint)_tmp;
+            }
+
+            public void Advance(int bits)
+            {
+                _tmp >>= bits;
+                _bits -= bits;
+            }
+
+            private void Read()
+            {
+                if (_bits > 32)
+                {
+                    return;
+                }
+
+                uint value = 0;
+                if (_size > 3)
+                {
+                    value = ReadLittleEndian32(_data, _offset - 3);
+                    _offset -= 4;
+                    _size -= 4;
+                }
+                else if (_size > 0)
+                {
+                    var shift = 24;
+                    while (_size > 0)
+                    {
+                        value |= (uint)_data[_offset--] << shift;
+                        _size--;
+                        shift -= 8;
+                    }
+                }
+
+                var tmp = value >> 24;
+                var bits = 8 - ((_unstuff && ((value >> 24) & 0x7F) == 0x7F) ? 1 : 0);
+                var unstuff = (value >> 24) > 0x8F;
+                tmp |= ((value >> 16) & 0xFF) << bits;
+                bits += 8 - ((unstuff && ((value >> 16) & 0x7F) == 0x7F) ? 1 : 0);
+                unstuff = ((value >> 16) & 0xFF) > 0x8F;
+                tmp |= ((value >> 8) & 0xFF) << bits;
+                bits += 8 - ((unstuff && ((value >> 8) & 0x7F) == 0x7F) ? 1 : 0);
+                unstuff = ((value >> 8) & 0xFF) > 0x8F;
+                tmp |= (value & 0xFF) << bits;
+                bits += 8 - ((unstuff && (value & 0x7F) == 0x7F) ? 1 : 0);
+                _unstuff = (value & 0xFF) > 0x8F;
+                _tmp |= (ulong)tmp << _bits;
+                _bits += bits;
             }
         }
 

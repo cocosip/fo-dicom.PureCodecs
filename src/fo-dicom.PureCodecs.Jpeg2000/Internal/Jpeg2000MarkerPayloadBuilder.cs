@@ -119,6 +119,26 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return writer.ToArray();
         }
 
+        public static byte[] CreateScalarExpoundedIrreversibleQuantization(ushort[] encodedSteps)
+        {
+            return CreateScalarExpoundedIrreversibleQuantization(encodedSteps, guardBits: 2);
+        }
+
+        public static byte[] CreateScalarExpoundedIrreversibleQuantization(ushort[] encodedSteps, int guardBits)
+        {
+            var writer = new Jpeg2000ByteWriter();
+            writer.WriteByte((byte)((guardBits << 5) | 0x02));
+            if (encodedSteps != null)
+            {
+                foreach (var step in encodedSteps)
+                {
+                    writer.WriteUInt16(step);
+                }
+            }
+
+            return writer.ToArray();
+        }
+
         public static byte[] CreateScalarDerivedIrreversibleQuantization(double step, int precision)
         {
             var writer = new Jpeg2000ByteWriter();

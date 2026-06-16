@@ -40,7 +40,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         public int[] Coefficients { get; }
 
+        public double[]? IrreversibleCoefficients { get; set; }
+
         public int[] Samples { get; set; }
+
+        public double[]? FloatSamples { get; set; }
 
         public IEnumerable<int> GetPrecincts(int resolution)
         {
@@ -53,7 +57,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             keys.Sort();
             foreach (var key in keys)
             {
-                yield return key;
+                if (precincts[key].Count != 0)
+                {
+                    yield return key;
+                }
             }
         }
 
@@ -92,6 +99,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         public void BuildCodeBlocks(int codeBlockWidth, int codeBlockHeight)
         {
+            BuildCodeBlocks(codeBlockWidth, codeBlockHeight, codingStyle: null);
+        }
+
+        public void BuildCodeBlocks(int codeBlockWidth, int codeBlockHeight, Jpeg2000CodingStyle? codingStyle)
+        {
             if (_bands.Count != 0)
             {
                 return;
@@ -101,7 +113,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             for (var resolution = 0; resolution <= Levels; resolution++)
             {
                 var subbands = Jpeg2000StandardGeometry.GetSubbands(Width, Height, X0, Y0, Levels, resolution);
-                var precinctMap = new Dictionary<int, List<PrecinctBand>>();
+                var precinctMap = CreatePrecinctMap(codingStyle, resolution, Jpeg2000StandardGeometry.GetResolution(Width, Height, X0, Y0, Levels, resolution), out var precinctInfo);
                 _bands.Add(resolution, precinctMap);
 
                 foreach (var subband in subbands)
@@ -111,7 +123,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                         continue;
                     }
 
-                    var precinctIndex = 0;
                     var codeBlockWidthExponent = Jpeg2000StandardGeometry.FloorLog2(codeBlockWidth);
                     var codeBlockHeightExponent = Jpeg2000StandardGeometry.FloorLog2(codeBlockHeight);
                     var blockXStart = Jpeg2000StandardGeometry.FloorDivPow2(subband.BandX0, codeBlockWidthExponent) << codeBlockWidthExponent;
@@ -120,39 +131,184 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     var blockYEnd = Jpeg2000StandardGeometry.CeilDivPow2(subband.BandY1, codeBlockHeightExponent) << codeBlockHeightExponent;
                     var blockCountX = (blockXEnd - blockXStart) >> codeBlockWidthExponent;
                     var blockCountY = (blockYEnd - blockYStart) >> codeBlockHeightExponent;
-                    var band = new PrecinctBand(subband.Orientation, blockCountX, blockCountY);
-                    if (!precinctMap.TryGetValue(precinctIndex, out var bands))
-                    {
-                        bands = new List<PrecinctBand>();
-                        precinctMap.Add(precinctIndex, bands);
-                    }
 
-                    bands.Add(band);
-
-                    for (var by = 0; by < blockCountY; by++)
+                    for (var precinctY = 0; precinctY < precinctInfo.PrecinctCountY; precinctY++)
                     {
-                        for (var bx = 0; bx < blockCountX; bx++)
+                        for (var precinctX = 0; precinctX < precinctInfo.PrecinctCountX; precinctX++)
                         {
-                            var codeBlockX0 = Math.Max(blockXStart + (bx * codeBlockWidth), subband.BandX0);
-                            var codeBlockY0 = Math.Max(blockYStart + (by * codeBlockHeight), subband.BandY0);
-                            var codeBlockX1 = Math.Min(codeBlockX0 - (codeBlockX0 - (blockXStart + (bx * codeBlockWidth))) + codeBlockWidth, subband.BandX1);
-                            var codeBlockY1 = Math.Min(codeBlockY0 - (codeBlockY0 - (blockYStart + (by * codeBlockHeight))) + codeBlockHeight, subband.BandY1);
-                            var coefficientX0 = subband.OffsetX + codeBlockX0 - subband.BandX0;
-                            var coefficientY0 = subband.OffsetY + codeBlockY0 - subband.BandY0;
-                            band.CodeBlocks.Add(new Jpeg2000StandardCodeBlock(
-                                this,
-                                globalIndex++,
-                                subband.Orientation,
-                                bx,
-                                by,
-                                coefficientX0,
-                                coefficientY0,
-                                codeBlockX1 - codeBlockX0,
-                                codeBlockY1 - codeBlockY0));
+                            var precinctIndex = precinctX + (precinctY * precinctInfo.PrecinctCountX);
+                            var window = ResolveSubbandPrecinctWindow(
+                                subband,
+                                resolution,
+                                precinctInfo,
+                                precinctX,
+                                precinctY,
+                                codeBlockWidthExponent,
+                                codeBlockHeightExponent);
+                            if (window.Width == 0 || window.Height == 0)
+                            {
+                                continue;
+                            }
+
+                            var band = new PrecinctBand(subband.Orientation, window.Width, window.Height);
+                            precinctMap[precinctIndex].Add(band);
+                            for (var localY = 0; localY < window.Height; localY++)
+                            {
+                                var blockY = window.Y + localY;
+                                if (blockY < 0 || blockY >= blockCountY)
+                                {
+                                    continue;
+                                }
+
+                                for (var localX = 0; localX < window.Width; localX++)
+                                {
+                                    var blockX = window.X + localX;
+                                    if (blockX < 0 || blockX >= blockCountX)
+                                    {
+                                        continue;
+                                    }
+
+                                    var nominalX0 = blockXStart + (blockX * codeBlockWidth);
+                                    var nominalY0 = blockYStart + (blockY * codeBlockHeight);
+                                    var codeBlockX0 = Math.Max(nominalX0, subband.BandX0);
+                                    var codeBlockY0 = Math.Max(nominalY0, subband.BandY0);
+                                    var codeBlockX1 = Math.Min(nominalX0 + codeBlockWidth, subband.BandX1);
+                                    var codeBlockY1 = Math.Min(nominalY0 + codeBlockHeight, subband.BandY1);
+                                    var coefficientX0 = subband.OffsetX + codeBlockX0 - subband.BandX0;
+                                    var coefficientY0 = subband.OffsetY + codeBlockY0 - subband.BandY0;
+                                    band.CodeBlocks.Add(new Jpeg2000StandardCodeBlock(
+                                        this,
+                                        globalIndex++,
+                                        subband.Orientation,
+                                        localX,
+                                        localY,
+                                        coefficientX0,
+                                        coefficientY0,
+                                        codeBlockX1 - codeBlockX0,
+                                        codeBlockY1 - codeBlockY0));
+                                }
+                            }
                         }
                     }
                 }
             }
+        }
+
+        private static Dictionary<int, List<PrecinctBand>> CreatePrecinctMap(
+            Jpeg2000CodingStyle? codingStyle,
+            int resolution,
+            ResolutionGeometry resolutionGeometry,
+            out PrecinctInfo precinctInfo)
+        {
+            if (codingStyle == null || !codingStyle.HasPrecinctSizes || resolution >= codingStyle.PrecinctSizes.Count)
+            {
+                precinctInfo = CreatePrecinctInfo(resolutionGeometry, 15, 15);
+            }
+            else
+            {
+                var value = codingStyle.PrecinctSizes[resolution];
+                precinctInfo = CreatePrecinctInfo(resolutionGeometry, value & 0x0F, (value >> 4) & 0x0F);
+            }
+
+            var map = new Dictionary<int, List<PrecinctBand>>();
+            for (var y = 0; y < precinctInfo.PrecinctCountY; y++)
+            {
+                for (var x = 0; x < precinctInfo.PrecinctCountX; x++)
+                {
+                    map.Add(x + (y * precinctInfo.PrecinctCountX), new List<PrecinctBand>());
+                }
+            }
+
+            return map;
+        }
+
+        private static PrecinctInfo CreatePrecinctInfo(ResolutionGeometry resolutionGeometry, int precinctWidthExponent, int precinctHeightExponent)
+        {
+            var x1 = resolutionGeometry.X0 + resolutionGeometry.Width;
+            var y1 = resolutionGeometry.Y0 + resolutionGeometry.Height;
+            var precinctCountX = Math.Max(1, Jpeg2000StandardGeometry.CeilDivPow2(x1, precinctWidthExponent) - Jpeg2000StandardGeometry.FloorDivPow2(resolutionGeometry.X0, precinctWidthExponent));
+            var precinctCountY = Math.Max(1, Jpeg2000StandardGeometry.CeilDivPow2(y1, precinctHeightExponent) - Jpeg2000StandardGeometry.FloorDivPow2(resolutionGeometry.Y0, precinctHeightExponent));
+            var precinctLeft = Jpeg2000StandardGeometry.FloorDivPow2(resolutionGeometry.X0, precinctWidthExponent) << precinctWidthExponent;
+            var precinctTop = Jpeg2000StandardGeometry.FloorDivPow2(resolutionGeometry.Y0, precinctHeightExponent) << precinctHeightExponent;
+            return new PrecinctInfo(precinctWidthExponent, precinctHeightExponent, precinctCountX, precinctCountY, precinctLeft, precinctTop, resolutionGeometry);
+        }
+
+        private static CodeBlockWindow ResolveSubbandPrecinctWindow(
+            SubbandGeometry subband,
+            int resolution,
+            PrecinctInfo precinctInfo,
+            int precinctX,
+            int precinctY,
+            int codeBlockWidthExponent,
+            int codeBlockHeightExponent)
+        {
+            var resolutionX0 = precinctInfo.Resolution.X0;
+            var resolutionY0 = precinctInfo.Resolution.Y0;
+            var resolutionX1 = precinctInfo.Resolution.X0 + precinctInfo.Resolution.Width;
+            var resolutionY1 = precinctInfo.Resolution.Y0 + precinctInfo.Resolution.Height;
+            var precinctRegionX0 = Math.Max(resolutionX0, precinctInfo.Left + (precinctX << precinctInfo.WidthExponent));
+            var precinctRegionX1 = Math.Min(resolutionX1, precinctInfo.Left + ((precinctX + 1) << precinctInfo.WidthExponent));
+            var precinctRegionY0 = Math.Max(resolutionY0, precinctInfo.Top + (precinctY << precinctInfo.HeightExponent));
+            var precinctRegionY1 = Math.Min(resolutionY1, precinctInfo.Top + ((precinctY + 1) << precinctInfo.HeightExponent));
+            var xShift = resolution == 0 ? 0 : 1;
+            var yShift = resolution == 0 ? 0 : 1;
+            precinctRegionX0 = Jpeg2000StandardGeometry.CeilDivPow2(precinctRegionX0 - (subband.Orientation & 1), xShift);
+            precinctRegionX1 = Jpeg2000StandardGeometry.CeilDivPow2(precinctRegionX1 - (subband.Orientation & 1), xShift);
+            precinctRegionY0 = Jpeg2000StandardGeometry.CeilDivPow2(precinctRegionY0 - (subband.Orientation >> 1), yShift);
+            precinctRegionY1 = Jpeg2000StandardGeometry.CeilDivPow2(precinctRegionY1 - (subband.Orientation >> 1), yShift);
+
+            var x0 = Jpeg2000StandardGeometry.FloorDivPow2(precinctRegionX0, codeBlockWidthExponent) - Jpeg2000StandardGeometry.FloorDivPow2(subband.BandX0, codeBlockWidthExponent);
+            var x1 = Jpeg2000StandardGeometry.CeilDivPow2(precinctRegionX1, codeBlockWidthExponent) - Jpeg2000StandardGeometry.FloorDivPow2(subband.BandX0, codeBlockWidthExponent);
+            var y0 = Jpeg2000StandardGeometry.FloorDivPow2(precinctRegionY0, codeBlockHeightExponent) - Jpeg2000StandardGeometry.FloorDivPow2(subband.BandY0, codeBlockHeightExponent);
+            var y1 = Jpeg2000StandardGeometry.CeilDivPow2(precinctRegionY1, codeBlockHeightExponent) - Jpeg2000StandardGeometry.FloorDivPow2(subband.BandY0, codeBlockHeightExponent);
+            return new CodeBlockWindow(x0, y0, Math.Max(0, x1 - x0), Math.Max(0, y1 - y0));
+        }
+
+        private readonly struct PrecinctInfo
+        {
+            public PrecinctInfo(int widthExponent, int heightExponent, int precinctCountX, int precinctCountY, int left, int top, ResolutionGeometry resolution)
+            {
+                WidthExponent = widthExponent;
+                HeightExponent = heightExponent;
+                PrecinctCountX = precinctCountX;
+                PrecinctCountY = precinctCountY;
+                Left = left;
+                Top = top;
+                Resolution = resolution;
+            }
+
+            public int WidthExponent { get; }
+
+            public int HeightExponent { get; }
+
+            public int PrecinctCountX { get; }
+
+            public int PrecinctCountY { get; }
+
+            public int Left { get; }
+
+            public int Top { get; }
+
+            public ResolutionGeometry Resolution { get; }
+        }
+
+        private readonly struct CodeBlockWindow
+        {
+            public CodeBlockWindow(int x, int y, int width, int height)
+            {
+                X = x;
+                Y = y;
+                Width = width;
+                Height = height;
+            }
+
+            public int X { get; }
+
+            public int Y { get; }
+
+            public int Width { get; }
+
+            public int Height { get; }
         }
     }
 

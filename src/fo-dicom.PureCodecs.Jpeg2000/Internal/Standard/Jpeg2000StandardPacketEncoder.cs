@@ -46,9 +46,44 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             byte[] data,
             int[]? passLengths,
             byte[][]? passSnapshots,
+            int resolution,
+            int orientation,
+            int precinct)
+            : this(x, y, gridWidth, gridHeight, zeroBitPlanes, passCount, data, passLengths, passSnapshots, null, resolution, orientation, precinct)
+        {
+        }
+
+        public Jpeg2000EncodedBlock(
+            int x,
+            int y,
+            int gridWidth,
+            int gridHeight,
+            int zeroBitPlanes,
+            int passCount,
+            byte[] data,
+            int[]? passLengths,
+            byte[][]? passSnapshots,
             double[]? passDistortions,
             int resolution,
             int orientation)
+            : this(x, y, gridWidth, gridHeight, zeroBitPlanes, passCount, data, passLengths, passSnapshots, passDistortions, resolution, orientation, precinct: 0)
+        {
+        }
+
+        public Jpeg2000EncodedBlock(
+            int x,
+            int y,
+            int gridWidth,
+            int gridHeight,
+            int zeroBitPlanes,
+            int passCount,
+            byte[] data,
+            int[]? passLengths,
+            byte[][]? passSnapshots,
+            double[]? passDistortions,
+            int resolution,
+            int orientation,
+            int precinct)
         {
             X = x;
             Y = y;
@@ -62,6 +97,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             PassDistortions = passDistortions ?? new double[0];
             Resolution = resolution;
             Orientation = orientation;
+            Precinct = precinct;
         }
 
         public int X { get; }
@@ -88,11 +124,13 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         public int Orientation { get; }
 
+        public int Precinct { get; }
+
         public Jpeg2000EncodedBlock TruncateToPasses(int passCount)
         {
             if (passCount <= 0 || Data.Length == 0)
             {
-                return new Jpeg2000EncodedBlock(X, Y, GridWidth, GridHeight, ZeroBitPlanes, 0, new byte[0], PassLengths, PassSnapshots, PassDistortions, Resolution, Orientation);
+                return new Jpeg2000EncodedBlock(X, Y, GridWidth, GridHeight, ZeroBitPlanes, 0, new byte[0], PassLengths, PassSnapshots, PassDistortions, Resolution, Orientation, Precinct);
             }
 
             if (passCount >= PassCount)
@@ -103,13 +141,13 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             var index = Math.Min(passCount, PassLengths.Length) - 1;
             if (PassSnapshots.Length > index && PassSnapshots[index].Length > 0)
             {
-                return new Jpeg2000EncodedBlock(X, Y, GridWidth, GridHeight, ZeroBitPlanes, passCount, PassSnapshots[index], PassLengths, PassSnapshots, PassDistortions, Resolution, Orientation);
+                return new Jpeg2000EncodedBlock(X, Y, GridWidth, GridHeight, ZeroBitPlanes, passCount, PassSnapshots[index], PassLengths, PassSnapshots, PassDistortions, Resolution, Orientation, Precinct);
             }
 
             var length = PassLengths[index];
             if (length <= 0)
             {
-                return new Jpeg2000EncodedBlock(X, Y, GridWidth, GridHeight, ZeroBitPlanes, 0, new byte[0], PassLengths, PassSnapshots, PassDistortions, Resolution, Orientation);
+                return new Jpeg2000EncodedBlock(X, Y, GridWidth, GridHeight, ZeroBitPlanes, 0, new byte[0], PassLengths, PassSnapshots, PassDistortions, Resolution, Orientation, Precinct);
             }
 
             if (length > Data.Length)
@@ -119,7 +157,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
             var data = new byte[length];
             Buffer.BlockCopy(Data, 0, data, 0, data.Length);
-            return new Jpeg2000EncodedBlock(X, Y, GridWidth, GridHeight, ZeroBitPlanes, passCount, data, PassLengths, PassSnapshots, PassDistortions, Resolution, Orientation);
+            return new Jpeg2000EncodedBlock(X, Y, GridWidth, GridHeight, ZeroBitPlanes, passCount, data, PassLengths, PassSnapshots, PassDistortions, Resolution, Orientation, Precinct);
         }
     }
 

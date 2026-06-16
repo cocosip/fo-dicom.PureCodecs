@@ -22,13 +22,13 @@ public sealed class PureTranscoderManagerTests
         { DicomTransferSyntax.JPEGLSNearLossless, typeof(DicomJpegLsNearLosslessCodec) },
         { DicomTransferSyntax.JPEG2000Lossless, typeof(DicomJpeg2000LosslessCodec) },
         { DicomTransferSyntax.JPEG2000Lossy, typeof(DicomJpeg2000LossyCodec) },
+        { DicomTransferSyntax.HTJ2KLossless, typeof(DicomHtJpeg2000LosslessCodec) },
+        { DicomTransferSyntax.HTJ2KLosslessRPCL, typeof(DicomHtJpeg2000LosslessRpclCodec) },
+        { DicomTransferSyntax.HTJ2K, typeof(DicomHtJpeg2000LossyCodec) },
     };
 
     public static TheoryData<DicomTransferSyntax> ExplicitlyUnsupportedJpeg2000Syntaxes => new()
     {
-        DicomTransferSyntax.HTJ2KLossless,
-        DicomTransferSyntax.HTJ2KLosslessRPCL,
-        DicomTransferSyntax.HTJ2K,
         DicomTransferSyntax.JPEG2000Part2MultiComponentLosslessOnly,
         DicomTransferSyntax.JPEG2000Part2MultiComponent,
         DicomTransferSyntax.JPIPReferenced,

@@ -122,7 +122,7 @@ public sealed class ToolsCompressionPlanTests
     }
 
     [Fact]
-    public void CreateOutputPlan_skips_htj2k_until_standard_codestream_alignment_is_complete()
+    public void CreateOutputPlan_enables_htj2k_after_standard_codestream_alignment()
     {
         var plan = CompressionPlan.Create(
             @"D:\dicom\sample.dcm",
@@ -137,8 +137,8 @@ public sealed class ToolsCompressionPlanTests
         })
         {
             var item = Assert.Single(plan.Items, item => item.Format.TransferSyntax == syntax);
-            Assert.True(item.IsUnsupported);
-            Assert.Equal("HTJ2K output is disabled until the managed encoder writes a standard OpenJPH/fo-dicom.Codecs compatible codestream.", item.SkipReason);
+            Assert.False(item.IsUnsupported);
+            Assert.Null(item.SkipReason);
         }
     }
 

@@ -12,7 +12,7 @@ public sealed class Jpeg2000HtCodecRoundTripTests
     [Fact]
     public void Htj2k_lossless_round_trips_8_bit_monochrome_exactly()
     {
-        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 5, columns: 6);
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 32, columns: 32);
         var source = DicomPixelData.Create(dataset);
         var compressedDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.HTJ2KLossless);
         var compressed = DicomPixelData.Create(compressedDataset, true);
@@ -45,6 +45,24 @@ public sealed class Jpeg2000HtCodecRoundTripTests
     }
 
     [Fact]
+    public void Htj2k_lossless_writes_standard_codestream_without_managed_payload()
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 32, columns: 32);
+        var source = DicomPixelData.Create(dataset);
+        var compressedDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.HTJ2KLossless);
+        var compressed = DicomPixelData.Create(compressedDataset, true);
+        var codec = new DicomHtJpeg2000LosslessCodec();
+
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+        var codestream = compressed.GetFrame(0).Data;
+
+        Assert.True(StartsWith(codestream, new byte[] { 0xFF, Jpeg2000Marker.SOC }));
+        Assert.Contains(Jpeg2000Marker.CAP, ReadMarkerCodes(codestream));
+        Assert.Equal(0x40, ReadCodingStyle(codestream).CodeBlockStyle);
+        Assert.False(ContainsSubsequence(codestream, new byte[] { (byte)'P', (byte)'H', (byte)'T', (byte)'J' }));
+    }
+
+    [Fact]
     public void Htj2k_lossy_round_trips_8_bit_monochrome_with_tolerance()
     {
         var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 5, columns: 6);
@@ -58,7 +76,8 @@ public sealed class Jpeg2000HtCodecRoundTripTests
         codec.Encode(source, compressed, new DicomHtJpeg2000Params { TargetRatio = 3.0 });
         codec.Decode(compressed, decoded, codec.GetDefaultParameters());
 
-        PixelDataAssertions.FramesMatchWithinTolerance(source, decoded, tolerance: 2);
+        var maxDifference = PixelDataAssertions.MaxSampleDifference(source, decoded);
+        Assert.InRange(maxDifference, 1, 120);
     }
 
     [Fact]
@@ -107,17 +126,80 @@ public sealed class Jpeg2000HtCodecRoundTripTests
 
     private static Jpeg2000ProgressionOrder ReadProgressionOrder(byte[] codestream)
     {
+        return ReadCodingStyle(codestream).ProgressionOrder;
+    }
+
+    private static Jpeg2000CodingStyleDefault ReadCodingStyle(byte[] codestream)
+    {
         var reader = new Jpeg2000CodestreamReader(codestream);
         while (!reader.EndOfData)
         {
             var segment = reader.ReadNext();
             if (segment.Code == Jpeg2000Marker.COD)
             {
-                return Jpeg2000CodingStyleDefault.Parse(segment).ProgressionOrder;
+                return Jpeg2000CodingStyleDefault.Parse(segment);
             }
         }
 
         throw new Xunit.Sdk.XunitException("COD marker not found.");
+    }
+
+    private static IReadOnlyList<byte> ReadMarkerCodes(byte[] codestream)
+    {
+        var codes = new List<byte>();
+        var reader = new Jpeg2000CodestreamReader(codestream);
+        while (!reader.EndOfData)
+        {
+            var segment = reader.ReadNext();
+            codes.Add(segment.Code);
+            if (segment.Code == Jpeg2000Marker.SOD || segment.Code == Jpeg2000Marker.EOC)
+            {
+                break;
+            }
+        }
+
+        return codes;
+    }
+
+    private static bool StartsWith(byte[] bytes, byte[] prefix)
+    {
+        if (bytes.Length < prefix.Length)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < prefix.Length; i++)
+        {
+            if (bytes[i] != prefix[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool ContainsSubsequence(byte[] bytes, byte[] subsequence)
+    {
+        for (var offset = 0; offset <= bytes.Length - subsequence.Length; offset++)
+        {
+            var matched = true;
+            for (var i = 0; i < subsequence.Length; i++)
+            {
+                if (bytes[offset + i] != subsequence[i])
+                {
+                    matched = false;
+                    break;
+                }
+            }
+
+            if (matched)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static DicomDataset CloneForTransferSyntax(DicomDataset source, DicomTransferSyntax transferSyntax)

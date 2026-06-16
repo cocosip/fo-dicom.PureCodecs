@@ -21,6 +21,9 @@ internal static class Phase1TransferSyntaxes
         DicomTransferSyntax.JPEGLSNearLossless,
         DicomTransferSyntax.JPEG2000Lossless,
         DicomTransferSyntax.JPEG2000Lossy,
+        DicomTransferSyntax.HTJ2KLossless,
+        DicomTransferSyntax.HTJ2KLosslessRPCL,
+        DicomTransferSyntax.HTJ2K,
     };
 
     public static TheoryData<DicomTransferSyntax, DicomTransferSyntax> AllPairs
@@ -51,5 +54,8 @@ internal static class Phase1TransferSyntaxes
         { DicomTransferSyntax.JPEGLSNearLossless, new DicomJpegLsNearLosslessCodec(), 2 },
         { DicomTransferSyntax.JPEG2000Lossless, new DicomJpeg2000LosslessCodec(), null },
         { DicomTransferSyntax.JPEG2000Lossy, new DicomJpeg2000LossyCodec(), 6 },
+        { DicomTransferSyntax.HTJ2KLossless, new DicomHtJpeg2000LosslessCodec(), null },
+        { DicomTransferSyntax.HTJ2KLosslessRPCL, new DicomHtJpeg2000LosslessRpclCodec(), null },
+        { DicomTransferSyntax.HTJ2K, new DicomHtJpeg2000LossyCodec(), 128 },
     };
 }

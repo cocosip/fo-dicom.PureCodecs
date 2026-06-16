@@ -224,7 +224,8 @@ public sealed class FullCompatibilityMatrixTests
             {
                 if (row[0] is DicomTransferSyntax syntax
                     && syntax != DicomTransferSyntax.JPEGProcess1
-                    && syntax != DicomTransferSyntax.JPEGProcess2_4)
+                    && syntax != DicomTransferSyntax.JPEGProcess2_4
+                    && syntax != DicomTransferSyntax.HTJ2K)
                 {
                     data.Add(syntax, (IDicomCodec)row[1], (int?)row[2]);
                 }

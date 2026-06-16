@@ -40,9 +40,35 @@ internal static class PixelDataAssertions
                 var difference = Math.Abs(expectedSample - actualSample);
                 Assert.True(
                     difference <= tolerance,
-                    $"Frame {frame} sample {i / bytesPerSample} differed by {difference}, which is greater than tolerance {tolerance}.");
+                    $"Frame {frame} sample {i / bytesPerSample} differed by {difference}, which is greater than tolerance {tolerance}. Expected {expectedSample}, actual {actualSample}.");
             }
         }
+    }
+
+    public static int MaxSampleDifference(DicomPixelData expected, DicomPixelData actual)
+    {
+        AssertFrameCount(expected, actual);
+        var max = 0;
+        for (var frame = 0; frame < expected.NumberOfFrames; frame++)
+        {
+            var expectedBytes = ToArray(expected.GetFrame(frame));
+            var actualBytes = ToArray(actual.GetFrame(frame));
+
+            Assert.Equal(expectedBytes.Length, actualBytes.Length);
+            Assert.Equal(expected.BitsAllocated, actual.BitsAllocated);
+            Assert.Equal(expected.PixelRepresentation, actual.PixelRepresentation);
+
+            var bytesPerSample = expected.BitsAllocated / 8;
+            Assert.True(bytesPerSample == 1 || bytesPerSample == 2, $"Unsupported BitsAllocated {expected.BitsAllocated}.");
+            for (var i = 0; i < expectedBytes.Length; i += bytesPerSample)
+            {
+                var expectedSample = ReadSample(expectedBytes, i, expected.BitsAllocated, expected.PixelRepresentation);
+                var actualSample = ReadSample(actualBytes, i, actual.BitsAllocated, actual.PixelRepresentation);
+                max = Math.Max(max, Math.Abs(expectedSample - actualSample));
+            }
+        }
+
+        return max;
     }
 
     public static void AssertFrameCount(DicomPixelData expected, DicomPixelData actual)

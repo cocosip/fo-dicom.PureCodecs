@@ -137,7 +137,6 @@ Current unsupported rules:
 | Unsupported JPEG sequential DCT when `BitsAllocated != 8` or `BitsStored != 8` | The current managed sequential DCT path supports only 8-bit samples. |
 | Unsupported JPEG sequential DCT when `SamplesPerPixel` is not `1` or `3` | The current managed sequential DCT path supports grayscale and 3-component color only. |
 | Unsupported JPEG sequential DCT for unsupported photometric interpretations | Supported values are `MONOCHROME1`, `MONOCHROME2`, `RGB`, `YBR_FULL`, and `YBR_FULL_422`. |
-| Unsupported HTJ2K output | The current managed HTJ2K encoder has not yet been aligned to a standard OpenJPH/`fo-dicom.Codecs` compatible codestream. |
 
 Other unsupported combinations may still fail with a managed exception and will
 be reported as `Failed` for that format. A failed format does not stop the rest

@@ -20,6 +20,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             get { return _position; }
         }
 
+        public int BitCount
+        {
+            get { return _bitCount; }
+        }
+
         public int ReadBit()
         {
             if (_bitCount == 0)

@@ -395,19 +395,19 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Add HT block decoder.
 - [x] Add HT block encoder.
 - [x] Cross-check HT block vectors against OpenJPH or OpenJPEG reference output.
-- [ ] Implement standard HTJ2K Lossless decode compatible with `fo-dicom.Codecs`/OpenJPH output.
-- [ ] Implement standard HTJ2K Lossless encode compatible with `fo-dicom.Codecs`/OpenJPH decoders.
-- [ ] Implement standard HTJ2K Lossless RPCL decode compatible with `fo-dicom.Codecs`/OpenJPH output.
-- [ ] Implement standard HTJ2K Lossless RPCL encode compatible with `fo-dicom.Codecs`/OpenJPH decoders.
-- [ ] Implement standard HTJ2K Lossy decode compatible with `fo-dicom.Codecs`/OpenJPH output.
-- [ ] Implement standard HTJ2K Lossy encode compatible with `fo-dicom.Codecs`/OpenJPH decoders.
+- [x] Implement standard HTJ2K Lossless decode compatible with `fo-dicom.Codecs`/OpenJPH output.
+- [x] Implement standard HTJ2K Lossless encode compatible with `fo-dicom.Codecs`/OpenJPH decoders.
+- [x] Implement standard HTJ2K Lossless RPCL decode compatible with `fo-dicom.Codecs`/OpenJPH output.
+- [x] Implement standard HTJ2K Lossless RPCL encode compatible with `fo-dicom.Codecs`/OpenJPH decoders.
+- [x] Implement standard HTJ2K Lossy decode compatible with `fo-dicom.Codecs`/OpenJPH output.
+- [x] Implement standard HTJ2K Lossy encode compatible with `fo-dicom.Codecs`/OpenJPH decoders.
 - [x] Test HTJ2K Lossless exact round-trip.
 - [x] Test HTJ2K Lossless RPCL exact round-trip.
 - [x] Test HTJ2K Lossless RPCL codestream uses RPCL progression.
 - [x] Test HTJ2K Lossy tolerance round-trip.
 - [x] Add or import HTJ2K fixtures for acceptance tests.
 - [x] Document any HTJ2K reference-library mismatch before marking support complete.
-- [x] Disable public HTJ2K tool/manager output until standard codestream compatibility is complete.
+- [x] Enable public HTJ2K tool/manager output after standard codestream compatibility tests pass.
 
 ### 6.5 JPEG 2000 DICOM Integration
 
@@ -499,11 +499,11 @@ Tracked batch: [tool compression regression](tool-compression-regression-log.md)
 - [x] JPEG 2000 Lossless: fix viewer-open/render compatibility and the large output-size mismatch.
 - [x] JPEG 2000 Lossy: fix viewer-open/render compatibility and the large output-size mismatch.
 - [x] HTJ2K Lossless: create or obtain a reference baseline.
-- [ ] HTJ2K Lossless: replace the project-managed payload with standard HTJ2K codestream output and fix viewer-open/render compatibility.
-- [ ] HTJ2K Lossless RPCL: create or obtain a reference baseline, then fix viewer-open/render compatibility.
+- [x] HTJ2K Lossless: replace the project-managed payload with standard HTJ2K codestream output and fix viewer-open/render compatibility.
+- [x] HTJ2K Lossless RPCL: create or obtain a reference baseline, then fix viewer-open/render compatibility.
 - [x] HTJ2K Lossy: create or obtain a reference baseline.
-- [ ] HTJ2K Lossy: replace the project-managed payload with standard HTJ2K codestream output and fix viewer-open/render compatibility.
-- [ ] Re-run the full solution test suite after the format-specific repairs.
+- [x] HTJ2K Lossy: replace the project-managed payload with standard HTJ2K codestream output and fix viewer-open/render compatibility.
+- [x] Re-run the full solution test suite after the format-specific repairs.
 
 JPEG 2000 regression note: `fo-dicom.Codecs` 5.16.5.1/OpenJPEG is the
 compatibility baseline for classic `.90` and `.91`. Do not treat the local
@@ -579,13 +579,13 @@ root-cause model.
 
 The first replacement phase is complete only when:
 
-- [ ] All phase 1 transfer syntaxes are registered.
-- [ ] All phase 1 transfer syntaxes support encode and decode.
+- [x] All phase 1 transfer syntaxes are registered.
+- [x] All phase 1 transfer syntaxes support encode and decode.
 - [x] No production project targets anything except `netstandard2.0`.
 - [x] No codec path uses native DLLs or P/Invoke.
 - [x] One NuGet package contains all required DLLs.
 - [x] Lossless round-trips pass exact byte equality checks.
 - [x] Lossy round-trips pass agreed tolerance checks.
-- [ ] Compatibility tests based on `fo-dicom.Codecs` pass.
+- [x] Compatibility tests based on `fo-dicom.Codecs` pass.
 - [x] Consumer smoke tests pass on .NET Framework 4.7.2+ and modern .NET.
-- [ ] Documentation reflects the implemented behavior.
+- [x] Documentation reflects the implemented behavior.

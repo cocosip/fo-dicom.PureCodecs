@@ -42,14 +42,6 @@ public sealed class CompressionPlan
         string baseName)
     {
         var outputPath = Path.Combine(outputDirectory, $"{baseName}_{format.Suffix}.dcm");
-        if (IsHtj2k(format.TransferSyntax))
-        {
-            return CompressionPlanItem.Unsupported(
-                format,
-                outputPath,
-                "HTJ2K output is disabled until the managed encoder writes a standard OpenJPH/fo-dicom.Codecs compatible codestream.");
-        }
-
         if (format.TransferSyntax == DicomTransferSyntax.JPEGProcess1 && pixelData.BitsStored > 8)
         {
             return CompressionPlanItem.Unsupported(
@@ -76,13 +68,6 @@ public sealed class CompressionPlan
         }
 
         return CompressionPlanItem.Transcode(format, outputPath);
-    }
-
-    private static bool IsHtj2k(DicomTransferSyntax transferSyntax)
-    {
-        return transferSyntax == DicomTransferSyntax.HTJ2KLossless ||
-               transferSyntax == DicomTransferSyntax.HTJ2KLosslessRPCL ||
-               transferSyntax == DicomTransferSyntax.HTJ2K;
     }
 
     private static bool IsJpegSequentialDct(DicomTransferSyntax transferSyntax)

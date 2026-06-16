@@ -20,7 +20,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 components,
                 cod.CodeBlockWidth,
                 cod.CodeBlockHeight,
-                cod.CodeBlockStyle);
+                cod.CodeBlockStyle,
+                cod);
             packetDecoder.Decode();
 
             foreach (var component in components)
@@ -57,8 +58,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     continue;
                 }
 
+                double[]? irreversibleCoefficients = null;
                 var coefficients = IsHighThroughput(cod)
-                    ? DecodeHighThroughputBlock(component, cod, qcd, block)
+                    ? DecodeHighThroughputBlock(component, cod, qcd, block, out irreversibleCoefficients)
                     : DecodeStandardBlock(component, cod, qcd, block);
                 for (var y = 0; y < block.Height; y++)
                 {
@@ -66,6 +68,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     {
                         var destination = ((block.Y0 + y) * component.Width) + block.X0 + x;
                         component.Coefficients[destination] = coefficients[(y * block.Width) + x];
+                        if (irreversibleCoefficients != null)
+                        {
+                            component.IrreversibleCoefficients ??= new double[component.Coefficients.Length];
+                            component.IrreversibleCoefficients[destination] = irreversibleCoefficients[(y * block.Width) + x];
+                        }
                     }
                 }
             }
@@ -81,8 +88,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
             if (cod.Transformation == 0)
             {
-                var samples = DequantizeIrreversible(component, cod, qcd);
+                var samples = component.IrreversibleCoefficients ?? DequantizeIrreversible(component, cod, qcd);
                 Jpeg2000StandardIrreversibleWavelet.Inverse97(samples, component.Width, component.Height, component.Levels);
+                component.FloatSamples = samples;
                 component.Samples = Round(samples);
                 return;
             }
@@ -107,34 +115,107 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             Jpeg2000StandardComponent component,
             Jpeg2000CodingStyleDefault cod,
             Jpeg2000QuantizationDefault qcd,
-            Jpeg2000StandardCodeBlock block)
+            Jpeg2000StandardCodeBlock block,
+            out double[]? irreversibleCoefficients)
         {
-            if (cod.Transformation != 1 || qcd.Style != Jpeg2000QuantizationStyle.None)
+            irreversibleCoefficients = null;
+            var reversible = cod.Transformation == 1 && qcd.Style == Jpeg2000QuantizationStyle.None;
+            var irreversible = cod.Transformation == 0 && qcd.Style == Jpeg2000QuantizationStyle.ScalarExpounded;
+            if (!reversible && !irreversible)
             {
-                throw Jpeg2000Binary.CreateException("HTJ2K pure decoder currently supports reversible lossless code-blocks only.");
+                throw Jpeg2000Binary.CreateException("HTJ2K pure decoder supports reversible lossless and scalar-expounded irreversible cleanup code-blocks.");
             }
 
-            if (block.TotalPasses != 1)
+            if (block.TotalPasses > 3)
             {
-                throw Jpeg2000Binary.CreateException("HTJ2K pure decoder currently supports cleanup-pass-only code-blocks.");
+                throw Jpeg2000Binary.CreateException("HTJ2K pure decoder currently supports up to three HT coding passes.");
             }
 
             Jpeg2000ClassicCodeBlock decoded;
             try
             {
-                decoded = Jpeg2000HtCodeBlockDecoder.DecodeStandardCleanupPass(
+                decoded = DecodeHighThroughputSegments(block);
+            }
+            catch (FellowOakDicom.Imaging.Codec.DicomCodecException ex)
+            {
+                throw Jpeg2000Binary.CreateException(
+                    $"HTJ2K code-block decode failed at x={block.X0}, y={block.Y0}, local=({block.LocalX},{block.LocalY}), orientation={block.Orientation}, zeroBitPlanes={block.ZeroBitPlanes}, size={block.Width}x{block.Height}, passes={block.TotalPasses}, segments={DescribeSegments(block)}. {ex.Message}");
+            }
+            var kMax = EstimateHighThroughputBandKmax(component, cod, qcd, block);
+            if (reversible)
+            {
+                return UnscaleOpenJphReversibleCodeBlock(decoded.Coefficients, kMax);
+            }
+
+            irreversibleCoefficients = UnscaleOpenJphIrreversibleCodeBlock(component, cod, qcd, block, decoded.Coefficients, kMax);
+
+            return new int[decoded.Coefficients.Count];
+        }
+
+        private static Jpeg2000ClassicCodeBlock DecodeHighThroughputSegments(Jpeg2000StandardCodeBlock block)
+        {
+            if (block.Segments.Count == 0)
+            {
+                return Jpeg2000HtCodeBlockDecoder.DecodeStandardCleanupPass(
                     block.Data,
                     block.Width,
                     block.Height,
                     block.ZeroBitPlanes);
             }
-            catch (FellowOakDicom.Imaging.Codec.DicomCodecException ex)
+
+            var cleanup = block.Segments[0].Data;
+            if (block.TotalPasses <= 1)
             {
-                throw Jpeg2000Binary.CreateException(
-                    $"HTJ2K code-block decode failed at x={block.X0}, y={block.Y0}, local=({block.LocalX},{block.LocalY}), orientation={block.Orientation}, zeroBitPlanes={block.ZeroBitPlanes}, size={block.Width}x{block.Height}. {ex.Message}");
+                return Jpeg2000HtCodeBlockDecoder.DecodeStandardCleanupPass(
+                    cleanup,
+                    block.Width,
+                    block.Height,
+                    block.ZeroBitPlanes);
             }
-            var kMax = EstimateHighThroughputBandKmax(component, cod, qcd, block);
-            return UnscaleOpenJphReversibleCodeBlock(decoded.Coefficients, kMax);
+
+            var refinementLength = 0;
+            for (var i = 1; i < block.Segments.Count; i++)
+            {
+                refinementLength += block.Segments[i].Data.Length;
+            }
+
+            var refinement = new byte[refinementLength];
+            var offset = 0;
+            for (var i = 1; i < block.Segments.Count; i++)
+            {
+                var data = block.Segments[i].Data;
+                Buffer.BlockCopy(data, 0, refinement, offset, data.Length);
+                offset += data.Length;
+            }
+
+            return Jpeg2000HtStandardCleanupPassDecoder.Decode(
+                cleanup,
+                refinement,
+                block.TotalPasses,
+                block.Width,
+                block.Height,
+                block.ZeroBitPlanes);
+        }
+
+        private static string DescribeSegments(Jpeg2000StandardCodeBlock block)
+        {
+            if (block.Segments.Count == 0)
+            {
+                return block.Data.Length.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            var values = new string[block.Segments.Count];
+            for (var i = 0; i < values.Length; i++)
+            {
+                var data = block.Segments[i].Data;
+                values[i] = data.Length.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                if (data.Length >= 2)
+                {
+                    values[i] += ":" + data[data.Length - 2].ToString("X2", System.Globalization.CultureInfo.InvariantCulture) + data[data.Length - 1].ToString("X2", System.Globalization.CultureInfo.InvariantCulture);
+                }
+            }
+
+            return string.Join(",", values);
         }
 
         private static int EstimateHighThroughputBandKmax(
@@ -147,7 +228,15 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             var index = SubbandIndex(cod.DecompositionLevels, resolution, block.Orientation);
             if (index >= 0 && index < qcd.StepSizes.Count)
             {
-                return (qcd.StepSizes[index] >> 3) + qcd.GuardBits - 1;
+                if (qcd.Style == Jpeg2000QuantizationStyle.None)
+                {
+                    return (qcd.StepSizes[index] >> 3) + qcd.GuardBits - 1;
+                }
+
+                if (qcd.Style == Jpeg2000QuantizationStyle.ScalarExpounded)
+                {
+                    return Jpeg2000HtIrreversibleQuantization.Kmax(qcd.StepSizes[index], qcd.GuardBits);
+                }
             }
 
             return EstimateBandBitPlaneDepth(component, cod, qcd, block);
@@ -165,6 +254,30 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             }
 
             return unscaled;
+        }
+
+        private static double[] UnscaleOpenJphIrreversibleCodeBlock(
+            Jpeg2000StandardComponent component,
+            Jpeg2000CodingStyleDefault cod,
+            Jpeg2000QuantizationDefault qcd,
+            Jpeg2000StandardCodeBlock block,
+            IReadOnlyList<int> coefficients,
+            int kMax)
+        {
+            var resolution = ResolutionForBlock(cod.DecompositionLevels, block.Orientation, block.X0, block.Y0, component.Width, component.Height);
+            var index = SubbandIndex(cod.DecompositionLevels, resolution, block.Orientation);
+            if (qcd.StepSizes.Count == 0)
+            {
+                throw Jpeg2000Binary.CreateException("HTJ2K irreversible QCD marker does not contain quantization steps.");
+            }
+
+            if (index < 0 || index >= qcd.StepSizes.Count)
+            {
+                index = qcd.StepSizes.Count - 1;
+            }
+
+            var delta = Jpeg2000HtIrreversibleQuantization.DecodeDelta(qcd.StepSizes[index], block.Orientation, kMax);
+            return Jpeg2000HtIrreversibleQuantization.FromSignMagnitude(coefficients, delta);
         }
 
         private static bool IsHighThroughput(Jpeg2000CodingStyleDefault cod)
@@ -337,6 +450,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             for (var i = 0; i < component.Samples.Length; i++)
             {
                 component.Samples[i] += shift;
+                if (component.FloatSamples != null)
+                {
+                    component.FloatSamples[i] += shift;
+                }
             }
         }
 
@@ -360,17 +477,29 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         private static void ApplyInverseIct(Jpeg2000StandardComponent[] components)
         {
             var count = components[0].Samples.Length;
+            var floatY = components[0].FloatSamples;
+            var floatCb = components[1].FloatSamples;
+            var floatCr = components[2].FloatSamples;
             for (var i = 0; i < count; i++)
             {
                 var y = components[0].Samples[i];
                 var cb = components[1].Samples[i];
                 var cr = components[2].Samples[i];
-                var yf = (float)y;
-                var cbf = (float)cb;
-                var crf = (float)cr;
-                components[0].Samples[i] = RoundSample(yf + (1.402f * crf));
-                components[1].Samples[i] = RoundSample(yf - (0.34413f * cbf) - (0.71414f * crf));
-                components[2].Samples[i] = RoundSample(yf + (1.772f * cbf));
+                var yf = floatY != null ? floatY[i] : y;
+                var cbf = floatCb != null ? floatCb[i] : cb;
+                var crf = floatCr != null ? floatCr[i] : cr;
+                var r = yf + (1.402 * crf);
+                var g = yf - (0.344136286201022 * cbf) - (0.714136286201022 * crf);
+                var b = yf + (1.772 * cbf);
+                components[0].Samples[i] = RoundSample(r);
+                components[1].Samples[i] = RoundSample(g);
+                components[2].Samples[i] = RoundSample(b);
+                if (floatY != null && floatCb != null && floatCr != null)
+                {
+                    floatY[i] = r;
+                    floatCb[i] = g;
+                    floatCr[i] = b;
+                }
             }
         }
 
@@ -391,7 +520,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             {
                 for (var component = 0; component < components.Length; component++)
                 {
-                    var value = components[component].Samples[pixel];
+                    var floatSamples = components[component].FloatSamples;
+                    var value = floatSamples != null
+                        ? RoundSample(floatSamples[pixel])
+                        : components[component].Samples[pixel];
                     if (components[component].IsSigned)
                     {
                         var min = -(1 << (components[component].Precision - 1));
