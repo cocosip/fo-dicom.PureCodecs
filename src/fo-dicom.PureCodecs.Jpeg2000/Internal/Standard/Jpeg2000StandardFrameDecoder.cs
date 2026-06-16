@@ -29,7 +29,14 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
             if (cod.UsesMultipleComponentTransform && components.Length == 3)
             {
-                ApplyInverseRct(components);
+                if (cod.Transformation == 0)
+                {
+                    ApplyInverseIct(components);
+                }
+                else
+                {
+                    ApplyInverseRct(components);
+                }
             }
 
             foreach (var component in components)
@@ -51,7 +58,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
                 var bitPlaneCount = EstimateBitPlaneCount(component, cod, qcd, block);
                 var decoder = new Jpeg2000StandardTier1Decoder(block.Width, block.Height, block.Orientation, cod.CodeBlockStyle);
-                var coefficients = decoder.Decode(block.Data, block.TotalPasses, bitPlaneCount);
+                var coefficients = cod.Transformation == 0
+                    ? decoder.DecodeScaled(block.Data, block.TotalPasses, bitPlaneCount)
+                    : decoder.Decode(block.Data, block.TotalPasses, bitPlaneCount);
                 for (var y = 0; y < block.Height; y++)
                 {
                     for (var x = 0; x < block.Width; x++)
@@ -100,7 +109,15 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     for (var x = block.X0; x < block.X0 + block.Width; x++)
                     {
                         var offset = (y * component.Width) + x;
-                        samples[offset] = component.Coefficients[offset] * step;
+                        var coefficient = component.Coefficients[offset];
+                        if (qcd.Style != Jpeg2000QuantizationStyle.None)
+                        {
+                            samples[offset] = coefficient * step / 64.0;
+                        }
+                        else
+                        {
+                            samples[offset] = coefficient * step;
+                        }
                     }
                 }
             }
@@ -257,6 +274,28 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 components[1].Samples[i] = g;
                 components[2].Samples[i] = b;
             }
+        }
+
+        private static void ApplyInverseIct(Jpeg2000StandardComponent[] components)
+        {
+            var count = components[0].Samples.Length;
+            for (var i = 0; i < count; i++)
+            {
+                var y = components[0].Samples[i];
+                var cb = components[1].Samples[i];
+                var cr = components[2].Samples[i];
+                var yf = (float)y;
+                var cbf = (float)cb;
+                var crf = (float)cr;
+                components[0].Samples[i] = RoundSample(yf + (1.402f * crf));
+                components[1].Samples[i] = RoundSample(yf - (0.34413f * cbf) - (0.71414f * crf));
+                components[2].Samples[i] = RoundSample(yf + (1.772f * cbf));
+            }
+        }
+
+        private static int RoundSample(double value)
+        {
+            return value >= 0 ? (int)(value + 0.5) : (int)(value - 0.5);
         }
 
         private static byte[] Pack(DicomPixelData targetPixelData, Jpeg2000StandardComponent[] components)

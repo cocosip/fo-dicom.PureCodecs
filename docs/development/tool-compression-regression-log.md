@@ -125,6 +125,74 @@ Regression coverage:
 - `ToolsCompressionPlanTests.CompressAll_jpegls_outputs_from_local_real_fixture_match_reference_frame_size_and_round_trip`
 - `ToolsCompressionPlanTests.CompressAll_outputs_from_local_real_fixture_decode_and_render`
 
+### JPEG 2000 Lossless and Lossy
+
+Reference generated with `fo-dicom.Codecs` 5.16.5.1/OpenJPEG from `D:\1.dcm`:
+
+- Reference JPEG 2000 Lossless file size: 177,234 bytes.
+- Reference JPEG 2000 Lossless compressed frame size: 173,228 bytes.
+- Reference JPEG 2000 Lossy file size: 44,824 bytes.
+- Reference JPEG 2000 Lossy compressed frame size: 40,774 bytes.
+- Reference JPEG 2000 Lossy QCD payload:
+  `42 B7 20 B6 F0 B6 F0 B6 C0 AF 00 AF 00 AE E0 A7 50 A7 50 A7 68 90 05 90 05 90 47 97 D3 97 D3 97 62`.
+
+This lossy baseline is the `fo-dicom.Codecs` default parameter path:
+`DicomJpeg2000Params.Rate = 20` with default `RateLevels`. Do not use
+`D:\1_transcoded\1_j2k_lossy.dcm` as the OpenJPEG baseline: its COM marker is
+`go-dicom-codec JPEG2000 encoder v1.0`, its COD/QCD payloads differ from
+OpenJPEG, and its compressed frame is 50,022 bytes. A native OpenJPEG
+approximately 54 KB frame is possible only with a non-default parameter such as
+`Rate = 15`; the same native runner produced a 54,182-byte frame for
+`Rate = 15`, and the managed encoder produced the same 54,182-byte frame for
+that explicit rate.
+
+Classic JPEG 2000 compatibility must use that OpenJPEG output as the baseline.
+The lossy path may use decoded-pixel tolerance, but frame-size drift is a sign
+that packet truncation, quality-layer distribution, marker payload, or
+rate-control behavior is still not aligned. In particular, `COD.Layers > 1`
+does not by itself mean multi-layer support is correct: early quality layers
+must contain real packet contributions instead of all contribution being
+deferred to the final layer.
+
+The final 1-byte mismatch after viewer compatibility was not standards-allowed
+drift. OpenJPEG 2.5.4 writes Tier-2 packets through the normal packet-present
+and tag-tree header path unless `ENABLE_EMPTY_PACKET_OPTIMIZATION` is compiled
+in; it does not use the optional single-byte `00` empty-packet shortcut for
+those quality-layer packets. After aligning that packet header behavior, the
+logical codestream length and SOT `Psot` matched OpenJPEG but the DICOM file was
+one byte short because the EOC-terminated codestream had an odd length. The
+encoder now adds the required encapsulated-item `00` padding byte after EOC.
+
+Verified current output from
+`artifacts\tool-regression-current-20260616-openjpeg-aligned`:
+
+- JPEG 2000 Lossless file size: 177,234 bytes.
+- JPEG 2000 Lossless logical codestream length: 173,227 bytes.
+- JPEG 2000 Lossless SHA-256:
+  `E07E0A745C50C5243A3F68A013F3FA82BDEFECCB6DD26589BA63EB0EEACE65F3`.
+- JPEG 2000 Lossy file size: 44,824 bytes.
+- JPEG 2000 Lossy logical codestream length: 40,773 bytes.
+- JPEG 2000 Lossy SHA-256:
+  `1E62426443B734D9C6A6205F98EFEA3B4F4C795DDE2173787B5BB60D885047FA`.
+- Both SHA-256 values match the `fo-dicom.Codecs`/OpenJPEG baseline files
+  byte-for-byte.
+
+Native `fo-dicom.Codecs` 5.16.5.1/OpenJPEG behavior for the Efferent
+`test16bits.dcm` default JPEG 2000 Lossy unit fixture was also measured:
+OpenJPEG generated a 26,154-byte frame and decoded with maximum signed-sample
+difference 2,411. The managed path generated the same frame size and the same
+maximum difference, so the unit lossy tolerance is 2,411 for that fixture. Do
+not lower or raise this value without re-running the native baseline runner.
+
+Native RGB unit behavior for Efferent `test8bits.dcm` was measured separately:
+OpenJPEG generated a 39,326-byte default JPEG 2000 Lossy frame and decoded with
+maximum 8-bit sample difference 6. The managed RGB lossy path uses tolerance 6
+for that fixture. After aligning Tier-1 `nmsedec` with OpenJPEG
+`t1_generate_luts.c`, including the `bitPlane == 0` significance and refinement
+cases, the managed RGB lossy path also writes a 39,326-byte frame with matching
+COD/QCD/SOT and packet-layer distribution. Keep the packet/layer regression
+test; decoded tolerance alone is not proof of future RGB binary alignment.
+
 ### HTJ2K Note
 
 While collecting the format matrix, HTJ2K outputs from the same input failed

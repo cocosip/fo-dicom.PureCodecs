@@ -56,7 +56,7 @@ public sealed class Jpeg2000ExternalAcceptanceTests
 
     [Theory]
     [InlineData("Efferent unit 16-bit sample", true, null)]
-    [InlineData("Efferent unit 16-bit sample", false, 2048)]
+    [InlineData("Efferent unit 16-bit sample", false, 2411)]
     public void Efferent_jpeg2000_inverse_transcode_monochrome_unit_samples_round_trip(string fixtureName, bool lossless, int? tolerance)
     {
         var catalog = ExternalFixtureCatalog.Resolve();
@@ -84,7 +84,7 @@ public sealed class Jpeg2000ExternalAcceptanceTests
     [Theory]
     [InlineData("Efferent unit 8-bit sample", true)]
     [InlineData("Efferent unit 8-bit sample", false)]
-    public void Efferent_jpeg2000_inverse_transcode_rgb_unit_samples_reject_until_component_encoding_is_implemented(
+    public void Efferent_jpeg2000_inverse_transcode_rgb_unit_samples_round_trip(
         string fixtureName,
         bool lossless)
     {
@@ -94,28 +94,37 @@ public sealed class Jpeg2000ExternalAcceptanceTests
         var source = DicomPixelData.Create(file.Dataset);
         var syntax = lossless ? DicomTransferSyntax.JPEG2000Lossless : DicomTransferSyntax.JPEG2000Lossy;
         var compressed = DicomPixelData.Create(CloneForTransferSyntax(file.Dataset, syntax), true);
+        var decoded = DicomPixelData.Create(CloneForTransferSyntax(file.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
         IDicomCodec codec = lossless ? new DicomJpeg2000LosslessCodec() : new DicomJpeg2000LossyCodec();
 
-        var exception = Assert.Throws<DicomCodecException>(
-            () => codec.Encode(source, compressed, codec.GetDefaultParameters()));
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
 
-        Assert.Contains("monochrome", exception.Message, StringComparison.OrdinalIgnoreCase);
+        if (lossless)
+        {
+            PixelDataAssertions.FramesMatchExactly(source, decoded);
+        }
+        else
+        {
+            PixelDataAssertions.FramesMatchWithinTolerance(source, decoded, tolerance: 6);
+        }
     }
 
     [Fact]
-    public void Efferent_jpeg2000_inverse_transcode_rgb_acceptance_sample_rejects_until_component_encoding_is_implemented()
+    public void Efferent_jpeg2000_inverse_transcode_rgb_acceptance_sample_round_trips_losslessly()
     {
         var catalog = ExternalFixtureCatalog.Resolve();
         var fixture = catalog.AcceptanceFixtures.Single(item => item.Name == "RGB raw acceptance sample");
         var file = DicomFile.Open(fixture.Path);
         var source = DicomPixelData.Create(file.Dataset);
         var compressed = DicomPixelData.Create(CloneForTransferSyntax(file.Dataset, DicomTransferSyntax.JPEG2000Lossless), true);
+        var decoded = DicomPixelData.Create(CloneForTransferSyntax(file.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
         var codec = new DicomJpeg2000LosslessCodec();
 
-        var exception = Assert.Throws<DicomCodecException>(
-            () => codec.Encode(source, compressed, codec.GetDefaultParameters()));
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
 
-        Assert.Contains("monochrome", exception.Message, StringComparison.OrdinalIgnoreCase);
+        PixelDataAssertions.FramesMatchExactly(source, decoded);
     }
 
     [Fact]

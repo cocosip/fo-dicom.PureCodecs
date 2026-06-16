@@ -176,14 +176,14 @@ public sealed class Jpeg2000DicomIntegrationTests
     }
 
     [Fact]
-    public void Jpeg2000_standard_encoder_rejects_rgb_round_trips_until_component_encoding_is_implemented()
+    public void Jpeg2000_standard_encoder_round_trips_rgb_interleaved_and_planar_losslessly()
     {
-        AssertRgbEncodeUnsupported(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 2, columns: 2));
-        AssertRgbEncodeUnsupported(DicomPixelDataFixtures.CreateRgbPlanar(rows: 2, columns: 2));
+        AssertRgbLosslessRoundTrip(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 2, columns: 2));
+        AssertRgbLosslessRoundTrip(DicomPixelDataFixtures.CreateRgbPlanar(rows: 2, columns: 2));
     }
 
     [Fact]
-    public void Jpeg2000_allow_mct_rgb_encode_is_rejected_until_component_encoding_is_implemented()
+    public void Jpeg2000_allow_mct_rgb_encode_writes_mct_and_updates_photometric()
     {
         var dataset = DicomPixelDataFixtures.CreateRgbInterleaved(rows: 2, columns: 2);
         var source = DicomPixelData.Create(dataset);
@@ -191,18 +191,19 @@ public sealed class Jpeg2000DicomIntegrationTests
         var compressed = DicomPixelData.Create(compressedDataset, true);
         var codec = new DicomJpeg2000LossyCodec();
 
-        var exception = Assert.Throws<DicomCodecException>(() => codec.Encode(source, compressed, new PureJpeg2000Params
+        codec.Encode(source, compressed, new PureJpeg2000Params
         {
             Irreversible = true,
             AllowMCT = true,
             UpdatePhotometricInterpretation = true
-        }));
+        });
 
-        Assert.Contains("monochrome", exception.Message, System.StringComparison.OrdinalIgnoreCase);
+        Assert.True(ReadUsesMultipleComponentTransform(compressed.GetFrame(0).Data));
+        Assert.Equal(PhotometricInterpretation.YbrIct, compressed.PhotometricInterpretation);
     }
 
     [Fact]
-    public void Jpeg2000_allow_mct_false_rgb_encode_is_rejected_until_component_encoding_is_implemented()
+    public void Jpeg2000_allow_mct_false_rgb_encode_keeps_rgb_without_mct()
     {
         var dataset = DicomPixelDataFixtures.CreateRgbInterleaved(rows: 2, columns: 2);
         var source = DicomPixelData.Create(dataset);
@@ -210,10 +211,10 @@ public sealed class Jpeg2000DicomIntegrationTests
         var compressed = DicomPixelData.Create(compressedDataset, true);
         var codec = new DicomJpeg2000LosslessCodec();
 
-        var exception = Assert.Throws<DicomCodecException>(
-            () => codec.Encode(source, compressed, new PureJpeg2000Params { Irreversible = false, AllowMCT = false }));
+        codec.Encode(source, compressed, new PureJpeg2000Params { Irreversible = false, AllowMCT = false });
 
-        Assert.Contains("monochrome", exception.Message, System.StringComparison.OrdinalIgnoreCase);
+        Assert.False(ReadUsesMultipleComponentTransform(compressed.GetFrame(0).Data));
+        Assert.Equal(PhotometricInterpretation.Rgb, compressed.PhotometricInterpretation);
     }
 
     [Fact]
@@ -464,16 +465,17 @@ public sealed class Jpeg2000DicomIntegrationTests
         PixelDataAssertions.AssertRequiredCompressionTags(compressedDataset, syntax);
     }
 
-    private static void AssertRgbEncodeUnsupported(DicomDataset dataset)
+    private static void AssertRgbLosslessRoundTrip(DicomDataset dataset)
     {
         var source = DicomPixelData.Create(dataset);
         var compressed = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.JPEG2000Lossless), true);
+        var decoded = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
         var codec = new DicomJpeg2000LosslessCodec();
 
-        var exception = Assert.Throws<DicomCodecException>(
-            () => codec.Encode(source, compressed, codec.GetDefaultParameters()));
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
 
-        Assert.Contains("monochrome", exception.Message, System.StringComparison.OrdinalIgnoreCase);
+        PixelDataAssertions.FramesMatchExactly(source, decoded);
     }
 
     private static int MaxByteDifference(byte[] expected, byte[] actual)

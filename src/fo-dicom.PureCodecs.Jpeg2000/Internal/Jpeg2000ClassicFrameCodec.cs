@@ -18,7 +18,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             int layerCount,
             bool usesMultipleComponentTransform,
             bool encodeSignedPixelValuesAsUnsigned,
-            double rate = 20)
+            double rate = 20,
+            double[]? layerRates = null)
         {
             ValidatePixelData(pixelData, frame);
 
@@ -30,7 +31,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 layerCount,
                 usesMultipleComponentTransform,
                 encodeSignedPixelValuesAsUnsigned,
-                rate);
+                rate,
+                layerRates);
         }
 
         public byte[] DecodeFrame(DicomPixelData targetPixelData, byte[] codestream)

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
@@ -32,19 +33,38 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         private readonly uint[] _flags;
         private readonly int _orientation;
         private readonly byte _codeBlockStyle;
+        private readonly int _level;
+        private readonly int _qmfbid;
+        private readonly double _stepSize;
+        private readonly double _mctNorm;
         private readonly byte[] _zeroCodingContexts = BuildZeroCodingContexts();
         private readonly byte[] _signCodingContexts = BuildSignCodingContexts();
         private readonly byte[] _signPredictions = BuildSignPredictions();
         private Jpeg2000StandardMqEncoder? _mq;
         private int _bitPlane;
+        private int _normalizedMseDecrease;
 
         public Jpeg2000StandardTier1Encoder(int width, int height, int orientation, byte codeBlockStyle)
+            : this(width, height, orientation, codeBlockStyle, level: 0, qmfbid: 1, stepSize: 1.0, mctNorm: 1.0)
+        {
+        }
+
+        public Jpeg2000StandardTier1Encoder(int width, int height, int orientation, byte codeBlockStyle, int level, int qmfbid, double stepSize)
+            : this(width, height, orientation, codeBlockStyle, level, qmfbid, stepSize, mctNorm: 1.0)
+        {
+        }
+
+        public Jpeg2000StandardTier1Encoder(int width, int height, int orientation, byte codeBlockStyle, int level, int qmfbid, double stepSize, double mctNorm)
         {
             _width = width;
             _height = height;
             _stride = width + 2;
             _orientation = orientation;
             _codeBlockStyle = codeBlockStyle;
+            _level = level;
+            _qmfbid = qmfbid;
+            _stepSize = stepSize <= 0 ? 1.0 : stepSize;
+            _mctNorm = mctNorm <= 0 ? 1.0 : mctNorm;
             _data = new int[(width + 2) * (height + 2)];
             _flags = new uint[(width + 2) * (height + 2)];
         }
@@ -61,8 +81,14 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         public byte[] Encode(int[] data, int passCount, out int[] passLengths, out byte[][] passSnapshots)
         {
+            return Encode(data, passCount, out passLengths, out passSnapshots, out _);
+        }
+
+        public byte[] Encode(int[] data, int passCount, out int[] passLengths, out byte[][] passSnapshots, out double[] passDistortions)
+        {
             var lengths = new List<int>();
             var snapshots = new List<byte[]>();
+            var distortions = new List<double>();
             for (var y = 0; y < _height; y++)
             {
                 for (var x = 0; x < _width; x++)
@@ -76,6 +102,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             {
                 passLengths = ArrayEmptyInt();
                 passSnapshots = new byte[0][];
+                passDistortions = ArrayEmptyDouble();
                 return ArrayEmpty();
             }
 
@@ -93,6 +120,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     ClearVisited();
                 }
 
+                _normalizedMseDecrease = 0;
                 switch (passType)
                 {
                     case 0:
@@ -115,9 +143,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 }
 
                 pass++;
-                var snapshot = Mq.FlushEstimate();
-                lengths.Add(snapshot.Length);
-                snapshots.Add(snapshot);
+                lengths.Add(Mq.CurrentLength + 3);
+                snapshots.Add(Array.Empty<byte>());
+                var jpeg2000BitPlane = Math.Max(0, _bitPlane - 6);
+                distortions.Add((distortions.Count == 0 ? 0.0 : distortions[distortions.Count - 1]) + GetWeightedMseDecrease(_normalizedMseDecrease, jpeg2000BitPlane));
                 if (passType == 2)
                 {
                     passType = 0;
@@ -138,8 +167,26 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 }
             }
 
+            for (var i = lengths.Count - 1; i >= 0; i--)
+            {
+                var previous = i + 1 < lengths.Count ? lengths[i + 1] : result.Length;
+                if (lengths[i] > previous)
+                {
+                    lengths[i] = previous;
+                }
+            }
+
+            for (var i = 0; i < lengths.Count; i++)
+            {
+                if (lengths[i] > 0 && result[lengths[i] - 1] == 0xFF)
+                {
+                    lengths[i]--;
+                }
+            }
+
             passLengths = lengths.ToArray();
             passSnapshots = snapshots.ToArray();
+            passDistortions = distortions.ToArray();
             return result;
         }
 
@@ -164,6 +211,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                         _flags[index] |= Visited;
                         if (significant)
                         {
+                            _normalizedMseDecrease += GetNormalizedMseDecreaseForSignificance(index);
                             SetSignificant(x, y, index);
                         }
                     }
@@ -187,6 +235,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                             continue;
                         }
 
+                        _normalizedMseDecrease += GetNormalizedMseDecreaseForRefinement(index);
                         Mq.Encode(MagnitudeBit(index), GetMagnitudeContext(flags));
                         _flags[index] |= Refined;
                     }
@@ -258,6 +307,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
                         if (significant)
                         {
+                            _normalizedMseDecrease += GetNormalizedMseDecreaseForSignificance(index);
                             SetSignificant(x, y, index);
                         }
 
@@ -302,6 +352,103 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             }
 
             return (value >> _bitPlane) & 1;
+        }
+
+        private int GetNormalizedMseDecreaseForSignificance(int index)
+        {
+            var value = Abs(_data[index]);
+            return GetNormalizedMseDecreaseSignificance(value, Math.Max(0, _bitPlane - 6));
+        }
+
+        private int GetNormalizedMseDecreaseForRefinement(int index)
+        {
+            var value = Abs(_data[index]);
+            return GetNormalizedMseDecreaseRefinement(value, Math.Max(0, _bitPlane - 6));
+        }
+
+        private static int GetNormalizedMseDecreaseSignificance(int value, int bitPlane)
+        {
+            var lookup = bitPlane > 0 ? (value >> bitPlane) & 0x7F : value & 0x7F;
+            var t = lookup / 64.0;
+            var u = t;
+            if (bitPlane == 0)
+            {
+                return QuantizeNormalizedMseDecrease(u, 0.0);
+            }
+
+            var v = t - 1.5;
+            return QuantizeNormalizedMseDecrease(u, v);
+        }
+
+        private static int GetNormalizedMseDecreaseRefinement(int value, int bitPlane)
+        {
+            var lookup = bitPlane > 0 ? (value >> bitPlane) & 0x7F : value & 0x7F;
+            var t = lookup / 64.0;
+            if (bitPlane == 0)
+            {
+                return QuantizeNormalizedMseDecrease(t - 1.0, 0.0);
+            }
+
+            var u = t - 1.0;
+            var v = (lookup & 0x40) != 0 ? t - 1.5 : t - 0.5;
+            return QuantizeNormalizedMseDecrease(u, v);
+        }
+
+        private static int QuantizeNormalizedMseDecrease(double u, double v)
+        {
+            var quantized = Math.Floor(((u * u) - (v * v)) * 64.0 + 0.5) / 64.0;
+            var value = (int)(quantized * 8192.0);
+            return value > 0 ? value : 0;
+        }
+
+        private double GetWeightedMseDecrease(int normalizedMseDecrease, int bitPlane)
+        {
+            if (normalizedMseDecrease <= 0)
+            {
+                return 0.0;
+            }
+
+            var waveletNorm = _qmfbid == 1
+                ? DwtNorm53(_level, _orientation)
+                : DwtNorm97(_level, _orientation);
+            var stepSize = _stepSize;
+            if (_qmfbid == 0)
+            {
+                stepSize /= 1 << GainBits(_orientation);
+            }
+
+            var scaled = _mctNorm * waveletNorm * stepSize * (1 << bitPlane);
+            return scaled * scaled * normalizedMseDecrease / 8192.0;
+        }
+
+        private static double DwtNorm53(int level, int orientation)
+        {
+            var values = orientation == 0
+                ? new[] { 1.000, 1.500, 2.750, 5.375, 10.68, 21.34, 42.67, 85.33, 170.7, 341.3 }
+                : orientation == 3
+                    ? new[] { .7186, .9218, 1.586, 3.043, 6.019, 12.01, 24.00, 47.97, 95.93 }
+                    : new[] { 1.038, 1.592, 2.919, 5.703, 11.33, 22.64, 45.25, 90.48, 180.9 };
+            return values[Math.Min(Math.Max(level, 0), values.Length - 1)];
+        }
+
+        private static double DwtNorm97(int level, int orientation)
+        {
+            var values = orientation == 0
+                ? new[] { 1.000, 1.965, 4.177, 8.403, 16.90, 33.84, 67.69, 135.3, 270.6, 540.9 }
+                : orientation == 3
+                    ? new[] { 2.080, 3.865, 8.307, 17.18, 34.71, 69.59, 139.3, 278.6, 557.2 }
+                    : new[] { 2.022, 3.989, 8.355, 17.04, 34.27, 68.63, 137.3, 274.6, 549.0 };
+            return values[Math.Min(Math.Max(level, 0), values.Length - 1)];
+        }
+
+        private static int GainBits(int orientation)
+        {
+            return orientation == 3 ? 2 : orientation == 0 ? 0 : 1;
+        }
+
+        private static int Abs(int value)
+        {
+            return value < 0 ? -value : value;
         }
 
         private int FindMaxBitPlane()
@@ -600,6 +747,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         {
             return new int[0];
         }
+
+        private static double[] ArrayEmptyDouble()
+        {
+            return new double[0];
+        }
     }
 
     internal sealed class Jpeg2000StandardMqEncoder
@@ -734,6 +886,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         public int LengthWithFlushEstimate()
         {
             return FlushEstimate().Length;
+        }
+
+        public int CurrentLength
+        {
+            get { return Math.Max(0, _bp - 1); }
         }
 
         public byte[] FlushEstimate()

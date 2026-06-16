@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
@@ -35,7 +36,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var jpeg2000Parameters = DicomJpeg2000Params.From(parameters ?? GetDefaultParameters());
             var irreversible = jpeg2000Parameters.Irreversible;
             var tolerance = ResolveTolerance(jpeg2000Parameters);
-            var layerCount = ResolveLayerCount(jpeg2000Parameters);
+            var layerRates = ResolveLayerRates(jpeg2000Parameters, oldPixelData.BitsStored, oldPixelData.BitsAllocated);
+            var layerCount = layerRates.Length;
             var usesMct = oldPixelData.SamplesPerPixel == 3 && jpeg2000Parameters.AllowMCT;
 
             ValidateSupportedPixelData(oldPixelData);
@@ -54,7 +56,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                         layerCount,
                         usesMct,
                         jpeg2000Parameters.EncodeSignedPixelValuesAsUnsigned,
-                        jpeg2000Parameters.Rate);
+                        jpeg2000Parameters.Rate,
+                        layerRates);
                     newPixelData.AddFrame(new MemoryByteBuffer(encoded));
                 }
                 catch (Exception exception)
@@ -101,9 +104,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return 1;
         }
 
-        private int ResolveLayerCount(DicomJpeg2000Params parameters)
+        private double[] ResolveLayerRates(DicomJpeg2000Params parameters, int bitsStored, int bitsAllocated)
         {
-            var layerCount = 0;
+            var layerRates = new List<double>();
             var rateLevels = parameters.RateLevels ?? new int[0];
             foreach (var rateLevel in rateLevels)
             {
@@ -112,20 +115,26 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                     break;
                 }
 
-                layerCount++;
+                layerRates.Add(rateLevel);
             }
 
             if (parameters.Rate > 0)
             {
-                layerCount++;
+                var adjustedRate = parameters.Rate * bitsStored / bitsAllocated;
+                layerRates.Add(adjustedRate);
             }
 
             if (TransferSyntax == DicomTransferSyntax.JPEG2000Lossless && parameters.Rate > 0)
             {
-                layerCount++;
+                layerRates.Add(0);
             }
 
-            return Math.Max(1, layerCount);
+            if (layerRates.Count == 0)
+            {
+                layerRates.Add(0);
+            }
+
+            return layerRates.ToArray();
         }
 
         private static void ValidateSupportedPixelData(DicomPixelData pixelData)

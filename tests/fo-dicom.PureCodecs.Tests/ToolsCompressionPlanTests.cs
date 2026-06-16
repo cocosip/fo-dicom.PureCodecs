@@ -323,16 +323,14 @@ public sealed class ToolsCompressionPlanTests
     }
 
     [Theory]
-    [InlineData("JPEG 2000 Lossless", @"D:\1_transcoded\1_j2k_lossless.dcm", 0, 64)]
-    [InlineData("JPEG 2000 Lossy", @"artifacts\fo-dicom-codecs-baseline\fo_dicom_codecs_j2k_lossy.dcm", 16, 64)]
-    public void CompressAll_jpeg2000_classic_outputs_from_local_real_fixture_use_standard_codestream_and_match_reference_size(
+    [InlineData("JPEG 2000 Lossless", @"artifacts\fo-dicom-codecs-baseline\fo_dicom_codecs_j2k_lossless.dcm", 0)]
+    public void CompressAll_jpeg2000_classic_lossless_output_from_local_real_fixture_uses_standard_codestream_and_matches_reference_size(
         string formatName,
         string referencePath,
-        int tolerance,
-        int allowedFrameSizeDifference)
+        int tolerance)
     {
         const string inputPath = @"D:\1.dcm";
-        referencePath = Path.GetFullPath(referencePath);
+        referencePath = ResolveRepositoryRelativePath(referencePath);
         if (!File.Exists(inputPath) || !File.Exists(referencePath))
         {
             return;
@@ -358,8 +356,18 @@ public sealed class ToolsCompressionPlanTests
         var decodedPixelData = DicomPixelData.Create(decoded);
 
         Assert.Equal(referencePixelData.Syntax, compressedPixelData.Syntax);
-        var referenceFrameSize = referencePixelData.GetFrame(0).Size;
-        Assert.InRange(Math.Abs(referenceFrameSize - frame.Length), 0, allowedFrameSizeDifference);
+        var referenceFrame = referencePixelData.GetFrame(0).Data;
+        var referenceFrameSize = referenceFrame.Length;
+        var referenceFileSize = new FileInfo(referencePath).Length;
+        var actualFileSize = new FileInfo(result.Item.OutputPath).Length;
+        Assert.True(
+            referenceFrameSize == frame.Length,
+            $"Expected JPEG 2000 frame size {referenceFrameSize} but got {frame.Length}.");
+        Assert.Equal(GetLogicalCodestreamLength(referenceFrame), GetLogicalCodestreamLength(frame));
+        Assert.Equal(ReadSotTilePartLength(referenceFrame), ReadSotTilePartLength(frame));
+        Assert.True(
+            referenceFileSize == actualFileSize,
+            $"Expected DICOM file size {referenceFileSize} but got {actualFileSize}.");
         Assert.DoesNotContain(new byte[] { (byte)'P', (byte)'C', (byte)'J', (byte)'2' }, frame);
         if (tolerance == 0)
         {
@@ -369,6 +377,44 @@ public sealed class ToolsCompressionPlanTests
         {
             PixelDataAssertions.FramesMatchWithinTolerance(sourcePixelData, decodedPixelData, tolerance);
         }
+    }
+
+    [Fact]
+    public void CompressAll_jpeg2000_lossy_output_from_local_real_fixture_targets_reference_size_and_round_trips()
+    {
+        const string inputPath = @"D:\1.dcm";
+        const string referencePath = @"D:\1_transcoded\1_j2k_lossy.dcm";
+        if (!File.Exists(inputPath) || !File.Exists(referencePath))
+        {
+            return;
+        }
+
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-j2k-lossy-size");
+        if (Directory.Exists(outputDirectory))
+        {
+            Directory.Delete(outputDirectory, recursive: true);
+        }
+
+        var sourcePixelData = DicomPixelData.Create(DicomFile.Open(inputPath, FileReadOption.ReadAll).Dataset);
+        var result = new DicomCompressionTool().CompressAll(inputPath, outputDirectory)
+            .Single(item => item.Item.Format.TransferSyntax == DicomTransferSyntax.JPEG2000Lossy);
+
+        Assert.Equal(CompressionResultStatus.Success, result.Status);
+        var referencePixelData = DicomPixelData.Create(DicomFile.Open(referencePath, FileReadOption.ReadAll).Dataset);
+        var compressedFile = DicomFile.Open(result.Item.OutputPath, FileReadOption.ReadAll);
+        var compressedPixelData = DicomPixelData.Create(compressedFile.Dataset);
+        var decoded = new DicomTranscoder(compressedPixelData.Syntax, DicomTransferSyntax.ExplicitVRLittleEndian)
+            .Transcode(compressedFile.Dataset);
+        var decodedPixelData = DicomPixelData.Create(decoded);
+        var referenceFrameSize = referencePixelData.GetFrame(0).Size;
+        var actualFrameSize = compressedPixelData.GetFrame(0).Size;
+        var referenceFileSize = new FileInfo(referencePath).Length;
+        var actualFileSize = new FileInfo(result.Item.OutputPath).Length;
+
+        Assert.Equal(referencePixelData.Syntax, compressedPixelData.Syntax);
+        Assert.InRange(Math.Abs(referenceFrameSize - actualFrameSize), 0, 1024);
+        Assert.InRange(Math.Abs(referenceFileSize - actualFileSize), 0, 1024);
+        PixelDataAssertions.FramesMatchWithinTolerance(sourcePixelData, decodedPixelData, tolerance: 16);
     }
 
     private static void AssertSequentialJpegSkipped(CompressionPlan plan, string reason)
@@ -384,5 +430,56 @@ public sealed class ToolsCompressionPlanTests
     private static int ReadRleSegmentCount(byte[] frame)
     {
         return frame[0] | (frame[1] << 8) | (frame[2] << 16) | (frame[3] << 24);
+    }
+
+    private static int GetLogicalCodestreamLength(byte[] frame)
+    {
+        for (var index = frame.Length - 2; index >= 0; index--)
+        {
+            if (frame[index] == 0xFF && frame[index + 1] == 0xD9)
+            {
+                return index + 2;
+            }
+        }
+
+        throw new InvalidOperationException("JPEG 2000 EOC marker was not found.");
+    }
+
+    private static uint ReadSotTilePartLength(byte[] frame)
+    {
+        for (var index = 0; index + 9 < frame.Length; index++)
+        {
+            if (frame[index] == 0xFF && frame[index + 1] == 0x90)
+            {
+                return ((uint)frame[index + 6] << 24)
+                    | ((uint)frame[index + 7] << 16)
+                    | ((uint)frame[index + 8] << 8)
+                    | frame[index + 9];
+            }
+        }
+
+        throw new InvalidOperationException("JPEG 2000 SOT marker was not found.");
+    }
+
+    private static string ResolveRepositoryRelativePath(string path)
+    {
+        if (Path.IsPathRooted(path))
+        {
+            return path;
+        }
+
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, path);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        return Path.GetFullPath(path);
     }
 }

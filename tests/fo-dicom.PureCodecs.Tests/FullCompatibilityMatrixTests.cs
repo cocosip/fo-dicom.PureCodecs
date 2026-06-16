@@ -22,8 +22,8 @@ public sealed class FullCompatibilityMatrixTests
         { "JPEG-LS lossless acceptance sample", DicomTransferSyntax.JPEGLSLossless, new DicomJpegLsLosslessCodec(), null },
         { "JPEG-LS near-lossless acceptance sample", DicomTransferSyntax.JPEGLSNearLossless, new DicomJpegLsNearLosslessCodec(), 2 },
         { "JPEG 2000 lossless acceptance sample", DicomTransferSyntax.JPEG2000Lossless, new DicomJpeg2000LosslessCodec(), null },
-        { "JPEG 2000 lossy acceptance sample", DicomTransferSyntax.JPEG2000Lossy, new DicomJpeg2000LossyCodec(), 2 },
-        { "JPEG 2000 lossy quality-50 acceptance sample", DicomTransferSyntax.JPEG2000Lossy, new DicomJpeg2000LossyCodec(), 2 },
+        { "JPEG 2000 lossy acceptance sample", DicomTransferSyntax.JPEG2000Lossy, new DicomJpeg2000LossyCodec(), 19 },
+        { "JPEG 2000 lossy quality-50 acceptance sample", DicomTransferSyntax.JPEG2000Lossy, new DicomJpeg2000LossyCodec(), 15 },
     };
 
     public static TheoryData<string, DicomTransferSyntax, int?> EfferentUnitJpeg2000Cases => new()

@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 {
     internal sealed class Jpeg2000StandardTier1Decoder
@@ -59,6 +61,84 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         public int[] DecodeScaled(byte[] bytes, int passCount, int bitPlaneCount)
         {
             return DecodeInternal(bytes, passCount, bitPlaneCount, preserveFractionalBits: true);
+        }
+
+        public int[] DecodeSegments(IReadOnlyList<Jpeg2000StandardCodeBlockSegment> segments, int bitPlaneCount)
+        {
+            return DecodeSegmentsInternal(segments, bitPlaneCount, preserveFractionalBits: false);
+        }
+
+        public int[] DecodeSegmentsScaled(IReadOnlyList<Jpeg2000StandardCodeBlockSegment> segments, int bitPlaneCount)
+        {
+            return DecodeSegmentsInternal(segments, bitPlaneCount, preserveFractionalBits: true);
+        }
+
+        private int[] DecodeSegmentsInternal(IReadOnlyList<Jpeg2000StandardCodeBlockSegment> segments, int bitPlaneCount, bool preserveFractionalBits)
+        {
+            if (segments == null || segments.Count == 0 || bitPlaneCount <= 0)
+            {
+                return new int[_width * _height];
+            }
+
+            var pass = 0;
+            var passType = 2;
+            var maxBitPlane = bitPlaneCount + Tier1FractionalBits - 1;
+            _bitPlane = maxBitPlane;
+            foreach (var segment in segments)
+            {
+                if (segment.PassCount <= 0)
+                {
+                    continue;
+                }
+
+                _mq = new Jpeg2000StandardMqDecoder(segment.Data, 19);
+                _mq.SetContextState(ContextUniform, 46);
+                _mq.SetContextState(ContextRunLength, 3);
+                _mq.SetContextState(ContextZeroCodingStart, 4);
+                _raw = new Jpeg2000RawBitReader(segment.Data);
+                for (var segmentPass = 0; segmentPass < segment.PassCount && _bitPlane >= 0; segmentPass++)
+                {
+                    if (passType == 0 || (passType == 2 && pass == 0))
+                    {
+                        ClearVisited();
+                    }
+
+                    var raw = IsLazyPass(_bitPlane, maxBitPlane, passType);
+                    switch (passType)
+                    {
+                        case 0:
+                            DecodeSignificancePropagation(raw);
+                            break;
+                        case 1:
+                            DecodeMagnitudeRefinement(raw);
+                            break;
+                        default:
+                            DecodeCleanup();
+                            if ((_codeBlockStyle & 0x20) != 0)
+                            {
+                                Mq.Decode(ContextUniform);
+                                Mq.Decode(ContextUniform);
+                                Mq.Decode(ContextUniform);
+                                Mq.Decode(ContextUniform);
+                            }
+
+                            break;
+                    }
+
+                    pass++;
+                    if (passType == 2)
+                    {
+                        passType = 0;
+                        _bitPlane--;
+                    }
+                    else
+                    {
+                        passType++;
+                    }
+                }
+            }
+
+            return GetResult(preserveFractionalBits);
         }
 
         private int[] DecodeInternal(byte[] bytes, int passCount, int bitPlaneCount, bool preserveFractionalBits)

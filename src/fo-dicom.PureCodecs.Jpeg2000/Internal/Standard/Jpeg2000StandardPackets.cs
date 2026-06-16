@@ -117,7 +117,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
             foreach (var contribution in packet.Contributions)
             {
-                if (!contribution.Included || contribution.ByteLength == 0)
+                if (!contribution.Included)
                 {
                     continue;
                 }

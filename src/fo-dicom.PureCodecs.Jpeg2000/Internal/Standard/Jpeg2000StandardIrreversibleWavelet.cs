@@ -4,15 +4,27 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 {
     internal static class Jpeg2000StandardIrreversibleWavelet
     {
-        private const double Alpha97 = -1.586134342;
-        private const double Beta97 = -0.052980118;
-        private const double Gamma97 = 0.882911075;
-        private const double Delta97 = 0.443506852;
-        private const double K97 = 1.230174105;
-        private const double InvK97 = 0.812893066;
+        private const float Alpha97 = -1.586134342f;
+        private const float Beta97 = -0.052980118f;
+        private const float Gamma97 = 0.882911075f;
+        private const float Delta97 = 0.443506852f;
+        private const float K97 = 1.230174105f;
+        private const float InvK97 = (float)(1.0 / 1.230174105);
+        private const double Alpha97Inverse = -1.586134342;
+        private const double Beta97Inverse = -0.052980118;
+        private const double Gamma97Inverse = 0.882911075;
+        private const double Delta97Inverse = 0.443506852;
+        private const double InvK97Inverse = 0.812893066;
+        private const double OpenJpegTwoInvK97 = 1.625732422;
 
         public static void Forward97(double[] data, int width, int height, int levels)
         {
+            var single = new float[data.Length];
+            for (var i = 0; i < data.Length; i++)
+            {
+                single[i] = (float)data[i];
+            }
+
             var currentWidth = width;
             var currentHeight = height;
             for (var level = 0; level < levels; level++)
@@ -22,9 +34,14 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     break;
                 }
 
-                Forward97_2D(data, currentWidth, currentHeight, width);
+                Forward97_2D(single, currentWidth, currentHeight, width);
                 currentWidth = (currentWidth + 1) >> 1;
                 currentHeight = (currentHeight + 1) >> 1;
+            }
+
+            for (var i = 0; i < data.Length; i++)
+            {
+                data[i] = single[i];
             }
         }
 
@@ -46,11 +63,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             }
         }
 
-        private static void Forward97_2D(double[] data, int width, int height, int stride)
+        private static void Forward97_2D(float[] data, int width, int height, int stride)
         {
             if (height > 1)
             {
-                var column = new double[height];
+                var column = new float[height];
                 for (var x = 0; x < width; x++)
                 {
                     for (var y = 0; y < height; y++)
@@ -68,7 +85,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
             if (width > 1)
             {
-                var row = new double[width];
+                var row = new float[width];
                 for (var y = 0; y < height; y++)
                 {
                     Array.Copy(data, y * stride, row, 0, width);
@@ -78,7 +95,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             }
         }
 
-        private static void Forward97_1D(double[] data)
+        private static void Forward97_1D(float[] data)
         {
             var width = data.Length;
             if (width <= 1)
@@ -104,7 +121,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 data[(lowCount - 1) * 2] *= InvK97;
             }
 
-            var temp = new double[width];
+            var temp = new float[width];
             for (var i = 0; i < lowCount; i++)
             {
                 temp[i] = data[2 * i];
@@ -174,22 +191,44 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             Array.Copy(temp, data, width);
             for (var i = 0; i < Math.Min(lowCount, highCount); i++)
             {
-                data[2 * i] /= InvK97;
-                data[(2 * i) + 1] /= K97;
+                data[2 * i] /= InvK97Inverse;
+                data[(2 * i) + 1] *= OpenJpegTwoInvK97;
             }
 
             if (lowCount > highCount)
             {
-                data[(lowCount - 1) * 2] /= InvK97;
+                data[(lowCount - 1) * 2] /= InvK97Inverse;
             }
 
-            EncodeStep97(data, 1, 1, lowCount, Math.Min(lowCount, highCount), -Delta97);
-            EncodeStep97(data, 0, 2, highCount, Math.Min(highCount, lowCount - 1), -Gamma97);
-            EncodeStep97(data, 1, 1, lowCount, Math.Min(lowCount, highCount), -Beta97);
-            EncodeStep97(data, 0, 2, highCount, Math.Min(highCount, lowCount - 1), -Alpha97);
+            EncodeStep97Inverse(data, 1, 1, lowCount, Math.Min(lowCount, highCount), -Delta97Inverse);
+            EncodeStep97Inverse(data, 0, 2, highCount, Math.Min(highCount, lowCount - 1), -Gamma97Inverse);
+            EncodeStep97Inverse(data, 1, 1, lowCount, Math.Min(lowCount, highCount), -Beta97Inverse);
+            EncodeStep97Inverse(data, 0, 2, highCount, Math.Min(highCount, lowCount - 1), -Alpha97Inverse);
         }
 
-        private static void EncodeStep97(double[] data, int flStart, int fwStart, int end, int middle, double coefficient)
+        private static void EncodeStep97(float[] data, int flStart, int fwStart, int end, int middle, float coefficient)
+        {
+            if (middle > 0)
+            {
+                var fw = fwStart;
+                var fl = flStart;
+                data[fw - 1] += (data[fl] + data[fw]) * coefficient;
+                fw += 2;
+                for (var i = 1; i < middle; i++)
+                {
+                    data[fw - 1] += (data[fw - 2] + data[fw]) * coefficient;
+                    fw += 2;
+                }
+            }
+
+            if (middle < end)
+            {
+                var fw = fwStart + (2 * middle);
+                data[fw - 1] += (2 * data[fw - 2]) * coefficient;
+            }
+        }
+
+        private static void EncodeStep97Inverse(double[] data, int flStart, int fwStart, int end, int middle, double coefficient)
         {
             if (middle > 0)
             {

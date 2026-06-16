@@ -53,7 +53,7 @@ internal static class Phase1TransferSyntaxes
         { DicomTransferSyntax.JPEGLSLossless, new DicomJpegLsLosslessCodec(), null },
         { DicomTransferSyntax.JPEGLSNearLossless, new DicomJpegLsNearLosslessCodec(), 2 },
         { DicomTransferSyntax.JPEG2000Lossless, new DicomJpeg2000LosslessCodec(), null },
-        { DicomTransferSyntax.JPEG2000Lossy, new DicomJpeg2000LossyCodec(), 2 },
+        { DicomTransferSyntax.JPEG2000Lossy, new DicomJpeg2000LossyCodec(), 6 },
         { DicomTransferSyntax.HTJ2KLossless, new DicomHtJpeg2000LosslessCodec(), null },
         { DicomTransferSyntax.HTJ2KLosslessRPCL, new DicomHtJpeg2000LosslessRpclCodec(), null },
         { DicomTransferSyntax.HTJ2K, new DicomHtJpeg2000LossyCodec(), 2 },

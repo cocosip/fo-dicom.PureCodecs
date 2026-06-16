@@ -242,6 +242,38 @@ For each source frame:
 
 The first implementation may use a conservative single-tile strategy if it remains compatible with DICOM and acceptance requirements. Any limitation must be documented before release.
 
+### Classic OpenJPEG Alignment Order
+
+For classic JPEG 2000 `.90` and `.91`, compatibility work must follow the
+`fo-dicom.Codecs`/OpenJPEG encode pipeline before interpreting final binary
+differences:
+
+1. Match DICOM-to-component sample mapping, including signed extension,
+   unsigned masking, `BitsStored`, `BitsAllocated`, and
+   `EncodeSignedPixelValuesAsUnsigned`.
+2. Match OpenJPEG encoder parameters: six resolutions, 64 x 64 code-blocks,
+   LRCP by default, optional MCT, and `RateLevels`/`Rate` layer construction.
+3. Match reversible 5/3 and irreversible 9/7 DWT geometry and coefficient
+   placement. The irreversible forward 9/7 path must follow OpenJPEG's
+   `OPJ_FLOAT32` arithmetic before Tier-1 quantization; a managed `double`
+   substitute changes low bit-plane pass payloads.
+4. Match lossless no-quantization QCD and lossy scalar-expounded QCD step-size
+   generation.
+5. Match Tier-1 pass coding, cumulative pass lengths, and cumulative
+   `distortiondec`.
+6. Match PCRD layer allocation using pass `dd/dr` and OpenJPEG-style packet
+   byte budget checks.
+7. Match Tier-2 packet header/body state across quality layers.
+   OpenJPEG 2.5.4 default builds do not use the optional
+   `ENABLE_EMPTY_PACKET_OPTIMIZATION` path, so even packets with no new
+   code-block contribution write the packet-present bit and tag-tree header
+   state instead of a single `00` empty-packet byte.
+8. Use final codestream size and binary comparison only as terminal
+   compatibility signals after the stages above are aligned.
+
+Multi-layer support means real quality-layer packet contribution distribution.
+`COD.Layers`, `NumLayers`, or a larger layer count alone is not sufficient.
+
 ## Decoding Design
 
 For each compressed frame:
@@ -399,14 +431,21 @@ parameter contract for phase 1 integration:
   `ProgressionOrder` values to the internal progression enum.
 - Classic JPEG 2000 encoding writes COD progression order, layer count,
   multiple-component transform use, transform type, and SIZ component
-  signedness from the requested parameters.
+  signedness from the requested parameters. Multi-layer support must be real
+  packet-layer contribution support: the encoder must distribute code-block
+  passes across quality layers, not only write a larger COD layer count and
+  leave early layers empty.
+- Classic JPEG 2000 encoding pads an odd-length EOC-terminated codestream with
+  a trailing `00` byte for the DICOM encapsulated item. This padding is outside
+  the logical JPEG 2000 codestream and must not be counted in SOT `Psot` or
+  packet tile-data length.
 - Classic JPEG 2000 lossy encoding uses OpenJPEG-compatible irreversible QCD
-  step-size generation and a managed single-layer rate-control path. The
-  managed rate-control targets `DicomJpeg2000Params.Rate` and may differ from
-  OpenJPEG PCRD by a small byte delta, so compatibility tests compare against
-  the generated `fo-dicom.Codecs` baseline with a narrow size window and a
-  decoded-pixel tolerance rather than requiring byte-for-byte codestream
-  equality.
+  step-size generation. The managed rate-control must target
+  `DicomJpeg2000Params.Rate` and `RateLevels` using OpenJPEG-compatible
+  quality-layer behavior for the public `fo-dicom.Codecs` contract. Decoded
+  pixels use lossy tolerance, but the `D:\1.dcm` classic JPEG 2000 regression
+  fixture must also compare codestream frame size against the generated
+  `fo-dicom.Codecs`/OpenJPEG baseline.
 - Classic lossy Tier-1 bit-plane depth must be derived from the encoded QCD
   step-size exponent plus guard bits, matching OpenJPEG's band `numbps`
   calculation. Do not infer irreversible band depth only from component

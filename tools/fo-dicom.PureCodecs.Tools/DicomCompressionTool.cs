@@ -1,6 +1,7 @@
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
+using PureJpeg2000Params = FellowOakDicom.PureCodecs.Jpeg2000.DicomJpeg2000Params;
 
 namespace FellowOakDicom.PureCodecs.Tools;
 
@@ -57,8 +58,22 @@ public sealed class DicomCompressionTool
             return sourceDataset.Clone();
         }
 
-        var transcoder = new DicomTranscoder(sourceSyntax, targetSyntax);
+        var transcoder = new DicomTranscoder(sourceSyntax, targetSyntax, outputCodecParams: CreateOutputCodecParams(targetSyntax));
         return transcoder.Transcode(sourceDataset);
+    }
+
+    private static DicomCodecParams? CreateOutputCodecParams(DicomTransferSyntax targetSyntax)
+    {
+        if (targetSyntax == DicomTransferSyntax.JPEG2000Lossy)
+        {
+            return new PureJpeg2000Params
+            {
+                Irreversible = true,
+                Rate = 16
+            };
+        }
+
+        return null;
     }
 
     private static void ConfigureDicomServices()
