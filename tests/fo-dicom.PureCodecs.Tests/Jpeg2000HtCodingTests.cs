@@ -113,6 +113,73 @@ public sealed class Jpeg2000HtCodingTests
         Assert.Equal(new[] { 10, 0, 6, 0, 0, 0, 0, 0 }, decoded.Coefficients);
     }
 
+    [Fact]
+    public void Ht_standard_cleanup_encoder_matches_openjph_cup_only_vector()
+    {
+        // Generated with OpenJPH ojph_encode_codeblock32 from coefficients:
+        // 8,0,4,0 / 0,2,0,1, with missing_msbs=28 and one cleanup pass.
+        var block = new Jpeg2000ClassicCodeBlock(
+            width: 4,
+            height: 2,
+            coefficients: new[] { 8, 0, 4, 0, 0, 2, 0, 1 });
+
+        var cleanupPass = Jpeg2000HtCodeBlockEncoder.EncodeStandardCleanupPass(
+            block,
+            missingMostSignificantBits: 28);
+
+        Assert.Equal(new byte[] { 0xFC, 0x01, 0xE7, 0x74, 0x00 }, cleanupPass);
+    }
+
+    [Fact]
+    public void Ht_standard_cleanup_round_trips_openjph_fixed_point_multiline_block()
+    {
+        const int kMax = 9;
+        var coefficients = new[]
+        {
+            12, -3, 0, 2,
+            -7, 5, 1, 0,
+            0, 9, -4, 6,
+            3, 0, -2, 8
+        };
+        var scaled = ScaleForOpenJphReversibleCodeBlock(coefficients, kMax);
+        var cleanupPass = Jpeg2000HtCodeBlockEncoder.EncodeStandardCleanupPass(
+            new Jpeg2000ClassicCodeBlock(4, 4, scaled),
+            missingMostSignificantBits: kMax - 1);
+
+        var decoded = Jpeg2000HtCodeBlockDecoder.DecodeStandardCleanupPass(
+            cleanupPass,
+            width: 4,
+            height: 4,
+            missingMostSignificantBits: kMax - 1);
+
+        Assert.Equal(coefficients, UnscaleOpenJphReversibleCodeBlock(decoded.Coefficients, kMax));
+    }
+
+    [Fact]
+    public void Ht_standard_cleanup_round_trips_odd_width_multiline_block()
+    {
+        const int kMax = 9;
+        var coefficients = new[]
+        {
+            0, 0, 0, 0, 15,
+            0, 0, 0, 0, 7,
+            0, 0, 0, 0, 13,
+            0, 0, 0, 0, 6
+        };
+        var scaled = ScaleForOpenJphReversibleCodeBlock(coefficients, kMax);
+        var cleanupPass = Jpeg2000HtCodeBlockEncoder.EncodeStandardCleanupPass(
+            new Jpeg2000ClassicCodeBlock(5, 4, scaled),
+            missingMostSignificantBits: kMax - 1);
+
+        var decoded = Jpeg2000HtCodeBlockDecoder.DecodeStandardCleanupPass(
+            cleanupPass,
+            width: 5,
+            height: 4,
+            missingMostSignificantBits: kMax - 1);
+
+        Assert.Equal(coefficients, UnscaleOpenJphReversibleCodeBlock(decoded.Coefficients, kMax));
+    }
+
     [Theory]
     [MemberData(nameof(MelStateMachineVectors))]
     public void Mel_state_machine_matches_fixed_vectors(bool[] events, byte[] bytes)
@@ -172,5 +239,33 @@ public sealed class Jpeg2000HtCodingTests
             var events = new bool[40];
             return events;
         }
+    }
+
+    private static int[] ScaleForOpenJphReversibleCodeBlock(int[] coefficients, int kMax)
+    {
+        var shift = 31 - kMax;
+        var scaled = new int[coefficients.Length];
+        for (var i = 0; i < coefficients.Length; i++)
+        {
+            var value = coefficients[i];
+            var sign = value < 0 ? unchecked((int)0x80000000) : 0;
+            scaled[i] = sign | (System.Math.Abs(value) << shift);
+        }
+
+        return scaled;
+    }
+
+    private static int[] UnscaleOpenJphReversibleCodeBlock(System.Collections.Generic.IReadOnlyList<int> coefficients, int kMax)
+    {
+        var shift = 31 - kMax;
+        var unscaled = new int[coefficients.Count];
+        for (var i = 0; i < coefficients.Count; i++)
+        {
+            var value = unchecked((uint)coefficients[i]);
+            var magnitude = (int)((value & 0x7FFFFFFFu) >> shift);
+            unscaled[i] = (value & 0x80000000u) != 0 ? -magnitude : magnitude;
+        }
+
+        return unscaled;
     }
 }

@@ -10,7 +10,7 @@ namespace FellowOakDicom.PureCodecs.Tests;
 public sealed class Jpeg2000HtExternalFixtureTests
 {
     [Fact]
-    public void Openjph_htj2k_fixture_parses_header_and_documents_block_parity_gap()
+    public void Openjph_irreversible_htj2k_fixture_parses_header_and_is_rejected_with_managed_error()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "TestSupport", "Fixtures", "OpenJPH", "test.j2c");
         var codestream = File.ReadAllBytes(path);
@@ -49,7 +49,8 @@ public sealed class Jpeg2000HtExternalFixtureTests
 
         var exception = Assert.Throws<DicomCodecException>(() =>
             new Jpeg2000HtFrameCodec().DecodeFrame(decoded, codestream));
-        Assert.Contains("managed payload", exception.Message, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("reversible lossless", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private static DicomDataset CloneForTransferSyntax(DicomDataset source, DicomTransferSyntax transferSyntax)

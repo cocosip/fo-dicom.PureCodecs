@@ -44,22 +44,17 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             var packets = new List<Jpeg2000StandardPacket>();
             BuildCodeBlockMaps();
 
-            if (_progressionOrder != Jpeg2000ProgressionOrder.LRCP)
+            var packetOrder = Jpeg2000ProgressionOrderIterator.Enumerate(
+                _progressionOrder,
+                _layerCount,
+                _resolutionCount,
+                _componentCount,
+                precinctCount: 1);
+            foreach (var packet in packetOrder)
             {
-                throw Jpeg2000Binary.CreateException($"JPEG 2000 progression order {_progressionOrder} is not yet supported by the standard decoder.");
-            }
-
-            for (var layer = 0; layer < _layerCount; layer++)
-            {
-                for (var resolution = 0; resolution < _resolutionCount; resolution++)
+                foreach (var precinct in _components[packet.ComponentIndex].GetPrecincts(packet.ResolutionLevel))
                 {
-                    for (var component = 0; component < _componentCount; component++)
-                    {
-                        foreach (var precinct in _components[component].GetPrecincts(resolution))
-                        {
-                            packets.Add(DecodePacket(layer, resolution, component, precinct));
-                        }
-                    }
+                    packets.Add(DecodePacket(packet.LayerIndex, packet.ResolutionLevel, packet.ComponentIndex, precinct));
                 }
             }
 

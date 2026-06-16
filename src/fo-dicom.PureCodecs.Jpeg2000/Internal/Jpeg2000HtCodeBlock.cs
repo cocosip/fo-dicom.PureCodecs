@@ -172,6 +172,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 Jpeg2000HtMelEncoder.EncodeEvents(cleanup.MelEvents),
                 Jpeg2000HtVlcEncoder.Encode(cleanup.VlcSymbols, initialQuadRow: true));
         }
+
+        public static byte[] EncodeStandardCleanupPass(Jpeg2000ClassicCodeBlock block, int missingMostSignificantBits)
+        {
+            return Jpeg2000HtStandardCleanupPassEncoder.Encode(block, missingMostSignificantBits);
+        }
     }
 
     public static class Jpeg2000HtCodeBlockDecoder

@@ -97,25 +97,116 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                     }
                 }
 
-                var uvlcEntry = Jpeg2000HtStandardTables.UvlcTable0[uvlcMode + (vlcValue & 0x3F)];
+                var uvlcIndex = uvlcMode + (vlcValue & 0x3F);
+                var uvlcEntry = Jpeg2000HtStandardTables.UvlcTable0[uvlcIndex];
+                var uvlcBias = Jpeg2000HtStandardTables.UvlcBias[uvlcIndex];
                 vlcValue = vlc.Advance(uvlcEntry & 0x7u);
                 uvlcEntry >>= 3;
                 var suffixLength = uvlcEntry & 0xFu;
                 var suffix = vlcValue & ((1u << (int)suffixLength) - 1u);
-                vlc.Advance(suffixLength);
+                vlcValue = vlc.Advance(suffixLength);
                 uvlcEntry >>= 4;
                 var quad0SuffixLength = uvlcEntry & 0x7u;
                 uvlcEntry >>= 3;
-                scratch[sp + 1] = (ushort)(1 + (uvlcEntry & 0x7u) + (suffix & ~(0xFFu << (int)quad0SuffixLength)));
-                scratch[sp + 3] = (ushort)(1 + (uvlcEntry >> 3) + (suffix >> (int)quad0SuffixLength));
+                var uQ0 = (uvlcEntry & 0x7u) + (suffix & ~(0xFFu << (int)quad0SuffixLength));
+                var uQ1 = (uvlcEntry >> 3) + (suffix >> (int)quad0SuffixLength);
+                if (uQ0 - (uvlcBias & 0x3u) > 32)
+                {
+                    uQ0 += (vlcValue & 0xFu) << 2;
+                    vlcValue = vlc.Advance(4);
+                }
+
+                if (uQ1 - (uvlcBias >> 2) > 32)
+                {
+                    uQ1 += (vlcValue & 0xFu) << 2;
+                    vlc.Advance(4);
+                }
+
+                scratch[sp + 1] = (ushort)(uQ0 + 1);
+                scratch[sp + 3] = (ushort)(uQ1 + 1);
             }
 
             scratch[sp] = 0;
             scratch[sp + 1] = 0;
 
-            if (height > 2)
+            for (var y = 2; y < height; y += 2)
             {
-                throw Jpeg2000Binary.CreateException("HTJ2K cleanup pass non-initial quad rows are not implemented for standard vectors.");
+                context = 0;
+                sp = (y >> 1) * sstr;
+                for (var x = 0; x < width; sp += 4)
+                {
+                    context |= ((uint)(scratch[sp - sstr] & 0xA0) << 2);
+                    context |= ((uint)(scratch[sp + 2 - sstr] & 0x20) << 4);
+
+                    var vlcValue = vlc.Fetch();
+                    var t0 = Jpeg2000HtStandardTables.VlcTable1[context + (vlcValue & 0x7F)];
+                    if (context == 0)
+                    {
+                        run -= 2;
+                        t0 = run == -1 ? t0 : (ushort)0;
+                        if (run < 0)
+                        {
+                            run = mel.GetRun();
+                        }
+                    }
+
+                    scratch[sp] = t0;
+                    x += 2;
+                    context = ((uint)(t0 & 0x40) << 2) | ((uint)(t0 & 0x80) << 1);
+                    context |= (uint)(scratch[sp - sstr] & 0x80);
+                    context |= ((uint)(scratch[sp + 2 - sstr] & 0xA0) << 2);
+                    context |= ((uint)(scratch[sp + 4 - sstr] & 0x20) << 4);
+                    vlcValue = vlc.Advance(t0 & 0x7u);
+
+                    ushort t1 = 0;
+                    t1 = Jpeg2000HtStandardTables.VlcTable1[context + (vlcValue & 0x7F)];
+                    if (context == 0 && x < width)
+                    {
+                        run -= 2;
+                        t1 = run == -1 ? t1 : (ushort)0;
+                        if (run < 0)
+                        {
+                            run = mel.GetRun();
+                        }
+                    }
+
+                    t1 = x < width ? t1 : (ushort)0;
+                    scratch[sp + 2] = t1;
+                    x += 2;
+                    context = ((uint)(t1 & 0x40) << 2) | ((uint)(t1 & 0x80) << 1);
+                    context |= (uint)(scratch[sp + 2 - sstr] & 0x80);
+                    vlcValue = vlc.Advance(t1 & 0x7u);
+
+                    var uvlcMode = ((uint)(t0 & 0x8) << 3) | ((uint)(t1 & 0x8) << 4);
+                    var uvlcEntry = Jpeg2000HtStandardTables.UvlcTable1[uvlcMode + (vlcValue & 0x3F)];
+                    vlcValue = vlc.Advance(uvlcEntry & 0x7u);
+                    uvlcEntry >>= 3;
+                    var suffixLength = uvlcEntry & 0xFu;
+                    var suffix = vlcValue & ((1u << (int)suffixLength) - 1u);
+                    vlc.Advance(suffixLength);
+                    uvlcEntry >>= 4;
+                    var quad0SuffixLength = uvlcEntry & 0x7u;
+                    uvlcEntry >>= 3;
+                    var uQ0 = (uvlcEntry & 0x7u) + (suffix & ~(0xFFu << (int)quad0SuffixLength));
+                    var uQ1 = (uvlcEntry >> 3) + (suffix >> (int)quad0SuffixLength);
+                    if (uQ0 > 32)
+                    {
+                        uQ0 += (vlcValue & 0xFu) << 2;
+                        vlcValue = vlc.Advance(4);
+                    }
+
+                    if (uQ1 > 32)
+                    {
+                        uQ1 += (vlcValue & 0xFu) << 2;
+                        vlc.Advance(4);
+                    }
+
+                    scratch[sp + 1] = (ushort)uQ0;
+                    scratch[sp + 3] = (ushort)uQ1;
+                }
+
+                scratch[sp] = 0;
+                scratch[sp + 1] = 0;
             }
         }
 
@@ -123,48 +214,101 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         {
             var reader = new HtForwardSegmentReader(cleanupPass, lcup - scup, 0xFF);
             var coefficients = new int[width * height];
-            var sp = 0;
-            var dp = 0;
+            var vScratch = new uint[width + 4];
+            DecodeMagSgnRow(reader, coefficients, width, height, sstr, scratch, vScratch, y: 0, bitPlane, mmsbp2, initial: true);
 
-            for (var x = 0; x < width; sp += 2)
+            for (var y = 2; y < height; y += 2)
+            {
+                DecodeMagSgnRow(reader, coefficients, width, height, sstr, scratch, vScratch, y, bitPlane, mmsbp2, initial: false);
+            }
+
+            return coefficients;
+        }
+
+        private static void DecodeMagSgnRow(
+            HtForwardSegmentReader reader,
+            int[] coefficients,
+            int width,
+            int height,
+            int sstr,
+            ushort[] scratch,
+            uint[] vScratch,
+            int y,
+            int bitPlane,
+            int mmsbp2,
+            bool initial)
+        {
+            var sp = (y >> 1) * sstr;
+            var dp = y * width;
+            var prevVn = 0u;
+            var vp = 0;
+            for (var x = 0; x < width; sp += 2, vp++)
             {
                 var inf = scratch[sp];
                 var uq = scratch[sp + 1];
-                if (uq > mmsbp2)
+                var u = initial ? uq : uq + Kappa(inf, vScratch[vp], vScratch[vp + 1]);
+                if (u > mmsbp2)
                 {
-                    throw Jpeg2000Binary.CreateException("HTJ2K cleanup pass has an invalid U value.");
+                    throw Jpeg2000Binary.CreateException($"HTJ2K cleanup pass has an invalid U value. U={u}, max={mmsbp2}, x={x}, y={y}, inf=0x{inf:X4}, uq={uq}.");
                 }
 
-                DecodeSample(reader, coefficients, dp, inf, uq, bit: 0, bitPlane);
-                if (height > 1)
+                DecodeSample(reader, coefficients, dp, inf, u, bit: 0, bitPlane, out _);
+                uint vn;
+                if (y + 1 < height)
                 {
-                    DecodeSample(reader, coefficients, dp + width, inf, uq, bit: 1, bitPlane);
+                    DecodeSample(reader, coefficients, dp + width, inf, u, bit: 1, bitPlane, out vn);
+                }
+                else
+                {
+                    vn = 0;
                 }
 
+                vScratch[vp] = prevVn | vn;
+                prevVn = 0;
                 dp++;
                 if (++x >= width)
                 {
+                    vp++;
+                    vScratch[vp] = 0;
                     break;
                 }
 
-                DecodeSample(reader, coefficients, dp, inf, uq, bit: 2, bitPlane);
-                if (height > 1)
+                DecodeSample(reader, coefficients, dp, inf, u, bit: 2, bitPlane, out _);
+                if (y + 1 < height)
                 {
-                    DecodeSample(reader, coefficients, dp + width, inf, uq, bit: 3, bitPlane);
+                    DecodeSample(reader, coefficients, dp + width, inf, u, bit: 3, bitPlane, out prevVn);
+                }
+                else
+                {
+                    prevVn = 0;
                 }
 
                 dp++;
                 x++;
             }
 
-            return coefficients;
+            vScratch[Math.Min(vp, vScratch.Length - 1)] = prevVn;
         }
 
-        private static void DecodeSample(HtForwardSegmentReader reader, int[] coefficients, int index, int inf, int uq, int bit, int bitPlane)
+        private static int Kappa(int inf, uint currentVn, uint nextVn)
+        {
+            var gamma = inf & 0xF0;
+            gamma &= gamma - 0x10;
+            if (gamma == 0)
+            {
+                return 1;
+            }
+
+            var emax = 31 - CountLeadingZeros((currentVn | nextVn) | 2u);
+            return emax;
+        }
+
+        private static void DecodeSample(HtForwardSegmentReader reader, int[] coefficients, int index, int inf, int uq, int bit, int bitPlane, out uint vn)
         {
             if ((inf & (1 << (4 + bit))) == 0)
             {
                 coefficients[index] = 0;
+                vn = 0;
                 return;
             }
 
@@ -172,11 +316,32 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var mn = uq - ((inf >> (12 + bit)) & 1);
             reader.Advance(mn);
             var sign = (magSgn & 1u) != 0;
-            var vn = magSgn & ((1u << mn) - 1u);
+            vn = magSgn & MaskLowBits(mn);
             vn |= (uint)((inf >> (8 + bit)) & 1) << mn;
             vn |= 1u;
-            var magnitude = (int)((vn + 2u) << (bitPlane - 1));
-            coefficients[index] = sign ? -magnitude : magnitude;
+            var magnitude = (vn + 2u) << (bitPlane - 1);
+            coefficients[index] = unchecked((int)(sign ? 0x80000000u | magnitude : magnitude));
+        }
+
+        private static uint MaskLowBits(int bitCount)
+        {
+            return bitCount >= 32 ? uint.MaxValue : (1u << bitCount) - 1u;
+        }
+
+        private static int CountLeadingZeros(uint value)
+        {
+            if (value == 0)
+            {
+                return 32;
+            }
+
+            var count = 0;
+            for (var bit = 31; bit >= 0 && ((value >> bit) & 1u) == 0; bit--)
+            {
+                count++;
+            }
+
+            return count;
         }
 
         private sealed class HtMelSegmentReader
@@ -372,7 +537,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 uint value = 0;
                 if (_size > 3)
                 {
-                    value = ReadBigEndianBackward32(_data, _offset - 3);
+                    value = ReadLittleEndian32(_data, _offset - 3);
                     _offset -= 4;
                     _size -= 4;
                 }
@@ -410,7 +575,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             private int _offset;
             private readonly int _size;
             private readonly byte _unstuffLimit;
-            private uint _tmp;
+            private ulong _tmp;
             private int _bits;
             private int _lastByte = -1;
 
@@ -434,7 +599,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                     ReadWord();
                 }
 
-                return _tmp;
+                return (uint)_tmp;
             }
 
             public void Advance(int bits)
@@ -447,7 +612,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             {
                 var value = _offset < _size ? _data[_offset++] : _unstuffLimit;
                 var bits = _lastByte == _unstuffLimit ? 7 : 8;
-                _tmp |= (uint)(value & ((1 << bits) - 1)) << _bits;
+                _tmp |= (ulong)(value & ((1 << bits) - 1)) << _bits;
                 _bits += bits;
                 _lastByte = value;
             }
@@ -471,9 +636,5 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return (uint)(data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24));
         }
 
-        private static uint ReadBigEndianBackward32(byte[] data, int offset)
-        {
-            return (uint)((data[offset] << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3]);
-        }
     }
 }

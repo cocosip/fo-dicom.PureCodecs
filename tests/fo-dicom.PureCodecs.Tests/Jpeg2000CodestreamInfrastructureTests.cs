@@ -1,5 +1,7 @@
+using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 using FellowOakDicom.PureCodecs.Jpeg2000.Internal;
+using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
 
 namespace FellowOakDicom.PureCodecs.Tests;
@@ -17,6 +19,8 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
         Assert.Equal(0x5D, Jpeg2000Marker.QCC);
         Assert.Equal(0x5F, Jpeg2000Marker.POC);
         Assert.Equal(0x5E, Jpeg2000Marker.RGN);
+        Assert.Equal(0x50, Jpeg2000Marker.CAP);
+        Assert.Equal(0x59, Jpeg2000Marker.CPF);
         Assert.Equal(0x64, Jpeg2000Marker.COM);
         Assert.Equal(0x90, Jpeg2000Marker.SOT);
         Assert.Equal(0x93, Jpeg2000Marker.SOD);
@@ -444,6 +448,42 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
             0xFF, Jpeg2000Marker.COD, 0x00, 0x04, 0x01, 0x02,
             0xFF, Jpeg2000Marker.EOC
         }, writer.ToArray());
+    }
+
+    [Fact]
+    public void Htj2k_encoder_writes_openjph_compatible_jph_header_shape()
+    {
+        var pixelData = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 8, columns: 8));
+        var frame = pixelData.GetFrame(0).Data;
+        var codec = new Jpeg2000HtFrameCodec();
+
+        var codestream = codec.EncodeFrame(pixelData, frame, lossy: false, qualityTolerance: 0, Jpeg2000ProgressionOrder.RPCL);
+
+        var reader = new Jpeg2000CodestreamReader(codestream);
+        Assert.Equal(Jpeg2000Marker.SOC, reader.ReadNext().Code);
+        var siz = Jpeg2000SizeSegment.Parse(reader.ReadNext());
+        var cap = reader.ReadNext();
+        var cod = Jpeg2000CodingStyleDefault.Parse(reader.ReadNext());
+        var qcd = Jpeg2000QuantizationDefault.Parse(reader.ReadNext());
+        var sot = Jpeg2000StartOfTilePart.Parse(reader.ReadNext(), tileCount: 1);
+        Assert.Equal(Jpeg2000Marker.SOD, reader.ReadNext().Code);
+        var tileData = reader.ReadTileData(sot);
+
+        Assert.Equal(0x4000, siz.Capabilities);
+        Assert.Equal(Jpeg2000Marker.CAP, cap.Code);
+        Assert.Equal(new byte[] { 0x00, 0x02, 0x00, 0x00 }, cap.Payload[..4]);
+        Assert.Equal(3, cod.DecompositionLevels);
+        Assert.Equal(64, cod.CodeBlockWidth);
+        Assert.Equal(64, cod.CodeBlockHeight);
+        Assert.Equal(0x40, cod.CodeBlockStyle);
+        Assert.Equal(1, cod.Transformation);
+        Assert.Equal(Jpeg2000QuantizationStyle.None, qcd.Style);
+        Assert.Equal(10, qcd.StepSizes.Count);
+        Assert.Equal(1, qcd.GuardBits);
+        Assert.Equal(11, (qcd.StepSizes[0] >> 3) + qcd.GuardBits);
+        Assert.Equal(12, (qcd.StepSizes[1] >> 3) + qcd.GuardBits);
+        Assert.Equal(12, (qcd.StepSizes[3] >> 3) + qcd.GuardBits);
+        Assert.NotEqual(new byte[] { (byte)'P', (byte)'H', (byte)'T', (byte)'J' }, tileData[..4]);
     }
 
     private static byte[] CreateSegment(byte marker, params byte[] payload)

@@ -355,17 +355,16 @@ public sealed class Jpeg2000DicomIntegrationTests
     }
 
     [Fact]
-    public void Jpeg2000_standard_decode_rejects_unsupported_progression_order()
+    public void Jpeg2000_standard_decode_accepts_non_lrcp_progression_order()
     {
         var codestream = CreateCodestreamWithProgressionOrder(Jpeg2000ProgressionOrder.RPCL);
         var compressedPixelData = CreateCompressedPixelDataWithFrame(DicomTransferSyntax.JPEG2000Lossless, codestream);
         var target = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8(rows: 1, columns: 1), true);
         var codec = new DicomJpeg2000LosslessCodec();
 
-        var exception = Assert.Throws<DicomCodecException>(
-            () => codec.Decode(compressedPixelData, target, codec.GetDefaultParameters()));
+        codec.Decode(compressedPixelData, target, codec.GetDefaultParameters());
 
-        Assert.Contains("progression", exception.Message, System.StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(new byte[] { 128 }, target.GetFrame(0).Data);
     }
 
     private static Jpeg2000ProgressionOrder ReadProgressionOrder(byte[] codestream)

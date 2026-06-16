@@ -10,9 +10,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public const byte QCD = 0x5C;
         public const byte QCC = 0x5D;
         public const byte POC = 0x5F;
+        public const byte CAP = 0x50;
         public const byte PPM = 0x60;
         public const byte PPT = 0x61;
         public const byte PLT = 0x58;
+        public const byte CPF = 0x59;
         public const byte COM = 0x64;
         public const byte SOT = 0x90;
         public const byte SOP = 0x91;

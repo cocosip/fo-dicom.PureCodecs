@@ -1,5 +1,6 @@
 using System;
 using FellowOakDicom.Imaging;
+using FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
@@ -24,17 +25,21 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var isSigned = pixelData.PixelRepresentation == PixelRepresentation.Signed;
             var samplesPerPixel = pixelData.SamplesPerPixel;
             var encodedFrame = lossy && bitsAllocated == 8 ? QuantizeLossy(frame, qualityTolerance) : Copy(frame);
-            var payload = EncodePayload(width, height, bitsAllocated, bitsStored, isSigned, samplesPerPixel, lossy, encodedFrame);
+            var decompositionLevels = EffectiveDecompositionLevels(width, height);
+            var payload = new Jpeg2000HtTileEncoder().EncodeLossless(pixelData, encodedFrame, progressionOrder, decompositionLevels);
 
             var writer = new Jpeg2000CodestreamWriter();
             writer.WriteStandalone(Jpeg2000Marker.SOC);
-            writer.WriteSegment(Jpeg2000Marker.SIZ, Jpeg2000MarkerPayloadBuilder.CreateSize(width, height, bitsStored, isSigned, samplesPerPixel));
-            writer.WriteSegment(Jpeg2000Marker.COD, CreateCodingStylePayload(lossy, progressionOrder));
+            writer.WriteSegment(Jpeg2000Marker.SIZ, Jpeg2000MarkerPayloadBuilder.CreateSize(width, height, bitsStored, isSigned, samplesPerPixel, capabilities: 0x4000));
+            writer.WriteSegment(Jpeg2000Marker.CAP, Jpeg2000MarkerPayloadBuilder.CreateHighThroughputCapabilities(reversible: true, guardBits: 0));
+            writer.WriteSegment(Jpeg2000Marker.COD, CreateCodingStylePayload(progressionOrder, samplesPerPixel == 3, decompositionLevels));
             writer.WriteSegment(
                 Jpeg2000Marker.QCD,
-                lossy
-                    ? Jpeg2000MarkerPayloadBuilder.CreateScalarDerivedIrreversibleQuantization(0x5000)
-                    : Jpeg2000MarkerPayloadBuilder.CreateNoQuantization(0x00, 0x08));
+                Jpeg2000MarkerPayloadBuilder.CreateReversibleQuantizationFromExponentBits(
+                    Jpeg2000ReversibleBiboGains.CreateReversibleExponentBits(
+                        bitsStored,
+                        samplesPerPixel == 3,
+                        decompositionLevels)));
             writer.WriteSegment(Jpeg2000Marker.SOT, Jpeg2000MarkerPayloadBuilder.CreateStartOfTile(payload.Length));
             writer.WriteStandalone(Jpeg2000Marker.SOD);
             writer.WriteRaw(payload);
@@ -48,9 +53,12 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 codestream,
                 sodFamilyName: "HTJ2K",
                 codestreamName: "HTJ2K");
-            var decoded = DecodePayload(parsed.TileData);
-            ValidateDecodedMetadata(targetPixelData, parsed.Size, decoded);
-            return decoded.Frame;
+            return new Jpeg2000StandardFrameDecoder().Decode(
+                targetPixelData,
+                parsed.Size,
+                parsed.CodingStyle,
+                parsed.Quantization,
+                parsed.TileData);
         }
 
         private static byte[] EncodePayload(
@@ -155,15 +163,28 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 : -1;
         }
 
-        private static byte[] CreateCodingStylePayload(bool lossy, Jpeg2000ProgressionOrder progressionOrder)
+        private static byte[] CreateCodingStylePayload(Jpeg2000ProgressionOrder progressionOrder, bool usesMultipleComponentTransform, int decompositionLevels)
         {
             return Jpeg2000MarkerPayloadBuilder.CreateCodingStyle(
                 progressionOrder,
                 layerCount: 1,
-                usesMultipleComponentTransform: false,
-                decompositionLevels: 0,
+                usesMultipleComponentTransform: usesMultipleComponentTransform,
+                decompositionLevels: decompositionLevels,
                 codeBlockStyle: 0x40,
-                transformation: (byte)(lossy ? 1 : 0));
+                transformation: 1);
+        }
+
+        private static int EffectiveDecompositionLevels(int width, int height)
+        {
+            var levels = 0;
+            while (levels < 5 && (width > 1 || height > 1))
+            {
+                width = (width + 1) >> 1;
+                height = (height + 1) >> 1;
+                levels++;
+            }
+
+            return levels;
         }
 
         private static byte[] QuantizeLossy(byte[] frame, int tolerance)

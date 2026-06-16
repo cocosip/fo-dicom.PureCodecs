@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using FellowOakDicom.Imaging;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
@@ -56,11 +57,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     continue;
                 }
 
-                var bitPlaneCount = EstimateBitPlaneCount(component, cod, qcd, block);
-                var decoder = new Jpeg2000StandardTier1Decoder(block.Width, block.Height, block.Orientation, cod.CodeBlockStyle);
-                var coefficients = cod.Transformation == 0
-                    ? decoder.DecodeScaled(block.Data, block.TotalPasses, bitPlaneCount)
-                    : decoder.Decode(block.Data, block.TotalPasses, bitPlaneCount);
+                var coefficients = IsHighThroughput(cod)
+                    ? DecodeHighThroughputBlock(component, cod, qcd, block)
+                    : DecodeStandardBlock(component, cod, qcd, block);
                 for (var y = 0; y < block.Height; y++)
                 {
                     for (var x = 0; x < block.Width; x++)
@@ -89,6 +88,88 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             }
 
             throw Jpeg2000Binary.CreateException("JPEG 2000 transformation type is unsupported.");
+        }
+
+        private static int[] DecodeStandardBlock(
+            Jpeg2000StandardComponent component,
+            Jpeg2000CodingStyleDefault cod,
+            Jpeg2000QuantizationDefault qcd,
+            Jpeg2000StandardCodeBlock block)
+        {
+            var bitPlaneCount = EstimateBitPlaneCount(component, cod, qcd, block);
+            var decoder = new Jpeg2000StandardTier1Decoder(block.Width, block.Height, block.Orientation, cod.CodeBlockStyle);
+            return cod.Transformation == 0
+                ? decoder.DecodeScaled(block.Data, block.TotalPasses, bitPlaneCount)
+                : decoder.Decode(block.Data, block.TotalPasses, bitPlaneCount);
+        }
+
+        private static int[] DecodeHighThroughputBlock(
+            Jpeg2000StandardComponent component,
+            Jpeg2000CodingStyleDefault cod,
+            Jpeg2000QuantizationDefault qcd,
+            Jpeg2000StandardCodeBlock block)
+        {
+            if (cod.Transformation != 1 || qcd.Style != Jpeg2000QuantizationStyle.None)
+            {
+                throw Jpeg2000Binary.CreateException("HTJ2K pure decoder currently supports reversible lossless code-blocks only.");
+            }
+
+            if (block.TotalPasses != 1)
+            {
+                throw Jpeg2000Binary.CreateException("HTJ2K pure decoder currently supports cleanup-pass-only code-blocks.");
+            }
+
+            Jpeg2000ClassicCodeBlock decoded;
+            try
+            {
+                decoded = Jpeg2000HtCodeBlockDecoder.DecodeStandardCleanupPass(
+                    block.Data,
+                    block.Width,
+                    block.Height,
+                    block.ZeroBitPlanes);
+            }
+            catch (FellowOakDicom.Imaging.Codec.DicomCodecException ex)
+            {
+                throw Jpeg2000Binary.CreateException(
+                    $"HTJ2K code-block decode failed at x={block.X0}, y={block.Y0}, local=({block.LocalX},{block.LocalY}), orientation={block.Orientation}, zeroBitPlanes={block.ZeroBitPlanes}, size={block.Width}x{block.Height}. {ex.Message}");
+            }
+            var kMax = EstimateHighThroughputBandKmax(component, cod, qcd, block);
+            return UnscaleOpenJphReversibleCodeBlock(decoded.Coefficients, kMax);
+        }
+
+        private static int EstimateHighThroughputBandKmax(
+            Jpeg2000StandardComponent component,
+            Jpeg2000CodingStyleDefault cod,
+            Jpeg2000QuantizationDefault qcd,
+            Jpeg2000StandardCodeBlock block)
+        {
+            var resolution = ResolutionForBlock(cod.DecompositionLevels, block.Orientation, block.X0, block.Y0, component.Width, component.Height);
+            var index = SubbandIndex(cod.DecompositionLevels, resolution, block.Orientation);
+            if (index >= 0 && index < qcd.StepSizes.Count)
+            {
+                return (qcd.StepSizes[index] >> 3) + qcd.GuardBits - 1;
+            }
+
+            return EstimateBandBitPlaneDepth(component, cod, qcd, block);
+        }
+
+        private static int[] UnscaleOpenJphReversibleCodeBlock(IReadOnlyList<int> coefficients, int kMax)
+        {
+            var shift = 31 - kMax;
+            var unscaled = new int[coefficients.Count];
+            for (var i = 0; i < coefficients.Count; i++)
+            {
+                var value = unchecked((uint)coefficients[i]);
+                var magnitude = (int)((value & 0x7FFFFFFFu) >> shift);
+                unscaled[i] = (value & 0x80000000u) != 0 ? -magnitude : magnitude;
+            }
+
+            return unscaled;
+        }
+
+        private static bool IsHighThroughput(Jpeg2000CodingStyleDefault cod)
+        {
+            return (cod.CodeBlockStyle & 0x40) != 0;
         }
 
         private static double[] DequantizeIrreversible(Jpeg2000StandardComponent component, Jpeg2000CodingStyleDefault cod, Jpeg2000QuantizationDefault qcd)
