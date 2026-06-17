@@ -1,0 +1,244 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches:
+      - master
+      - main
+  push:
+    branches:
+      - master
+      - main
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: 10.0.x
+  SOLUTION_PATH: fo-dicom.PureCodecs.slnx
+  PACKAGE_PROJECT: src/fo-dicom.PureCodecs/fo-dicom.PureCodecs.csproj
+  PACKAGE_ID: fo-dicom.PureCodecs
+  PACKAGE_OUTPUT: artifacts/packages
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore "${{ env.SOLUTION_PATH }}"
+
+      - name: Build
+        run: dotnet build "${{ env.SOLUTION_PATH }}" -c Release --no-restore
+
+      - name: Test
+        run: dotnet test "${{ env.SOLUTION_PATH }}" -c Release --no-build --verbosity normal
+
+      - name: Read package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="$(dotnet msbuild "${{ env.PACKAGE_PROJECT }}" -getProperty:Version)"
+          tag="${GITHUB_REF_NAME}"
+          expected_tag="v${version}"
+
+          if [[ -z "$version" ]]; then
+            echo "::error::Could not read <Version> from ${{ env.PACKAGE_PROJECT }}."
+            exit 1
+          fi
+
+          if [[ "$tag" != "$expected_tag" ]]; then
+            echo "::error::Tag $tag does not match ${{ env.PACKAGE_PROJECT }} <Version> $version. Use tag $expected_tag or update the project version first."
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Pack
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: dotnet pack "${{ env.PACKAGE_PROJECT }}" -c Release --no-build -o "${{ env.PACKAGE_OUTPUT }}"
+
+      - name: Upload NuGet packages
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: ${{ env.PACKAGE_OUTPUT }}/*.nupkg
+          retention-days: 7
+
+  publish-nuget:
+    name: Publish to NuGet
+    needs: build-and-test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Download NuGet packages
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-packages
+          path: packages
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: NuGet login
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Publish to NuGet.org
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          packages=(packages/*.nupkg)
+          if [[ ${#packages[@]} -eq 0 ]]; then
+            echo "::error::No NuGet packages found."
+            exit 1
+          fi
+
+          for package in "${packages[@]}"; do
+            dotnet nuget push "$package" \
+              --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          done
+
+  create-release:
+    name: Create GitHub Release
+    needs: publish-nuget
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download NuGet packages
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-packages
+          path: packages
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Read package version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="$(dotnet msbuild "${{ env.PACKAGE_PROJECT }}" -getProperty:Version)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Get previous tag
+        id: previous_tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          current_tag="${{ steps.version.outputs.tag }}"
+          previous_tag="$(git describe --tags --abbrev=0 "${current_tag}^" 2>/dev/null || true)"
+
+          if [[ -n "$previous_tag" ]]; then
+            echo "tag=$previous_tag" >> "$GITHUB_OUTPUT"
+            echo "log_args=$previous_tag..$current_tag" >> "$GITHUB_OUTPUT"
+            echo "diff_args=$previous_tag..$current_tag" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "log_args=$current_tag" >> "$GITHUB_OUTPUT"
+            echo "diff_args=$(git hash-object -t tree /dev/null)..$current_tag" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate release notes
+        id: release_notes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.version }}"
+          current_tag="${{ steps.version.outputs.tag }}"
+          previous_tag="${{ steps.previous_tag.outputs.tag }}"
+          log_args="${{ steps.previous_tag.outputs.log_args }}"
+          diff_args="${{ steps.previous_tag.outputs.diff_args }}"
+          notes_path="release_notes.md"
+
+          commit_count="$(git log "$log_args" --oneline --no-merges | wc -l | tr -d ' ')"
+          changed_files="$(git diff --name-only "$diff_args" | wc -l | tr -d ' ')"
+          changelog="$(git log "$log_args" --pretty=format:'- %h - %s (%an)' --no-merges | sed 's/```//g' || true)"
+
+          if [[ -z "$changelog" ]]; then
+            changelog="- No non-merge commits in this release range."
+          fi
+
+          {
+            echo "## fo-dicom.PureCodecs $version"
+            echo ""
+            echo "### NuGet Package"
+            echo ""
+            echo "This release has been published to NuGet.org:"
+            echo ""
+            echo '```bash'
+            echo "dotnet add package ${{ env.PACKAGE_ID }} --version $version"
+            echo '```'
+            echo ""
+            echo "### What's Changed"
+            echo ""
+            echo "This release includes $commit_count non-merge commits and $changed_files changed files."
+            echo ""
+            echo "$changelog"
+            echo ""
+            echo "### Useful Links"
+            echo ""
+            echo "- [NuGet Gallery](https://www.nuget.org/packages/${{ env.PACKAGE_ID }}/$version)"
+            if [[ -n "$previous_tag" ]]; then
+              echo "- [Full Changelog](https://github.com/${{ github.repository }}/compare/$previous_tag...$current_tag)"
+            else
+              echo "- [Full Changelog](https://github.com/${{ github.repository }}/commits/$current_tag)"
+            fi
+          } > "$notes_path"
+
+          echo "path=$notes_path" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ steps.version.outputs.version }}
+          body_path: ${{ steps.release_notes.outputs.path }}
+          files: packages/*.nupkg
+          draft: false
+          prerelease: false

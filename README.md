@@ -4,14 +4,16 @@
 
 The package ships as one NuGet package that contains separate managed codec-family assemblies for RLE, JPEG, JPEG-LS, and JPEG 2000 / HTJ2K. Production assemblies target `netstandard2.0` only and do not use native codec DLLs, P/Invoke, or native fallback paths.
 
-NuGet package versions are managed centrally in `Directory.Packages.props`. Project files keep `PackageReference` items versionless; add or update package versions in `Directory.Packages.props`.
+NuGet dependency versions are managed centrally in `Directory.Packages.props`. Project files keep `PackageReference` items versionless; add or update dependency versions in `Directory.Packages.props`.
+
+The package version is maintained manually in `src/fo-dicom.PureCodecs/fo-dicom.PureCodecs.csproj`.
 
 ## Install
 
-Use the published prerelease package when it is available:
+Use the published package when it is available:
 
 ```bash
-dotnet add package fo-dicom.PureCodecs --prerelease
+dotnet add package fo-dicom.PureCodecs
 ```
 
 ## Usage
@@ -42,7 +44,7 @@ DicomDataset compressed = transcoder.Transcode(dataset);
 
 ## Supported Transfer Syntaxes
 
-The first alpha package targets the completed codec support in `fo-dicom.Codecs`, excluding JPEG XL because upstream marks it as in development.
+The phase 1 package targets the completed codec support in `fo-dicom.Codecs`, excluding JPEG XL because upstream marks it as in development.
 
 | Codec family | Transfer syntax | UID |
 | --- | --- | --- |
@@ -118,3 +120,25 @@ The shell script is intended for Linux and macOS jobs. It validates the package 
 ```
 
 The PowerShell script is intended for Windows jobs. It validates the same package checks and modern consumer smoke test, and also runs the .NET Framework 4.7.2 consumer smoke test.
+
+## Release and Publishing
+
+GitHub Actions runs CI on pull requests and pushes to `master` or `main`. Tag pushes that match `v*` additionally pack the NuGet package, publish it to NuGet.org, and create a GitHub Release with release notes generated from the commits since the previous tag.
+
+The package version is not generated from the tag and is not overridden during packing. Before publishing a release, update `<Version>` in `src/fo-dicom.PureCodecs/fo-dicom.PureCodecs.csproj`, commit that change, and create a matching tag:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow validates that the pushed tag matches the project version. For example, `<Version>0.1.0</Version>` must be released with tag `v0.1.0`.
+
+NuGet publishing uses NuGet.org Trusted Publishing through GitHub OIDC. Configure a nuget.org trusted publishing policy with:
+
+- Repository Owner: `cocosip`
+- Repository: `fo-dicom.PureCodecs`
+- Workflow File: `ci-cd.yml`
+- Environment: `release`
+
+Create a GitHub environment named `release` and add an environment secret named `NUGET_USER` with the NuGet.org profile name.
