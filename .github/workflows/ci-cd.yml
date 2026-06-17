@@ -73,7 +73,7 @@ jobs:
 
       - name: Pack
         if: startsWith(github.ref, 'refs/tags/v')
-        run: dotnet pack "${{ env.PACKAGE_PROJECT }}" -c Release --no-build -o "${{ env.PACKAGE_OUTPUT }}"
+        run: dotnet pack "${{ env.PACKAGE_PROJECT }}" -c Release --no-build -p:BuildProjectReferences=false -o "${{ env.PACKAGE_OUTPUT }}"
 
       - name: Upload NuGet packages
         if: startsWith(github.ref, 'refs/tags/v')
