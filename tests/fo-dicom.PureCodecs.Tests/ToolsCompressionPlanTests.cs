@@ -185,6 +185,16 @@ public sealed class ToolsCompressionPlanTests
         AssertSequentialJpegSkipped(plan, "JPEG sequential DCT does not support photometric interpretation HSV.");
     }
 
+    [Theory]
+    [InlineData(@"Regression\Transcoded\1_jpeg_lossless.dcm", "1_jpeg_lossless.dcm")]
+    [InlineData("Regression/Transcoded/1_jpegls_lossless.dcm", "1_jpegls_lossless.dcm")]
+    public void Regression_reference_file_name_parsing_accepts_windows_and_unix_separators(
+        string referencePath,
+        string expectedFileName)
+    {
+        Assert.Equal(expectedFileName, GetPortableFileName(referencePath));
+    }
+
     [Fact]
     public void CompressAll_outputs_from_local_real_fixture_decode_and_render()
     {
@@ -533,9 +543,15 @@ public sealed class ToolsCompressionPlanTests
     {
         if (path.IndexOf("Jpeg2000Baseline", StringComparison.OrdinalIgnoreCase) >= 0)
         {
-            return RegressionFixturePaths.Jpeg2000Baseline(Path.GetFileName(path));
+            return RegressionFixturePaths.Jpeg2000Baseline(GetPortableFileName(path));
         }
 
-        return RegressionFixturePaths.Transcoded(Path.GetFileName(path));
+        return RegressionFixturePaths.Transcoded(GetPortableFileName(path));
+    }
+
+    private static string GetPortableFileName(string path)
+    {
+        var normalized = path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+        return Path.GetFileName(normalized);
     }
 }
