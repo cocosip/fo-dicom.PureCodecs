@@ -30,11 +30,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return writer.ToArray();
         }
 
-        public static byte[] CreateHighThroughputCapabilities(bool reversible, int guardBits)
+        public static byte[] CreateHighThroughputCapabilities(bool reversible, int magnitudeBound)
         {
             var writer = new Jpeg2000ByteWriter();
             writer.WriteUInt32(0x00020000);
-            writer.WriteUInt16(CreateHighThroughputCcap(reversible, guardBits));
+            writer.WriteUInt16(CreateHighThroughputCcap(reversible, magnitudeBound));
             return writer.ToArray();
         }
 
@@ -63,11 +63,33 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         public static byte[] CreateStartOfTile(int tileDataLength)
         {
+            return CreateStartOfTile(tileDataLength, tilePartIndex: 0, tilePartCount: 1);
+        }
+
+        public static byte[] CreateStartOfTile(int tileDataLength, int tilePartIndex, int tilePartCount)
+        {
             var writer = new Jpeg2000ByteWriter();
             writer.WriteUInt16(0);
             writer.WriteUInt32((uint)(tileDataLength + 14));
+            writer.WriteByte((byte)tilePartIndex);
+            writer.WriteByte((byte)tilePartCount);
+            return writer.ToArray();
+        }
+
+        public static byte[] CreateTilePartLengths(int[] tileDataLengths)
+        {
+            var writer = new Jpeg2000ByteWriter();
             writer.WriteByte(0);
-            writer.WriteByte(1);
+            writer.WriteByte(0x60);
+            if (tileDataLengths != null)
+            {
+                for (var i = 0; i < tileDataLengths.Length; i++)
+                {
+                    writer.WriteUInt16(0);
+                    writer.WriteUInt32((uint)(tileDataLengths[i] + 14));
+                }
+            }
+
             return writer.ToArray();
         }
 
@@ -160,14 +182,44 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return new[] { guardAndStyle, stepSize };
         }
 
-        private static ushort CreateHighThroughputCcap(bool reversible, int guardBits)
+        public static int ComputeReversibleMagnitudeBound(byte[] qcdPayload)
+        {
+            var bound = 0;
+            if (qcdPayload != null && qcdPayload.Length > 0)
+            {
+                var guardBits = qcdPayload[0] >> 5;
+                for (var i = 1; i < qcdPayload.Length; i++)
+                {
+                    bound = System.Math.Max(bound, (qcdPayload[i] >> 3) + guardBits - 1);
+                }
+            }
+
+            return bound;
+        }
+
+        public static int ComputeScalarExpoundedMagnitudeBound(ushort[] encodedSteps, int guardBits, int decompositionLevels)
+        {
+            var bound = 0;
+            if (encodedSteps != null)
+            {
+                for (var i = 0; i < encodedSteps.Length; i++)
+                {
+                    var subbandDecompositionLevel = decompositionLevels - (i == 0 ? 0 : (i - 1) / 3);
+                    bound = System.Math.Max(bound, (encodedSteps[i] >> 11) + guardBits - subbandDecompositionLevel);
+                }
+            }
+
+            return bound;
+        }
+
+        private static ushort CreateHighThroughputCcap(bool reversible, int magnitudeBound)
         {
             var ccap = reversible ? 0 : 0x0020;
-            var bp = guardBits <= 8
+            var bp = magnitudeBound <= 8
                 ? 0
-                : guardBits < 28
-                    ? guardBits - 8
-                    : 13 + (guardBits >> 2);
+                : magnitudeBound < 28
+                    ? magnitudeBound - 8
+                    : 13 + (magnitudeBound >> 2);
             return (ushort)(ccap | bp);
         }
 

@@ -32,7 +32,7 @@ public sealed class Jpeg2000DicomIntegrationTests
     }
 
     [Fact]
-    public void Htj2k_default_parameters_match_fo_dicom_core_contract()
+    public void Htj2k_lossless_default_parameters_use_transfer_syntax_progression()
     {
         var codec = new DicomHtJpeg2000LosslessCodec();
 
@@ -41,7 +41,7 @@ public sealed class Jpeg2000DicomIntegrationTests
         Assert.True(parameters.Irreversible);
         Assert.Equal(5, parameters.NumberOfDecompositions);
         Assert.True(parameters.EmployColorTransform);
-        Assert.Equal(ProgressionOrder.RPCL, parameters.ProgressionOrder);
+        Assert.Equal(ProgressionOrder.LRCP, parameters.ProgressionOrder);
         Assert.False(parameters.InsertTlmMarkers);
     }
 
@@ -251,6 +251,20 @@ public sealed class Jpeg2000DicomIntegrationTests
         codec.Encode(source, compressed, parameters);
 
         Assert.Equal(Jpeg2000ProgressionOrder.CPRL, ReadProgressionOrder(compressed.GetFrame(0).Data));
+    }
+
+    [Fact]
+    public void Htj2k_lossless_core_default_parameters_use_transfer_syntax_progression()
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 4, columns: 4);
+        var source = DicomPixelData.Create(dataset);
+        var compressedDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.HTJ2KLossless);
+        var compressed = DicomPixelData.Create(compressedDataset, true);
+        var codec = new DicomHtJpeg2000LosslessCodec();
+
+        codec.Encode(source, compressed, new CoreHtJpeg2000Params());
+
+        Assert.Equal(Jpeg2000ProgressionOrder.LRCP, ReadProgressionOrder(compressed.GetFrame(0).Data));
     }
 
     [Fact]

@@ -32,9 +32,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public void Encode(DicomPixelData oldPixelData, DicomPixelData newPixelData, DicomCodecParams parameters)
         {
             var htParameters = DicomHtJpeg2000Params.From(parameters ?? GetDefaultParameters());
-            var progressionOrder = TransferSyntax == DicomTransferSyntax.HTJ2KLosslessRPCL
-                ? Jpeg2000ProgressionOrder.RPCL
-                : htParameters.Jpeg2000ProgressionOrder;
+            var progressionOrder = ResolveProgressionOrder(htParameters);
             var tolerance = ResolveTolerance(htParameters);
 
             for (var frame = 0; frame < oldPixelData.NumberOfFrames; frame++)
@@ -49,6 +47,21 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                     throw CodecFailure.Wrap(TransferSyntax, "encode", frame, exception);
                 }
             }
+        }
+
+        private Jpeg2000ProgressionOrder ResolveProgressionOrder(DicomHtJpeg2000Params parameters)
+        {
+            if (TransferSyntax == DicomTransferSyntax.HTJ2KLosslessRPCL)
+            {
+                return Jpeg2000ProgressionOrder.RPCL;
+            }
+
+            if (parameters.Jpeg2000ProgressionOrder == Jpeg2000ProgressionOrder.RPCL)
+            {
+                return _defaultProgressionOrder;
+            }
+
+            return parameters.Jpeg2000ProgressionOrder;
         }
 
         public void Decode(DicomPixelData oldPixelData, DicomPixelData newPixelData, DicomCodecParams parameters)

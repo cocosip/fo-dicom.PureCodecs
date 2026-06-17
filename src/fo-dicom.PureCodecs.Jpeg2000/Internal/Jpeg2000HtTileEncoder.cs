@@ -12,6 +12,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         public byte[] EncodeLossless(DicomPixelData pixelData, byte[] frame, Jpeg2000ProgressionOrder progressionOrder, int decompositionLevels)
         {
+            return Concat(EncodeLosslessTileParts(pixelData, frame, progressionOrder, decompositionLevels));
+        }
+
+        public byte[][] EncodeLosslessTileParts(DicomPixelData pixelData, byte[] frame, Jpeg2000ProgressionOrder progressionOrder, int decompositionLevels)
+        {
             if (pixelData.SamplesPerPixel != 1 && pixelData.SamplesPerPixel != 3)
             {
                 throw Jpeg2000Binary.CreateException("HTJ2K encoder currently supports monochrome and RGB frames only.");
@@ -32,10 +37,15 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 encodedComponents.Add(BuildHtCodeBlocksByResolution(coefficients, pixelData.Width, pixelData.Height, pixelData.BitsStored, components.Length == 3, decompositionLevels));
             }
 
-            return EncodePackets(encodedComponents, progressionOrder, decompositionLevels);
+            return EncodePacketsByResolution(encodedComponents, progressionOrder, decompositionLevels);
         }
 
         public byte[] EncodeLossy(DicomPixelData pixelData, byte[] frame, Jpeg2000ProgressionOrder progressionOrder, int decompositionLevels, ushort[] encodedSteps)
+        {
+            return Concat(EncodeLossyTileParts(pixelData, frame, progressionOrder, decompositionLevels, encodedSteps));
+        }
+
+        public byte[][] EncodeLossyTileParts(DicomPixelData pixelData, byte[] frame, Jpeg2000ProgressionOrder progressionOrder, int decompositionLevels, ushort[] encodedSteps)
         {
             if (pixelData.SamplesPerPixel != 1 && pixelData.SamplesPerPixel != 3)
             {
@@ -60,12 +70,22 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 encodedComponents.Add(BuildHtIrreversibleCodeBlocksByResolution(component, pixelData.Width, pixelData.Height, pixelData.BitsStored, decompositionLevels, encodedSteps));
             }
 
-            return EncodePackets(encodedComponents, progressionOrder, decompositionLevels);
+            return EncodePacketsByResolution(encodedComponents, progressionOrder, decompositionLevels);
         }
 
         private static byte[] EncodePackets(IReadOnlyList<List<List<Jpeg2000EncodedBlock>>> components, Jpeg2000ProgressionOrder progressionOrder, int decompositionLevels)
         {
-            var bytes = new List<byte>();
+            return Concat(EncodePacketsByResolution(components, progressionOrder, decompositionLevels));
+        }
+
+        private static byte[][] EncodePacketsByResolution(IReadOnlyList<List<List<Jpeg2000EncodedBlock>>> components, Jpeg2000ProgressionOrder progressionOrder, int decompositionLevels)
+        {
+            var bytesByResolution = new List<byte>[decompositionLevels + 1];
+            for (var i = 0; i < bytesByResolution.Length; i++)
+            {
+                bytesByResolution[i] = new List<byte>();
+            }
+
             foreach (var packet in EnumeratePackets(components, progressionOrder, decompositionLevels))
             {
                 var blocks = components[packet.ComponentIndex][packet.ResolutionLevel];
@@ -75,10 +95,35 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 }
 
                 var packetBlocks = FilterPrecinct(blocks, packet.PrecinctIndex);
-                bytes.AddRange(EncodeHighThroughputPacket(packetBlocks));
+                bytesByResolution[packet.ResolutionLevel].AddRange(EncodeHighThroughputPacket(packetBlocks));
             }
 
-            return bytes.ToArray();
+            var result = new byte[bytesByResolution.Length][];
+            for (var i = 0; i < result.Length; i++)
+            {
+                result[i] = bytesByResolution[i].ToArray();
+            }
+
+            return result;
+        }
+
+        private static byte[] Concat(IReadOnlyList<byte[]> parts)
+        {
+            var length = 0;
+            foreach (var part in parts)
+            {
+                length += part.Length;
+            }
+
+            var result = new byte[length];
+            var offset = 0;
+            foreach (var part in parts)
+            {
+                Buffer.BlockCopy(part, 0, result, offset, part.Length);
+                offset += part.Length;
+            }
+
+            return result;
         }
 
         private static byte[] EncodeHighThroughputPacket(IReadOnlyList<Jpeg2000EncodedBlock> blocks)

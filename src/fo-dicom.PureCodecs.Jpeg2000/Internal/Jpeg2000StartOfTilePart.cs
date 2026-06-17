@@ -18,6 +18,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         public int TilePartCount { get; }
 
+        public static Jpeg2000StartOfTilePart Empty { get; } = new Jpeg2000StartOfTilePart(0, 0, 0, 0);
+
         public static Jpeg2000StartOfTilePart Parse(Jpeg2000MarkerSegment segment, int tileCount)
         {
             if (segment.Code != Jpeg2000Marker.SOT)

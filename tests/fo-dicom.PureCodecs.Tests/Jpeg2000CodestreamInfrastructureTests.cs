@@ -465,6 +465,7 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
         var cap = reader.ReadNext();
         var cod = Jpeg2000CodingStyleDefault.Parse(reader.ReadNext());
         var qcd = Jpeg2000QuantizationDefault.Parse(reader.ReadNext());
+        var tlm = reader.ReadNext();
         var sot = Jpeg2000StartOfTilePart.Parse(reader.ReadNext(), tileCount: 1);
         Assert.Equal(Jpeg2000Marker.SOD, reader.ReadNext().Code);
         var tileData = reader.ReadTileData(sot);
@@ -480,10 +481,38 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
         Assert.Equal(Jpeg2000QuantizationStyle.None, qcd.Style);
         Assert.Equal(10, qcd.StepSizes.Count);
         Assert.Equal(1, qcd.GuardBits);
+        Assert.Equal(EncodeCcapMagnitudeBound(MaxMagnitudeBound(qcd)), ReadUInt16(cap.Payload, 4));
+        Assert.Equal(Jpeg2000Marker.TLM, tlm.Code);
+        Assert.Equal(26, tlm.Payload.Length);
+        Assert.Equal(0x60, tlm.Payload[1]);
+        Assert.Equal(0, sot.TilePartIndex);
+        Assert.Equal(cod.DecompositionLevels + 1, sot.TilePartCount);
         Assert.Equal(11, (qcd.StepSizes[0] >> 3) + qcd.GuardBits);
         Assert.Equal(12, (qcd.StepSizes[1] >> 3) + qcd.GuardBits);
         Assert.Equal(12, (qcd.StepSizes[3] >> 3) + qcd.GuardBits);
         Assert.NotEqual(new byte[] { (byte)'P', (byte)'H', (byte)'T', (byte)'J' }, tileData[..4]);
+    }
+
+    [Fact]
+    public void Htj2k_capability_marker_uses_openjph_magb_from_quantization()
+    {
+        var pixelData = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome16(rows: 459, columns: 888));
+        var frame = pixelData.GetFrame(0).Data;
+        var codec = new Jpeg2000HtFrameCodec();
+
+        var codestream = codec.EncodeFrame(pixelData, frame, lossy: false, qualityTolerance: 0, Jpeg2000ProgressionOrder.LRCP);
+
+        var reader = new Jpeg2000CodestreamReader(codestream);
+        Assert.Equal(Jpeg2000Marker.SOC, reader.ReadNext().Code);
+        var siz = Jpeg2000SizeSegment.Parse(reader.ReadNext());
+        var cap = reader.ReadNext();
+        var cod = Jpeg2000CodingStyleDefault.Parse(reader.ReadNext());
+        var qcd = Jpeg2000QuantizationDefault.Parse(reader.ReadNext());
+
+        Assert.Equal(0x4000, siz.Capabilities);
+        Assert.Equal(5, cod.DecompositionLevels);
+        Assert.Equal(EncodeCcapMagnitudeBound(MaxMagnitudeBound(qcd)), ReadUInt16(cap.Payload, 4));
+        Assert.Equal(18, MaxMagnitudeBound(qcd));
     }
 
     private static byte[] CreateSegment(byte marker, params byte[] payload)
@@ -495,5 +524,30 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
         bytes[3] = (byte)(payload.Length + 2);
         System.Buffer.BlockCopy(payload, 0, bytes, 4, payload.Length);
         return bytes;
+    }
+
+    private static ushort ReadUInt16(byte[] bytes, int offset)
+    {
+        return (ushort)((bytes[offset] << 8) | bytes[offset + 1]);
+    }
+
+    private static int MaxMagnitudeBound(Jpeg2000QuantizationDefault qcd)
+    {
+        var max = 0;
+        foreach (var step in qcd.StepSizes)
+        {
+            max = Math.Max(max, (step >> 3) + qcd.GuardBits - 1);
+        }
+
+        return max;
+    }
+
+    private static int EncodeCcapMagnitudeBound(int magnitudeBound)
+    {
+        return magnitudeBound <= 8
+            ? 0
+            : magnitudeBound < 28
+                ? magnitudeBound - 8
+                : 13 + (magnitudeBound >> 2);
     }
 }

@@ -40,7 +40,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             Jpeg2000CodingStyleDefault? cod = null;
             Jpeg2000QuantizationDefault? qcd = null;
             Jpeg2000StartOfTilePart? sot = null;
-            byte[]? tileData = null;
+            var tileDataParts = new System.Collections.Generic.List<byte[]>();
             var reachedEndOfCodestream = false;
 
             while (!reader.EndOfData && !reachedEndOfCodestream)
@@ -68,7 +68,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                             throw Jpeg2000Binary.CreateException(sodFamilyName + " SOD marker was found before SOT.");
                         }
 
-                        tileData = reader.ReadTileData(sot);
+                        tileDataParts.Add(reader.ReadTileData(sot));
+                        sot = null;
                         break;
                     case Jpeg2000Marker.EOC:
                         reachedEndOfCodestream = true;
@@ -76,12 +77,31 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 }
             }
 
-            if (siz == null || cod == null || qcd == null || sot == null || tileData == null)
+            if (siz == null || cod == null || qcd == null || tileDataParts.Count == 0)
             {
                 throw Jpeg2000Binary.CreateException(codestreamName + " codestream is missing required marker data.");
             }
 
-            return new Jpeg2000ParsedTilePart(siz, cod, qcd, sot, tileData);
+            return new Jpeg2000ParsedTilePart(siz, cod, qcd, sot ?? Jpeg2000StartOfTilePart.Empty, Concat(tileDataParts));
+        }
+
+        private static byte[] Concat(System.Collections.Generic.IReadOnlyList<byte[]> parts)
+        {
+            var length = 0;
+            foreach (var part in parts)
+            {
+                length += part.Length;
+            }
+
+            var result = new byte[length];
+            var offset = 0;
+            foreach (var part in parts)
+            {
+                System.Buffer.BlockCopy(part, 0, result, offset, part.Length);
+                offset += part.Length;
+            }
+
+            return result;
         }
     }
 }

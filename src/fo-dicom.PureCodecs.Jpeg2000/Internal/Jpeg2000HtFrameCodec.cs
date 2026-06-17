@@ -28,27 +28,42 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                     bitsStored,
                     CreateLossyQuality(qualityTolerance))
                 : Array.Empty<ushort>();
-            var payload = lossy
-                ? new Jpeg2000HtTileEncoder().EncodeLossy(pixelData, frame, progressionOrder, decompositionLevels, encodedSteps)
-                : new Jpeg2000HtTileEncoder().EncodeLossless(pixelData, frame, progressionOrder, decompositionLevels);
+            var encoder = new Jpeg2000HtTileEncoder();
+            var tileParts = lossy
+                ? encoder.EncodeLossyTileParts(pixelData, frame, progressionOrder, decompositionLevels, encodedSteps)
+                : encoder.EncodeLosslessTileParts(pixelData, frame, progressionOrder, decompositionLevels);
+            byte[] qcdPayload;
+            if (lossy)
+            {
+                qcdPayload = Jpeg2000MarkerPayloadBuilder.CreateScalarExpoundedIrreversibleQuantization(encodedSteps, guardBits: 1);
+            }
+            else
+            {
+                var reversibleExponentBits = Jpeg2000ReversibleBiboGains.CreateReversibleExponentBits(
+                    bitsStored,
+                    samplesPerPixel == 3,
+                    decompositionLevels);
+                qcdPayload = Jpeg2000MarkerPayloadBuilder.CreateReversibleQuantizationFromExponentBits(reversibleExponentBits);
+            }
+
+            var magnitudeBound = lossy
+                ? Jpeg2000MarkerPayloadBuilder.ComputeScalarExpoundedMagnitudeBound(encodedSteps, guardBits: 1, decompositionLevels)
+                : Jpeg2000MarkerPayloadBuilder.ComputeReversibleMagnitudeBound(qcdPayload);
 
             var writer = new Jpeg2000CodestreamWriter();
             writer.WriteStandalone(Jpeg2000Marker.SOC);
             writer.WriteSegment(Jpeg2000Marker.SIZ, Jpeg2000MarkerPayloadBuilder.CreateSize(width, height, bitsStored, isSigned, samplesPerPixel, capabilities: 0x4000));
-            writer.WriteSegment(Jpeg2000Marker.CAP, Jpeg2000MarkerPayloadBuilder.CreateHighThroughputCapabilities(reversible: !lossy, guardBits: lossy ? 1 : 0));
+            writer.WriteSegment(Jpeg2000Marker.CAP, Jpeg2000MarkerPayloadBuilder.CreateHighThroughputCapabilities(reversible: !lossy, magnitudeBound));
             writer.WriteSegment(Jpeg2000Marker.COD, CreateCodingStylePayload(progressionOrder, samplesPerPixel == 3, decompositionLevels, lossy));
-            writer.WriteSegment(
-                Jpeg2000Marker.QCD,
-                lossy
-                    ? Jpeg2000MarkerPayloadBuilder.CreateScalarExpoundedIrreversibleQuantization(encodedSteps, guardBits: 1)
-                    : Jpeg2000MarkerPayloadBuilder.CreateReversibleQuantizationFromExponentBits(
-                        Jpeg2000ReversibleBiboGains.CreateReversibleExponentBits(
-                            bitsStored,
-                            samplesPerPixel == 3,
-                            decompositionLevels)));
-            writer.WriteSegment(Jpeg2000Marker.SOT, Jpeg2000MarkerPayloadBuilder.CreateStartOfTile(payload.Length));
-            writer.WriteStandalone(Jpeg2000Marker.SOD);
-            writer.WriteRaw(payload);
+            writer.WriteSegment(Jpeg2000Marker.QCD, qcdPayload);
+            writer.WriteSegment(Jpeg2000Marker.TLM, Jpeg2000MarkerPayloadBuilder.CreateTilePartLengths(TilePartLengths(tileParts)));
+            for (var i = 0; i < tileParts.Length; i++)
+            {
+                writer.WriteSegment(Jpeg2000Marker.SOT, Jpeg2000MarkerPayloadBuilder.CreateStartOfTile(tileParts[i].Length, i, tileParts.Length));
+                writer.WriteStandalone(Jpeg2000Marker.SOD);
+                writer.WriteRaw(tileParts[i]);
+            }
+
             writer.WriteStandalone(Jpeg2000Marker.EOC);
             return writer.ToArray();
         }
@@ -76,6 +91,17 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 decompositionLevels: decompositionLevels,
                 codeBlockStyle: 0x40,
                 transformation: (byte)(irreversible ? 0 : 1));
+        }
+
+        private static int[] TilePartLengths(byte[][] tileParts)
+        {
+            var lengths = new int[tileParts.Length];
+            for (var i = 0; i < tileParts.Length; i++)
+            {
+                lengths[i] = tileParts[i].Length;
+            }
+
+            return lengths;
         }
 
         private static int EffectiveDecompositionLevels(int width, int height)

@@ -10,6 +10,7 @@
     <Project Path="tests/fo-dicom.PureCodecs.Tests/fo-dicom.PureCodecs.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
+    <Project Path="tools/fo-dicom.PureCodecs.Htj2kValidation/fo-dicom.PureCodecs.Htj2kValidation.csproj" />
     <Project Path="tools/fo-dicom.PureCodecs.Tools/fo-dicom.PureCodecs.Tools.csproj" />
   </Folder>
 </Solution>

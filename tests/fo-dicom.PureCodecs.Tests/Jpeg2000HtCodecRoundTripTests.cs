@@ -45,6 +45,37 @@ public sealed class Jpeg2000HtCodecRoundTripTests
     }
 
     [Fact]
+    public void Htj2k_lossless_default_progression_is_not_rpcl_options()
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 32, columns: 32);
+        var source = DicomPixelData.Create(dataset);
+        var compressedDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.HTJ2KLossless);
+        var compressed = DicomPixelData.Create(compressedDataset, true);
+        var codec = new DicomHtJpeg2000LosslessCodec();
+
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+
+        Assert.Equal(Jpeg2000ProgressionOrder.LRCP, ReadProgressionOrder(compressed.GetFrame(0).Data));
+    }
+
+    [Fact]
+    public void Htj2k_lossless_and_rpcl_transfer_syntaxes_write_distinct_progression_orders()
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 32, columns: 32);
+        var source = DicomPixelData.Create(dataset);
+        var losslessDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.HTJ2KLossless);
+        var lossless = DicomPixelData.Create(losslessDataset, true);
+        var rpclDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.HTJ2KLosslessRPCL);
+        var rpcl = DicomPixelData.Create(rpclDataset, true);
+
+        new DicomHtJpeg2000LosslessCodec().Encode(source, lossless, new DicomHtJpeg2000Params());
+        new DicomHtJpeg2000LosslessRpclCodec().Encode(source, rpcl, new DicomHtJpeg2000Params());
+
+        Assert.Equal(Jpeg2000ProgressionOrder.LRCP, ReadProgressionOrder(lossless.GetFrame(0).Data));
+        Assert.Equal(Jpeg2000ProgressionOrder.RPCL, ReadProgressionOrder(rpcl.GetFrame(0).Data));
+    }
+
+    [Fact]
     public void Htj2k_lossless_writes_standard_codestream_without_managed_payload()
     {
         var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 32, columns: 32);
@@ -60,6 +91,22 @@ public sealed class Jpeg2000HtCodecRoundTripTests
         Assert.Contains(Jpeg2000Marker.CAP, ReadMarkerCodes(codestream));
         Assert.Equal(0x40, ReadCodingStyle(codestream).CodeBlockStyle);
         Assert.False(ContainsSubsequence(codestream, new byte[] { (byte)'P', (byte)'H', (byte)'T', (byte)'J' }));
+    }
+
+    [Fact]
+    public void Htj2k_lossless_codestream_ends_at_eoc_without_fragment_padding()
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome16(rows: 459, columns: 888);
+        var source = DicomPixelData.Create(dataset);
+        var compressedDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.HTJ2KLossless);
+        var compressed = DicomPixelData.Create(compressedDataset, true);
+        var codec = new DicomHtJpeg2000LosslessCodec();
+
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+        var codestream = compressed.GetFrame(0).Data;
+
+        Assert.True(StartsWith(codestream, new byte[] { 0xFF, Jpeg2000Marker.SOC }));
+        Assert.Equal(codestream.Length - 2, LastMarkerOffset(codestream, Jpeg2000Marker.EOC));
     }
 
     [Fact]
@@ -200,6 +247,19 @@ public sealed class Jpeg2000HtCodecRoundTripTests
         }
 
         return false;
+    }
+
+    private static int LastMarkerOffset(byte[] bytes, byte marker)
+    {
+        for (var index = bytes.Length - 2; index >= 0; index--)
+        {
+            if (bytes[index] == 0xFF && bytes[index + 1] == marker)
+            {
+                return index;
+            }
+        }
+
+        throw new Xunit.Sdk.XunitException($"Marker 0xFF{marker:X2} not found.");
     }
 
     private static DicomDataset CloneForTransferSyntax(DicomDataset source, DicomTransferSyntax transferSyntax)
