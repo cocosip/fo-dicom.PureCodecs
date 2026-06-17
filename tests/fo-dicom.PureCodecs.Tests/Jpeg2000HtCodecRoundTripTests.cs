@@ -45,7 +45,7 @@ public sealed class Jpeg2000HtCodecRoundTripTests
     }
 
     [Fact]
-    public void Htj2k_lossless_default_progression_is_not_rpcl_options()
+    public void Htj2k_lossless_default_progression_matches_openjph_default_rpcl()
     {
         var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 32, columns: 32);
         var source = DicomPixelData.Create(dataset);
@@ -55,24 +55,99 @@ public sealed class Jpeg2000HtCodecRoundTripTests
 
         codec.Encode(source, compressed, codec.GetDefaultParameters());
 
-        Assert.Equal(Jpeg2000ProgressionOrder.LRCP, ReadProgressionOrder(compressed.GetFrame(0).Data));
+        Assert.Equal(Jpeg2000ProgressionOrder.RPCL, ReadProgressionOrder(compressed.GetFrame(0).Data));
     }
 
     [Fact]
-    public void Htj2k_lossless_and_rpcl_transfer_syntaxes_write_distinct_progression_orders()
+    public void Htj2k_lossless_and_lossy_ignore_progression_parameters_like_fo_dicom_codecs()
     {
         var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 32, columns: 32);
         var source = DicomPixelData.Create(dataset);
         var losslessDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.HTJ2KLossless);
         var lossless = DicomPixelData.Create(losslessDataset, true);
-        var rpclDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.HTJ2KLosslessRPCL);
-        var rpcl = DicomPixelData.Create(rpclDataset, true);
+        var lossyDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.HTJ2K);
+        var lossy = DicomPixelData.Create(lossyDataset, true);
+        var parameters = new DicomHtJpeg2000Params { Jpeg2000ProgressionOrder = Jpeg2000ProgressionOrder.CPRL };
 
-        new DicomHtJpeg2000LosslessCodec().Encode(source, lossless, new DicomHtJpeg2000Params());
-        new DicomHtJpeg2000LosslessRpclCodec().Encode(source, rpcl, new DicomHtJpeg2000Params());
+        new DicomHtJpeg2000LosslessCodec().Encode(source, lossless, parameters);
+        new DicomHtJpeg2000LossyCodec().Encode(source, lossy, parameters);
 
-        Assert.Equal(Jpeg2000ProgressionOrder.LRCP, ReadProgressionOrder(lossless.GetFrame(0).Data));
-        Assert.Equal(Jpeg2000ProgressionOrder.RPCL, ReadProgressionOrder(rpcl.GetFrame(0).Data));
+        Assert.Equal(Jpeg2000ProgressionOrder.RPCL, ReadProgressionOrder(lossless.GetFrame(0).Data));
+        Assert.Equal(Jpeg2000ProgressionOrder.RPCL, ReadProgressionOrder(lossy.GetFrame(0).Data));
+    }
+
+    [Fact]
+    public void Htj2k_lossless_rpcl_honors_progression_parameter_like_fo_dicom_codecs()
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 32, columns: 32);
+        var source = DicomPixelData.Create(dataset);
+        var compressedDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.HTJ2KLosslessRPCL);
+        var compressed = DicomPixelData.Create(compressedDataset, true);
+        var parameters = new DicomHtJpeg2000Params { Jpeg2000ProgressionOrder = Jpeg2000ProgressionOrder.CPRL };
+
+        new DicomHtJpeg2000LosslessRpclCodec().Encode(source, compressed, parameters);
+
+        Assert.Equal(Jpeg2000ProgressionOrder.CPRL, ReadProgressionOrder(compressed.GetFrame(0).Data));
+    }
+
+    [Theory]
+    [InlineData(Jpeg2000ProgressionOrder.LRCP, 6)]
+    [InlineData(Jpeg2000ProgressionOrder.RLCP, 6)]
+    [InlineData(Jpeg2000ProgressionOrder.RPCL, 6)]
+    [InlineData(Jpeg2000ProgressionOrder.PCRL, 1)]
+    [InlineData(Jpeg2000ProgressionOrder.CPRL, 1)]
+    public void Htj2k_lossless_rpcl_matches_openjph_tilepart_division_corrections(
+        Jpeg2000ProgressionOrder progressionOrder,
+        int expectedTilePartCount)
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 32, columns: 32);
+        var source = DicomPixelData.Create(dataset);
+        var compressedDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.HTJ2KLosslessRPCL);
+        var compressed = DicomPixelData.Create(compressedDataset, true);
+        var parameters = new DicomHtJpeg2000Params { Jpeg2000ProgressionOrder = progressionOrder };
+
+        new DicomHtJpeg2000LosslessRpclCodec().Encode(source, compressed, parameters);
+        var codestream = compressed.GetFrame(0).Data;
+
+        Assert.Equal(progressionOrder, ReadProgressionOrder(codestream));
+        Assert.Equal(expectedTilePartCount, ReadStartOfTiles(codestream).Count);
+        Assert.All(ReadStartOfTiles(codestream), sot => Assert.Equal(expectedTilePartCount, sot.TilePartCount));
+        Assert.Equal(2 + (expectedTilePartCount * 6), ReadTlmPayload(codestream).Length);
+    }
+
+    [Theory]
+    [InlineData(4, 4, "1.2.840.10008.1.2.4.201", Jpeg2000ProgressionOrder.RPCL)]
+    [InlineData(32, 32, "1.2.840.10008.1.2.4.202", Jpeg2000ProgressionOrder.CPRL)]
+    [InlineData(32, 32, "1.2.840.10008.1.2.4.203", Jpeg2000ProgressionOrder.RPCL)]
+    public void Htj2k_codestream_shape_matches_fo_dicom_codecs_openjph_defaults(
+        ushort rows,
+        ushort columns,
+        string transferSyntaxUid,
+        Jpeg2000ProgressionOrder expectedProgressionOrder)
+    {
+        var transferSyntax = DicomTransferSyntax.Parse(transferSyntaxUid);
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows, columns);
+        var source = DicomPixelData.Create(dataset);
+        var compressedDataset = CloneForTransferSyntax(dataset, transferSyntax);
+        var compressed = DicomPixelData.Create(compressedDataset, true);
+        var codec = CreateCodec(transferSyntax);
+
+        codec.Encode(source, compressed, new DicomHtJpeg2000Params
+        {
+            Jpeg2000ProgressionOrder = Jpeg2000ProgressionOrder.CPRL,
+            NumLayers = 3,
+            TargetRatio = 12
+        });
+        var codestream = compressed.GetFrame(0).Data;
+        var coding = ReadCodingStyle(codestream);
+
+        Assert.Equal(expectedProgressionOrder, coding.ProgressionOrder);
+        Assert.Equal(1, coding.LayerCount);
+        Assert.Equal(5, coding.DecompositionLevels);
+        Assert.Equal(64, coding.CodeBlockWidth);
+        Assert.Equal(64, coding.CodeBlockHeight);
+        Assert.Equal(0x40, coding.CodeBlockStyle);
+        Assert.Contains(Jpeg2000Marker.TLM, ReadMarkerCodes(codestream));
     }
 
     [Fact]
@@ -206,6 +281,64 @@ public sealed class Jpeg2000HtCodecRoundTripTests
         }
 
         return codes;
+    }
+
+    private static IReadOnlyList<Jpeg2000StartOfTilePart> ReadStartOfTiles(byte[] codestream)
+    {
+        var tiles = new List<Jpeg2000StartOfTilePart>();
+        var reader = new Jpeg2000CodestreamReader(codestream);
+        while (!reader.EndOfData)
+        {
+            var segment = reader.ReadNext();
+            if (segment.Code == Jpeg2000Marker.SOT)
+            {
+                var sot = Jpeg2000StartOfTilePart.Parse(segment, tileCount: 1);
+                tiles.Add(sot);
+                Assert.Equal(Jpeg2000Marker.SOD, reader.ReadNext().Code);
+                _ = reader.ReadTileData(sot);
+            }
+            else if (segment.Code == Jpeg2000Marker.EOC)
+            {
+                break;
+            }
+        }
+
+        return tiles;
+    }
+
+    private static byte[] ReadTlmPayload(byte[] codestream)
+    {
+        var reader = new Jpeg2000CodestreamReader(codestream);
+        while (!reader.EndOfData)
+        {
+            var segment = reader.ReadNext();
+            if (segment.Code == Jpeg2000Marker.TLM)
+            {
+                return segment.Payload;
+            }
+        }
+
+        throw new Xunit.Sdk.XunitException("TLM marker not found.");
+    }
+
+    private static FellowOakDicom.Imaging.Codec.IDicomCodec CreateCodec(DicomTransferSyntax transferSyntax)
+    {
+        if (transferSyntax == DicomTransferSyntax.HTJ2KLossless)
+        {
+            return new DicomHtJpeg2000LosslessCodec();
+        }
+
+        if (transferSyntax == DicomTransferSyntax.HTJ2KLosslessRPCL)
+        {
+            return new DicomHtJpeg2000LosslessRpclCodec();
+        }
+
+        if (transferSyntax == DicomTransferSyntax.HTJ2K)
+        {
+            return new DicomHtJpeg2000LossyCodec();
+        }
+
+        throw new ArgumentException("Unsupported HTJ2K transfer syntax.", nameof(transferSyntax));
     }
 
     private static bool StartsWith(byte[] bytes, byte[] prefix)

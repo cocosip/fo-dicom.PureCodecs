@@ -64,6 +64,27 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             }
         }
 
+        public IEnumerable<int> GetPrecinctsIncludingEmpty(int resolution)
+        {
+            if (!_bands.TryGetValue(resolution, out var precincts))
+            {
+                yield break;
+            }
+
+            var keys = new List<int>(precincts.Keys);
+            keys.Sort();
+            foreach (var key in keys)
+            {
+                yield return key;
+            }
+        }
+
+        public bool HasPrecinct(int resolution, int precinct)
+        {
+            return _bands.TryGetValue(resolution, out var precincts)
+                && precincts.ContainsKey(precinct);
+        }
+
         public IReadOnlyList<PrecinctBand> GetBands(int resolution, int precinct)
         {
             if (_bands.TryGetValue(resolution, out var precincts)

@@ -77,7 +77,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     for (var l = 0; l < _layerCount; l++)
                     for (var r = 0; r < _resolutionCount; r++)
                     for (var c = 0; c < _componentCount; c++)
-                    foreach (var p in _components[c].GetPrecincts(r))
+                    foreach (var p in GetPrecincts(c, r))
                     {
                         yield return new Jpeg2000PacketModel(l, r, c, p);
                     }
@@ -87,7 +87,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     for (var r = 0; r < _resolutionCount; r++)
                     for (var l = 0; l < _layerCount; l++)
                     for (var c = 0; c < _componentCount; c++)
-                    foreach (var p in _components[c].GetPrecincts(r))
+                    foreach (var p in GetPrecincts(c, r))
                     {
                         yield return new Jpeg2000PacketModel(l, r, c, p);
                     }
@@ -101,7 +101,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                         for (var c = 0; c < _componentCount; c++)
                         for (var l = 0; l < _layerCount; l++)
                         {
-                            if (_components[c].GetBands(r, p).Count != 0)
+                            if (HasPacket(c, r, p))
                             {
                                 yield return new Jpeg2000PacketModel(l, r, c, p);
                             }
@@ -115,7 +115,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     for (var r = 0; r < _resolutionCount; r++)
                     for (var l = 0; l < _layerCount; l++)
                     {
-                        if (_components[c].GetBands(r, p).Count != 0)
+                        if (HasPacket(c, r, p))
                         {
                             yield return new Jpeg2000PacketModel(l, r, c, p);
                         }
@@ -128,7 +128,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     for (var r = 0; r < _resolutionCount; r++)
                     for (var l = 0; l < _layerCount; l++)
                     {
-                        if (_components[c].GetBands(r, p).Count != 0)
+                        if (HasPacket(c, r, p))
                         {
                             yield return new Jpeg2000PacketModel(l, r, c, p);
                         }
@@ -138,6 +138,24 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 default:
                     throw Jpeg2000Binary.CreateException($"JPEG 2000 progression order {_progressionOrder} is not supported.");
             }
+        }
+
+        private IEnumerable<int> GetPrecincts(int component, int resolution)
+        {
+            return IsHighThroughput()
+                ? _components[component].GetPrecinctsIncludingEmpty(resolution)
+                : _components[component].GetPrecincts(resolution);
+        }
+
+        private bool HasPacket(int component, int resolution, int precinct)
+        {
+            return _components[component].GetBands(resolution, precinct).Count != 0
+                || (IsHighThroughput() && _components[component].HasPrecinct(resolution, precinct));
+        }
+
+        private bool IsHighThroughput()
+        {
+            return (_codeBlockStyle & 0x40) != 0;
         }
 
         private int MaxPrecinctIndex(int? resolution = null, int? component = null)
@@ -150,7 +168,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             for (var c = c0; c <= c1; c++)
             for (var r = r0; r <= r1; r++)
             {
-                foreach (var precinct in _components[c].GetPrecincts(r))
+                foreach (var precinct in GetPrecincts(c, r))
                 {
                     if (precinct > max)
                     {

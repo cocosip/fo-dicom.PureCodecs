@@ -6,6 +6,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
     public sealed class Jpeg2000HtFrameCodec
     {
+        private const int OpenJphDecompositionLevels = 5;
+
         public byte[] EncodeFrame(
             DicomPixelData pixelData,
             byte[] frame,
@@ -21,7 +23,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var bitsStored = pixelData.BitsStored;
             var isSigned = pixelData.PixelRepresentation == PixelRepresentation.Signed;
             var samplesPerPixel = pixelData.SamplesPerPixel;
-            var decompositionLevels = EffectiveDecompositionLevels(width, height);
+            var decompositionLevels = OpenJphDecompositionLevels;
             var encodedSteps = lossy
                 ? Jpeg2000HtIrreversibleQuantization.CreateQualityScalarExpoundedSteps(
                     decompositionLevels,
@@ -56,16 +58,27 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             writer.WriteSegment(Jpeg2000Marker.CAP, Jpeg2000MarkerPayloadBuilder.CreateHighThroughputCapabilities(reversible: !lossy, magnitudeBound));
             writer.WriteSegment(Jpeg2000Marker.COD, CreateCodingStylePayload(progressionOrder, samplesPerPixel == 3, decompositionLevels, lossy));
             writer.WriteSegment(Jpeg2000Marker.QCD, qcdPayload);
-            writer.WriteSegment(Jpeg2000Marker.TLM, Jpeg2000MarkerPayloadBuilder.CreateTilePartLengths(TilePartLengths(tileParts)));
-            for (var i = 0; i < tileParts.Length; i++)
+            var writtenTileParts = ApplyOpenJphTilePartDivision(tileParts, progressionOrder);
+            writer.WriteSegment(Jpeg2000Marker.TLM, Jpeg2000MarkerPayloadBuilder.CreateTilePartLengths(TilePartLengths(writtenTileParts)));
+            for (var i = 0; i < writtenTileParts.Length; i++)
             {
-                writer.WriteSegment(Jpeg2000Marker.SOT, Jpeg2000MarkerPayloadBuilder.CreateStartOfTile(tileParts[i].Length, i, tileParts.Length));
+                writer.WriteSegment(Jpeg2000Marker.SOT, Jpeg2000MarkerPayloadBuilder.CreateStartOfTile(writtenTileParts[i].Length, i, writtenTileParts.Length));
                 writer.WriteStandalone(Jpeg2000Marker.SOD);
-                writer.WriteRaw(tileParts[i]);
+                writer.WriteRaw(writtenTileParts[i]);
             }
 
             writer.WriteStandalone(Jpeg2000Marker.EOC);
             return writer.ToArray();
+        }
+
+        private static byte[][] ApplyOpenJphTilePartDivision(byte[][] tileParts, Jpeg2000ProgressionOrder progressionOrder)
+        {
+            if (progressionOrder == Jpeg2000ProgressionOrder.PCRL || progressionOrder == Jpeg2000ProgressionOrder.CPRL)
+            {
+                return new[] { Concat(tileParts) };
+            }
+
+            return tileParts;
         }
 
         public byte[] DecodeFrame(DicomPixelData targetPixelData, byte[] codestream)
@@ -104,17 +117,23 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return lengths;
         }
 
-        private static int EffectiveDecompositionLevels(int width, int height)
+        private static byte[] Concat(byte[][] parts)
         {
-            var levels = 0;
-            while (levels < 5 && (width > 1 || height > 1))
+            var length = 0;
+            foreach (var part in parts)
             {
-                width = (width + 1) >> 1;
-                height = (height + 1) >> 1;
-                levels++;
+                length += part.Length;
             }
 
-            return levels;
+            var result = new byte[length];
+            var offset = 0;
+            foreach (var part in parts)
+            {
+                Buffer.BlockCopy(part, 0, result, offset, part.Length);
+                offset += part.Length;
+            }
+
+            return result;
         }
 
         private static int CreateLossyQuality(int tolerance)

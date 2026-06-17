@@ -26,7 +26,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         public DicomCodecParams GetDefaultParameters()
         {
-            return new DicomHtJpeg2000Params { Jpeg2000ProgressionOrder = _defaultProgressionOrder };
+            return new DicomHtJpeg2000Params { Jpeg2000ProgressionOrder = Jpeg2000ProgressionOrder.RPCL };
         }
 
         public void Encode(DicomPixelData oldPixelData, DicomPixelData newPixelData, DicomCodecParams parameters)
@@ -53,15 +53,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         {
             if (TransferSyntax == DicomTransferSyntax.HTJ2KLosslessRPCL)
             {
-                return Jpeg2000ProgressionOrder.RPCL;
+                return parameters.Jpeg2000ProgressionOrder;
             }
 
-            if (parameters.Jpeg2000ProgressionOrder == Jpeg2000ProgressionOrder.RPCL)
-            {
-                return _defaultProgressionOrder;
-            }
-
-            return parameters.Jpeg2000ProgressionOrder;
+            return _defaultProgressionOrder;
         }
 
         public void Decode(DicomPixelData oldPixelData, DicomPixelData newPixelData, DicomCodecParams parameters)

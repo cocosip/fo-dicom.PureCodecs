@@ -91,6 +91,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 var blocks = components[packet.ComponentIndex][packet.ResolutionLevel];
                 if (blocks.Count == 0)
                 {
+                    bytesByResolution[packet.ResolutionLevel].Add(0);
                     continue;
                 }
 
@@ -347,6 +348,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         private static bool HasPrecinct(IReadOnlyList<Jpeg2000EncodedBlock> blocks, int precinct)
         {
+            if (blocks.Count == 0 && precinct == 0)
+            {
+                return true;
+            }
+
             foreach (var block in blocks)
             {
                 if (block.Precinct == precinct)

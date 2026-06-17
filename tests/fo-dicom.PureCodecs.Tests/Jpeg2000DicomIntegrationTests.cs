@@ -32,17 +32,13 @@ public sealed class Jpeg2000DicomIntegrationTests
     }
 
     [Fact]
-    public void Htj2k_lossless_default_parameters_use_transfer_syntax_progression()
+    public void Htj2k_lossless_default_parameters_match_openjph_wrapper()
     {
         var codec = new DicomHtJpeg2000LosslessCodec();
 
         var parameters = Assert.IsType<PureHtJpeg2000Params>(codec.GetDefaultParameters());
 
-        Assert.True(parameters.Irreversible);
-        Assert.Equal(5, parameters.NumberOfDecompositions);
-        Assert.True(parameters.EmployColorTransform);
-        Assert.Equal(ProgressionOrder.LRCP, parameters.ProgressionOrder);
-        Assert.False(parameters.InsertTlmMarkers);
+        Assert.Equal(ProgressionOrder.RPCL, parameters.ProgressionOrder);
     }
 
     [Fact]
@@ -236,7 +232,7 @@ public sealed class Jpeg2000DicomIntegrationTests
     }
 
     [Fact]
-    public void Htj2k_accepts_fo_dicom_core_parameters_and_writes_progression_order()
+    public void Htj2k_lossless_ignores_core_progression_parameters_like_fo_dicom_codecs()
     {
         var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 4, columns: 4);
         var source = DicomPixelData.Create(dataset);
@@ -250,11 +246,11 @@ public sealed class Jpeg2000DicomIntegrationTests
 
         codec.Encode(source, compressed, parameters);
 
-        Assert.Equal(Jpeg2000ProgressionOrder.CPRL, ReadProgressionOrder(compressed.GetFrame(0).Data));
+        Assert.Equal(Jpeg2000ProgressionOrder.RPCL, ReadProgressionOrder(compressed.GetFrame(0).Data));
     }
 
     [Fact]
-    public void Htj2k_lossless_core_default_parameters_use_transfer_syntax_progression()
+    public void Htj2k_lossless_core_default_parameters_use_openjph_default_progression()
     {
         var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 4, columns: 4);
         var source = DicomPixelData.Create(dataset);
@@ -264,7 +260,7 @@ public sealed class Jpeg2000DicomIntegrationTests
 
         codec.Encode(source, compressed, new CoreHtJpeg2000Params());
 
-        Assert.Equal(Jpeg2000ProgressionOrder.LRCP, ReadProgressionOrder(compressed.GetFrame(0).Data));
+        Assert.Equal(Jpeg2000ProgressionOrder.RPCL, ReadProgressionOrder(compressed.GetFrame(0).Data));
     }
 
     [Fact]
