@@ -475,16 +475,12 @@ public sealed class Jpeg2000StandardInternalTests
     }
 
     [Theory]
-    [InlineData(@"artifacts\fo-dicom-codecs-baseline\fo_dicom_codecs_j2k_lossless.dcm", false)]
-    [InlineData(@"artifacts\fo-dicom-codecs-baseline\fo_dicom_codecs_j2k_lossy.dcm", true)]
-    public void Openjpeg_real_fixture_packet_layers_match_managed_default_layer_shape(string referenceRelativePath, bool lossy)
+    [InlineData("fo_dicom_codecs_j2k_lossless.dcm", false)]
+    [InlineData("fo_dicom_codecs_j2k_lossy.dcm", true)]
+    public void Openjpeg_real_fixture_packet_layers_match_managed_default_layer_shape(string referenceFileName, bool lossy)
     {
-        const string inputPath = @"D:\1.dcm";
-        var referencePath = ResolveRepositoryRelativePath(referenceRelativePath);
-        if (!File.Exists(inputPath) || !File.Exists(referencePath))
-        {
-            return;
-        }
+        var inputPath = RegressionFixturePaths.LocalReal1;
+        var referencePath = RegressionFixturePaths.Jpeg2000Baseline(referenceFileName);
 
         var referenceFrame = DicomPixelData.Create(DicomFile.Open(referencePath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
         var file = DicomFile.Open(inputPath, FileReadOption.ReadAll);
@@ -519,12 +515,8 @@ public sealed class Jpeg2000StandardInternalTests
     [Fact]
     public void Openjpeg_rgb_lossy_fixture_packet_layers_match_managed_layer_shape()
     {
-        var referencePath = ResolveRepositoryRelativePath(@"artifacts\fo-dicom-codecs-baseline\fo_dicom_codecs_unit8_j2k_lossy.j2k");
-        var purePath = ResolveRepositoryRelativePath(@"artifacts\fo-dicom-codecs-baseline\purecodecs_unit8_j2k_lossy.j2k");
-        if (!File.Exists(referencePath) || !File.Exists(purePath))
-        {
-            return;
-        }
+        var referencePath = RegressionFixturePaths.Jpeg2000Baseline("fo_dicom_codecs_unit8_j2k_lossy.j2k");
+        var purePath = RegressionFixturePaths.Jpeg2000Baseline("purecodecs_unit8_j2k_lossy.j2k");
 
         var referenceFrame = File.ReadAllBytes(referencePath);
         var pureFrame = File.ReadAllBytes(purePath);
@@ -560,11 +552,7 @@ public sealed class Jpeg2000StandardInternalTests
     [Fact]
     public void Standard_reversible_encoder_preserves_local_real_fixture_through_default_layers()
     {
-        const string inputPath = @"D:\1.dcm";
-        if (!File.Exists(inputPath))
-        {
-            return;
-        }
+        var inputPath = RegressionFixturePaths.LocalReal1;
 
         var file = DicomFile.Open(inputPath, FileReadOption.ReadAll);
         var source = DicomPixelData.Create(file.Dataset);
@@ -581,11 +569,7 @@ public sealed class Jpeg2000StandardInternalTests
     [Fact]
     public void Standard_reversible_encoder_preserves_local_real_fixture_with_single_layer()
     {
-        const string inputPath = @"D:\1.dcm";
-        if (!File.Exists(inputPath))
-        {
-            return;
-        }
+        var inputPath = RegressionFixturePaths.LocalReal1;
 
         var file = DicomFile.Open(inputPath, FileReadOption.ReadAll);
         var source = DicomPixelData.Create(file.Dataset);
@@ -613,11 +597,7 @@ public sealed class Jpeg2000StandardInternalTests
     [Fact]
     public void Standard_reversible_layered_tile_packets_decode_to_original_coefficients_for_local_real_fixture()
     {
-        const string inputPath = @"D:\1.dcm";
-        if (!File.Exists(inputPath))
-        {
-            return;
-        }
+        var inputPath = RegressionFixturePaths.LocalReal1;
 
         var file = DicomFile.Open(inputPath, FileReadOption.ReadAll);
         var pixelData = DicomPixelData.Create(file.Dataset);
@@ -661,11 +641,7 @@ public sealed class Jpeg2000StandardInternalTests
     [Fact]
     public void Standard_reversible_layered_tile_packets_preserve_encoder_codeblock_payloads_for_local_real_fixture()
     {
-        const string inputPath = @"D:\1.dcm";
-        if (!File.Exists(inputPath))
-        {
-            return;
-        }
+        var inputPath = RegressionFixturePaths.LocalReal1;
 
         var file = DicomFile.Open(inputPath, FileReadOption.ReadAll);
         var pixelData = DicomPixelData.Create(file.Dataset);
@@ -725,11 +701,7 @@ public sealed class Jpeg2000StandardInternalTests
     [Fact]
     public void Tier1_reversible_real_fixture_codeblock_restores_small_coefficients_after_openjpeg_postscale()
     {
-        const string inputPath = @"D:\1.dcm";
-        if (!File.Exists(inputPath))
-        {
-            return;
-        }
+        var inputPath = RegressionFixturePaths.LocalReal1;
 
         var file = DicomFile.Open(inputPath, FileReadOption.ReadAll);
         var pixelData = DicomPixelData.Create(file.Dataset);
@@ -783,11 +755,7 @@ public sealed class Jpeg2000StandardInternalTests
     [Fact]
     public void Irreversible_real_fixture_codeblock_payload_prefix_matches_openjpeg_after_float32_dwt()
     {
-        const string inputPath = @"D:\1.dcm";
-        if (!File.Exists(inputPath))
-        {
-            return;
-        }
+        var inputPath = RegressionFixturePaths.LocalReal1;
 
         var file = DicomFile.Open(inputPath, FileReadOption.ReadAll);
         var pixelData = DicomPixelData.Create(file.Dataset);
@@ -842,11 +810,7 @@ public sealed class Jpeg2000StandardInternalTests
             && Property<int>(item, "Y") == 0);
         var passLengths = Property<int[]>(block, "PassLengths");
         var blockData = Property<byte[]>(block, "Data");
-        var referencePath = ResolveRepositoryRelativePath(@"artifacts\fo-dicom-codecs-baseline\fo_dicom_codecs_j2k_lossy.dcm");
-        if (!File.Exists(referencePath))
-        {
-            return;
-        }
+        var referencePath = RegressionFixturePaths.Jpeg2000Baseline("fo_dicom_codecs_j2k_lossy.dcm");
 
         var referenceFrame = DicomPixelData.Create(DicomFile.Open(referencePath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
         var referenceBlockData = ExtractDecodedBlockData(referenceFrame, resolution: 3, orientation: 2, x: 0, y: 0);
@@ -1841,28 +1805,6 @@ public sealed class Jpeg2000StandardInternalTests
         }
 
         throw new InvalidOperationException("COD marker was not found.");
-    }
-
-    private static string ResolveRepositoryRelativePath(string path)
-    {
-        if (Path.IsPathRooted(path))
-        {
-            return path;
-        }
-
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory != null)
-        {
-            var candidate = Path.Combine(directory.FullName, path);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            directory = directory.Parent;
-        }
-
-        return Path.GetFullPath(path);
     }
 
     private static double[] DequantizeLikeManagedDecoder(int[] quantized, int width, int height, int precision, ushort[] encodedSteps)

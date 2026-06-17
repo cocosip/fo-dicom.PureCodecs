@@ -63,11 +63,7 @@ public sealed class JpegLsCodecRoundTripTests
     [Fact]
     public void Near_lossless_encode_pads_odd_length_jpeg_ls_frames_to_even_length()
     {
-        const string inputPath = @"D:\1.dcm";
-        if (!File.Exists(inputPath))
-        {
-            return;
-        }
+        var inputPath = RegressionFixturePaths.LocalReal1;
 
         var codec = new DicomJpegLsNearLosslessCodec();
         var rawPixelData = DicomPixelData.Create(DicomFile.Open(inputPath, FileReadOption.ReadAll).Dataset);

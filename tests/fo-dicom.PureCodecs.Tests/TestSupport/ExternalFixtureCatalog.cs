@@ -32,14 +32,10 @@ internal sealed class ExternalFixtureCatalog
     {
         var codecsRoot = ResolveRoot(
             "FO_DICOM_CODECS_SOURCE_ROOT",
-            Path.Combine(AppContext.BaseDirectory, "TestSupport", "Fixtures", "fo-dicom.Codecs"),
-            Path.Combine("D:", "Code", "dotnet-source", "fo-dicom.Codecs"),
-            Path.Combine("D:", "Code", "ts", "dicom-ts", "source-code", "fo-dicom.Codecs"));
+            Path.Combine(AppContext.BaseDirectory, "TestSupport", "Fixtures", "fo-dicom.Codecs"));
         var foDicomRoot = ResolveRoot(
             "FO_DICOM_SOURCE_ROOT",
-            Path.Combine(AppContext.BaseDirectory, "TestSupport", "Fixtures", "fo-dicom"),
-            Path.Combine("D:", "Code", "dotnet-source", "fo-dicom"),
-            Path.Combine("D:", "Code", "ts", "dicom-ts", "source-code", "fo-dicom"));
+            Path.Combine(AppContext.BaseDirectory, "TestSupport", "Fixtures", "fo-dicom"));
 
         if (codecsRoot is null)
         {

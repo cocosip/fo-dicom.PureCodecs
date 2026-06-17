@@ -13,9 +13,11 @@ public sealed class ToolsCompressionPlanTests
     [Fact]
     public void Parse_accepts_single_input_file()
     {
-        var options = ToolOptions.Parse(new[] { @"D:\dicom\sample.dcm" });
+        var inputPath = Path.Combine("dicom", "sample.dcm");
 
-        Assert.Equal(@"D:\dicom\sample.dcm", options.InputPath);
+        var options = ToolOptions.Parse(new[] { inputPath });
+
+        Assert.Equal(inputPath, options.InputPath);
         Assert.Null(options.OutputDirectory);
         Assert.False(options.ShowHelp);
     }
@@ -23,10 +25,13 @@ public sealed class ToolsCompressionPlanTests
     [Fact]
     public void Parse_accepts_single_input_file_with_output_directory()
     {
-        var options = ToolOptions.Parse(new[] { @"D:\dicom\sample.dcm", "-o", @"D:\exports" });
+        var inputPath = Path.Combine("dicom", "sample.dcm");
+        var outputDirectory = Path.Combine("exports");
 
-        Assert.Equal(@"D:\dicom\sample.dcm", options.InputPath);
-        Assert.Equal(@"D:\exports", options.OutputDirectory);
+        var options = ToolOptions.Parse(new[] { inputPath, "-o", outputDirectory });
+
+        Assert.Equal(inputPath, options.InputPath);
+        Assert.Equal(outputDirectory, options.OutputDirectory);
         Assert.False(options.ShowHelp);
     }
 
@@ -34,7 +39,7 @@ public sealed class ToolsCompressionPlanTests
     public void Parse_rejects_unknown_options()
     {
         var exception = Assert.Throws<ArgumentException>(
-            () => ToolOptions.Parse(new[] { "--compress-all", @"D:\dicom\sample.dcm" }));
+            () => ToolOptions.Parse(new[] { "--compress-all", Path.Combine("dicom", "sample.dcm") }));
 
         Assert.Equal("Unknown option --compress-all.", exception.Message);
     }
@@ -66,37 +71,41 @@ public sealed class ToolsCompressionPlanTests
     [Fact]
     public void CreateOutputPlan_uses_default_output_directory_and_stable_suffixes()
     {
+        var inputPath = Path.Combine("dicom", "sample.image.dcm");
+        var expectedOutputDirectory = Path.Combine("dicom", "sample.image_compressed");
         var plan = CompressionPlan.Create(
-            @"D:\dicom\sample.image.dcm",
+            inputPath,
             outputDirectory: null,
             DicomPixelDataFixtures.CreateMonochrome8());
 
-        Assert.Equal(@"D:\dicom\sample.image_compressed", plan.OutputDirectory);
+        Assert.Equal(expectedOutputDirectory, plan.OutputDirectory);
         Assert.Contains(plan.Items, item =>
             item.Format.TransferSyntax == DicomTransferSyntax.JPEGLSLossless &&
-            item.OutputPath == @"D:\dicom\sample.image_compressed\sample.image_jpegls_lossless.dcm");
+            item.OutputPath == Path.Combine(expectedOutputDirectory, "sample.image_jpegls_lossless.dcm"));
         Assert.Contains(plan.Items, item =>
             item.Format.TransferSyntax == DicomTransferSyntax.HTJ2KLosslessRPCL &&
-            item.OutputPath == @"D:\dicom\sample.image_compressed\sample.image_htj2k_lossless_rpcl.dcm");
+            item.OutputPath == Path.Combine(expectedOutputDirectory, "sample.image_htj2k_lossless_rpcl.dcm"));
     }
 
     [Fact]
     public void CreateOutputPlan_uses_explicit_output_directory()
     {
+        var inputPath = Path.Combine("dicom", "sample.dcm");
+        var outputDirectory = Path.Combine("exports");
         var plan = CompressionPlan.Create(
-            @"D:\dicom\sample.dcm",
-            @"D:\exports",
+            inputPath,
+            outputDirectory,
             DicomPixelDataFixtures.CreateMonochrome8());
 
-        Assert.Equal(@"D:\exports", plan.OutputDirectory);
-        Assert.All(plan.Items, item => Assert.StartsWith(@"D:\exports\", item.OutputPath));
+        Assert.Equal(outputDirectory, plan.OutputDirectory);
+        Assert.All(plan.Items, item => Assert.StartsWith(outputDirectory + Path.DirectorySeparatorChar, item.OutputPath));
     }
 
     [Fact]
     public void CreateOutputPlan_skips_jpeg_baseline_for_16_bit_input()
     {
         var plan = CompressionPlan.Create(
-            @"D:\dicom\sample.dcm",
+            Path.Combine("dicom", "sample.dcm"),
             outputDirectory: null,
             DicomPixelDataFixtures.CreateMonochrome16());
 
@@ -111,7 +120,7 @@ public sealed class ToolsCompressionPlanTests
     public void CreateOutputPlan_skips_jpeg_process_2_4_for_16_bit_input()
     {
         var plan = CompressionPlan.Create(
-            @"D:\dicom\sample.dcm",
+            Path.Combine("dicom", "sample.dcm"),
             outputDirectory: null,
             DicomPixelDataFixtures.CreateMonochrome16());
 
@@ -126,7 +135,7 @@ public sealed class ToolsCompressionPlanTests
     public void CreateOutputPlan_enables_htj2k_after_standard_codestream_alignment()
     {
         var plan = CompressionPlan.Create(
-            @"D:\dicom\sample.dcm",
+            Path.Combine("dicom", "sample.dcm"),
             outputDirectory: null,
             DicomPixelDataFixtures.CreateMonochrome8());
 
@@ -147,7 +156,7 @@ public sealed class ToolsCompressionPlanTests
     public void CreateOutputPlan_skips_jpeg_sequential_dct_for_unsupported_8_bit_samples_per_pixel()
     {
         var plan = CompressionPlan.Create(
-            @"D:\dicom\sample.dcm",
+            Path.Combine("dicom", "sample.dcm"),
             outputDirectory: null,
             DicomPixelDataFixtures.CreateBaseDataset(
                 rows: 2,
@@ -171,7 +180,7 @@ public sealed class ToolsCompressionPlanTests
         var dataset = DicomPixelDataFixtures.CreateRgbInterleaved();
         dataset.AddOrUpdate(DicomTag.PhotometricInterpretation, "HSV");
 
-        var plan = CompressionPlan.Create(@"D:\dicom\sample.dcm", outputDirectory: null, dataset);
+        var plan = CompressionPlan.Create(Path.Combine("dicom", "sample.dcm"), outputDirectory: null, dataset);
 
         AssertSequentialJpegSkipped(plan, "JPEG sequential DCT does not support photometric interpretation HSV.");
     }
@@ -179,11 +188,7 @@ public sealed class ToolsCompressionPlanTests
     [Fact]
     public void CompressAll_outputs_from_local_real_fixture_decode_and_render()
     {
-        const string inputPath = @"D:\1.dcm";
-        if (!File.Exists(inputPath))
-        {
-            return;
-        }
+        var inputPath = GetRegressionInputPath();
 
         var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression");
         if (Directory.Exists(outputDirectory))
@@ -222,11 +227,7 @@ public sealed class ToolsCompressionPlanTests
     [Fact]
     public void CompressAll_rle_output_from_local_real_fixture_round_trips_exactly()
     {
-        const string inputPath = @"D:\1.dcm";
-        if (!File.Exists(inputPath))
-        {
-            return;
-        }
+        var inputPath = GetRegressionInputPath();
 
         var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-rle");
         if (Directory.Exists(outputDirectory))
@@ -258,17 +259,14 @@ public sealed class ToolsCompressionPlanTests
     }
 
     [Theory]
-    [InlineData("JPEG Lossless Process 14", @"D:\1_transcoded\1_jpeg_lossless.dcm")]
-    [InlineData("JPEG Lossless Process 14 SV1", @"D:\1_transcoded\1_jpeg_lossless_sv1.dcm")]
+    [InlineData("JPEG Lossless Process 14", @"Regression\Transcoded\1_jpeg_lossless.dcm")]
+    [InlineData("JPEG Lossless Process 14 SV1", @"Regression\Transcoded\1_jpeg_lossless_sv1.dcm")]
     public void CompressAll_jpeg_lossless_outputs_from_local_real_fixture_match_reference_frame_size_and_round_trip(
         string formatName,
         string referencePath)
     {
-        const string inputPath = @"D:\1.dcm";
-        if (!File.Exists(inputPath) || !File.Exists(referencePath))
-        {
-            return;
-        }
+        var inputPath = GetRegressionInputPath();
+        referencePath = ResolveFixturePath(referencePath);
 
         var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-jpeg");
         if (Directory.Exists(outputDirectory))
@@ -297,18 +295,15 @@ public sealed class ToolsCompressionPlanTests
     }
 
     [Theory]
-    [InlineData("JPEG-LS Lossless", @"D:\1_transcoded\1_jpegls_lossless.dcm", 0)]
-    [InlineData("JPEG-LS Near-Lossless", @"D:\1_transcoded\1_jpegls_near_lossless.dcm", 2)]
+    [InlineData("JPEG-LS Lossless", @"Regression\Transcoded\1_jpegls_lossless.dcm", 0)]
+    [InlineData("JPEG-LS Near-Lossless", @"Regression\Transcoded\1_jpegls_near_lossless.dcm", 2)]
     public void CompressAll_jpegls_outputs_from_local_real_fixture_match_reference_frame_size_and_round_trip(
         string formatName,
         string referencePath,
         int tolerance)
     {
-        const string inputPath = @"D:\1.dcm";
-        if (!File.Exists(inputPath) || !File.Exists(referencePath))
-        {
-            return;
-        }
+        var inputPath = GetRegressionInputPath();
+        referencePath = ResolveFixturePath(referencePath);
 
         var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-jpegls");
         if (Directory.Exists(outputDirectory))
@@ -345,18 +340,14 @@ public sealed class ToolsCompressionPlanTests
     }
 
     [Theory]
-    [InlineData("JPEG 2000 Lossless", @"artifacts\fo-dicom-codecs-baseline\fo_dicom_codecs_j2k_lossless.dcm", 0)]
+    [InlineData("JPEG 2000 Lossless", @"Regression\Jpeg2000Baseline\fo_dicom_codecs_j2k_lossless.dcm", 0)]
     public void CompressAll_jpeg2000_classic_lossless_output_from_local_real_fixture_uses_standard_codestream_and_matches_reference_size(
         string formatName,
         string referencePath,
         int tolerance)
     {
-        const string inputPath = @"D:\1.dcm";
-        referencePath = ResolveRepositoryRelativePath(referencePath);
-        if (!File.Exists(inputPath) || !File.Exists(referencePath))
-        {
-            return;
-        }
+        var inputPath = GetRegressionInputPath();
+        referencePath = ResolveFixturePath(referencePath);
 
         var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-j2k");
         if (Directory.Exists(outputDirectory))
@@ -404,12 +395,8 @@ public sealed class ToolsCompressionPlanTests
     [Fact]
     public void CompressAll_jpeg2000_lossy_output_from_local_real_fixture_targets_reference_size_and_round_trips()
     {
-        const string inputPath = @"D:\1.dcm";
-        const string referencePath = @"D:\1_transcoded\1_j2k_lossy.dcm";
-        if (!File.Exists(inputPath) || !File.Exists(referencePath))
-        {
-            return;
-        }
+        var inputPath = GetRegressionInputPath();
+        var referencePath = ResolveFixturePath(@"Regression\Transcoded\1_j2k_lossy.dcm");
 
         var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-j2k-lossy-size");
         if (Directory.Exists(outputDirectory))
@@ -442,11 +429,7 @@ public sealed class ToolsCompressionPlanTests
     [Fact]
     public void CompressAll_htj2k_outputs_from_local_real_fixture_decode_with_native_codecs_and_lossy_is_smaller()
     {
-        const string inputPath = @"D:\1.dcm";
-        if (!File.Exists(inputPath))
-        {
-            return;
-        }
+        var inputPath = GetRegressionInputPath();
 
         var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-htj2k-native");
         if (Directory.Exists(outputDirectory))
@@ -541,25 +524,18 @@ public sealed class ToolsCompressionPlanTests
         throw new InvalidOperationException("JPEG 2000 SOT marker was not found.");
     }
 
-    private static string ResolveRepositoryRelativePath(string path)
+    private static string GetRegressionInputPath()
     {
-        if (Path.IsPathRooted(path))
+        return RegressionFixturePaths.LocalReal1;
+    }
+
+    private static string ResolveFixturePath(string path)
+    {
+        if (path.IndexOf("Jpeg2000Baseline", StringComparison.OrdinalIgnoreCase) >= 0)
         {
-            return path;
+            return RegressionFixturePaths.Jpeg2000Baseline(Path.GetFileName(path));
         }
 
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var candidate = Path.Combine(directory.FullName, path);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            directory = directory.Parent;
-        }
-
-        return Path.GetFullPath(path);
+        return RegressionFixturePaths.Transcoded(Path.GetFileName(path));
     }
 }

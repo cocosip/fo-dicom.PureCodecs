@@ -28,5 +28,6 @@
   <ItemGroup>
     <Content Include="TestSupport\Fixtures\**\*.dcm" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="TestSupport\Fixtures\**\*.j2c" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TestSupport\Fixtures\**\*.j2k" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
