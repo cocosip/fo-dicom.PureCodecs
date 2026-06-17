@@ -91,7 +91,6 @@ jobs:
     environment: release
     permissions:
       contents: read
-      id-token: write
 
     steps:
       - name: Download NuGet packages
@@ -105,14 +104,22 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: NuGet login
-        id: login
-        uses: NuGet/login@v1
-        with:
-          user: ${{ secrets.NUGET_USER }}
+      - name: Validate NuGet API key
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${NUGET_API_KEY}" ]]; then
+            echo "::error::Set the NUGET_API_KEY secret to a nuget.org API key for the release environment or repository."
+            exit 1
+          fi
 
       - name: Publish to NuGet.org
         shell: bash
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -125,7 +132,7 @@ jobs:
 
           for package in "${packages[@]}"; do
             dotnet nuget push "$package" \
-              --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
+              --api-key "$NUGET_API_KEY" \
               --source https://api.nuget.org/v3/index.json \
               --skip-duplicate
           done
