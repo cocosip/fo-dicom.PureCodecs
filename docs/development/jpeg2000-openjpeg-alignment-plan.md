@@ -31,10 +31,12 @@ follows:
      irreversible coding.
 3. Build quality layers from `RateLevels` and `Rate`:
    - Add each `RateLevels[r]` while it is greater than `Rate`.
-   - Add the target `Rate * BitsStored / BitsAllocated`.
+   - Add the target `Rate` without scaling it by `BitsStored / BitsAllocated`.
    - For JPEG 2000 Lossless with positive `Rate`, append a final `0` rate layer
      for the lossless tail.
    - OpenJPEG later normalizes rates `<= 1.0` to `0.0`.
+   - Regression coverage includes 12-bit stored in 16-bit allocated input so
+     the requested `Rate` is not accidentally reduced for packed precision.
 4. Copy DICOM samples into `opj_image_comp_t.data`:
    - `prec = BitsStored`, `bpp = BitsAllocated`, `sgnd = PixelRepresentation`
      unless `EncodeSignedPixelValuesAsUnsigned` is set.

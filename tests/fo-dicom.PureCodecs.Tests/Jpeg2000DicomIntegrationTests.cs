@@ -290,6 +290,39 @@ public sealed class Jpeg2000DicomIntegrationTests
     }
 
     [Fact]
+    public void Jpeg2000_lossless_accepts_palette_color_index_data()
+    {
+        var dataset = DicomPixelDataFixtures.CreatePaletteColor8(rows: 2, columns: 3);
+        var source = DicomPixelData.Create(dataset);
+        var compressed = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.JPEG2000Lossless), true);
+        var decoded = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
+        var codec = new DicomJpeg2000LosslessCodec();
+
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
+
+        Assert.Equal("PALETTE COLOR", compressed.PhotometricInterpretation.Value);
+        PixelDataAssertions.FramesMatchExactly(source, decoded);
+    }
+
+    [Fact]
+    public void Jpeg2000_lossy_accepts_palette_color_index_data()
+    {
+        var dataset = DicomPixelDataFixtures.CreatePaletteColor8(rows: 64, columns: 64);
+        var source = DicomPixelData.Create(dataset);
+        var compressed = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.JPEG2000Lossy), true);
+        var decoded = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
+        var codec = new DicomJpeg2000LossyCodec();
+
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
+
+        Assert.Equal("PALETTE COLOR", compressed.PhotometricInterpretation.Value);
+        PixelDataAssertions.AssertFrameCount(source, compressed);
+        Assert.Equal(source.GetFrame(0).Data.Length, decoded.GetFrame(0).Data.Length);
+    }
+
+    [Fact]
     public void Jpeg2000_lossy_preserves_frame_count_and_required_compression_tags()
     {
         AssertPreservesCompressionTags(

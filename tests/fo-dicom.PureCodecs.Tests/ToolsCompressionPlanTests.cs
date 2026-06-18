@@ -406,7 +406,7 @@ public sealed class ToolsCompressionPlanTests
     public void CompressAll_jpeg2000_lossy_output_from_local_real_fixture_targets_reference_size_and_round_trips()
     {
         var inputPath = GetRegressionInputPath();
-        var referencePath = ResolveFixturePath(@"Regression\Transcoded\1_j2k_lossy.dcm");
+        var referencePath = ResolveFixturePath(@"Regression\Jpeg2000Baseline\fo_dicom_codecs_j2k_lossy.dcm");
 
         var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-j2k-lossy-size");
         if (Directory.Exists(outputDirectory))

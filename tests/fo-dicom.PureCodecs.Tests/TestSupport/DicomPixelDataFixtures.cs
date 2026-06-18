@@ -50,6 +50,28 @@ internal static class DicomPixelDataFixtures
         return dataset;
     }
 
+    public static DicomDataset CreatePaletteColor8(
+        ushort rows = 4,
+        ushort columns = 5,
+        byte[]? frame = null)
+    {
+        var pixels = frame ?? CreateRamp(rows * columns, seed: 37);
+        var dataset = CreateBaseDataset(
+            rows,
+            columns,
+            samplesPerPixel: 1,
+            photometricInterpretation: PhotometricInterpretation.PaletteColor,
+            bitsAllocated: 8,
+            bitsStored: 8,
+            highBit: 7,
+            planarConfiguration: null,
+            numberOfFrames: 1,
+            transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian);
+
+        DicomPixelData.Create(dataset, true).AddFrame(new MemoryByteBuffer(pixels));
+        return dataset;
+    }
+
     public static DicomDataset CreateRgbInterleaved(
         ushort rows = 3,
         ushort columns = 3,

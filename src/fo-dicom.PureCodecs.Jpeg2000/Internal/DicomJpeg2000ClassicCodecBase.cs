@@ -120,8 +120,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
             if (parameters.Rate > 0)
             {
-                var adjustedRate = parameters.Rate * bitsStored / bitsAllocated;
-                layerRates.Add(adjustedRate);
+                layerRates.Add(parameters.Rate);
             }
 
             if (TransferSyntax == DicomTransferSyntax.JPEG2000Lossless && parameters.Rate > 0)
@@ -158,6 +157,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             if (photometric != PhotometricInterpretation.Monochrome1.Value
                 && photometric != PhotometricInterpretation.Monochrome2.Value
                 && photometric != PhotometricInterpretation.Rgb.Value
+                && photometric != PhotometricInterpretation.PaletteColor.Value
                 && photometric != PhotometricInterpretation.YbrIct.Value
                 && photometric != PhotometricInterpretation.YbrRct.Value
                 && photometric != "YBR_FULL"

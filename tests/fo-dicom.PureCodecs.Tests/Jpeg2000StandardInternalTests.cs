@@ -115,6 +115,17 @@ public sealed class Jpeg2000StandardInternalTests
     }
 
     [Fact]
+    public void Classic_jpeg2000_layer_rates_do_not_scale_rate_by_stored_precision()
+    {
+        var parameters = new DicomJpeg2000Params { Rate = 20 };
+        var lossy = new DicomJpeg2000LossyCodec();
+
+        var rates = (double[])Invoke(lossy, "ResolveLayerRates", parameters, 12, 16);
+
+        Assert.Equal(new[] { 1280d, 640d, 320d, 160d, 80d, 40d, 20d }, rates);
+    }
+
+    [Fact]
     public void Standard_encoder_sample_mapping_matches_openjpeg_for_sixteen_bit_signed_input()
     {
         var frame = new byte[] { 0xFF, 0xFF, 0x00, 0x80, 0x00, 0x00, 0xFF, 0x7F };
