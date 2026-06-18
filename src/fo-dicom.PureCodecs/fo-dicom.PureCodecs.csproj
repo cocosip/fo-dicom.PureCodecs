@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <AssemblyName>fo-dicom.PureCodecs</AssemblyName>
+    <AssemblyName>PureCodecs.FoDicom</AssemblyName>
     <RootNamespace>FellowOakDicom.PureCodecs</RootNamespace>
     <PackageId>fo-dicom.PureCodecs</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>fo-dicom.PureCodecs contributors</Authors>
     <Company>fo-dicom.PureCodecs contributors</Company>
     <Description>Pure C# codec package for fo-dicom.</Description>
