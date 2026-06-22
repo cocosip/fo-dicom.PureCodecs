@@ -43,19 +43,36 @@ internal static class Phase1TransferSyntaxes
         }
     }
 
-    public static TheoryData<DicomTransferSyntax, IDicomCodec, int?> RoundTripCodecs => new()
+    public static TheoryData<DicomTransferSyntax, IDicomCodec, int?> RoundTripCodecs
     {
-        { DicomTransferSyntax.RLELossless, new DicomRleLosslessCodec(), null },
-        { DicomTransferSyntax.JPEGProcess1, new DicomJpegProcess1Codec(), 20 },
-        { DicomTransferSyntax.JPEGProcess2_4, new DicomJpegProcess2_4Codec(), 20 },
-        { DicomTransferSyntax.JPEGProcess14, new DicomJpegLossless14Codec(), null },
-        { DicomTransferSyntax.JPEGProcess14SV1, new DicomJpegLossless14SV1Codec(), null },
-        { DicomTransferSyntax.JPEGLSLossless, new DicomJpegLsLosslessCodec(), null },
-        { DicomTransferSyntax.JPEGLSNearLossless, new DicomJpegLsNearLosslessCodec(), 2 },
-        { DicomTransferSyntax.JPEG2000Lossless, new DicomJpeg2000LosslessCodec(), null },
-        { DicomTransferSyntax.JPEG2000Lossy, new DicomJpeg2000LossyCodec(), 6 },
-        { DicomTransferSyntax.HTJ2KLossless, new DicomHtJpeg2000LosslessCodec(), null },
-        { DicomTransferSyntax.HTJ2KLosslessRPCL, new DicomHtJpeg2000LosslessRpclCodec(), null },
-        { DicomTransferSyntax.HTJ2K, new DicomHtJpeg2000LossyCodec(), 128 },
-    };
+        get
+        {
+            var data = new TheoryData<DicomTransferSyntax, IDicomCodec, int?>();
+            foreach (var row in RoundTripCodecRows)
+            {
+                data.Add(row.Syntax, row.Codec, row.Tolerance);
+            }
+
+            return data;
+        }
+    }
+
+    public static IEnumerable<(DicomTransferSyntax Syntax, IDicomCodec Codec, int? Tolerance)> RoundTripCodecRows
+    {
+        get
+        {
+            yield return (DicomTransferSyntax.RLELossless, new DicomRleLosslessCodec(), null);
+            yield return (DicomTransferSyntax.JPEGProcess1, new DicomJpegProcess1Codec(), 20);
+            yield return (DicomTransferSyntax.JPEGProcess2_4, new DicomJpegProcess2_4Codec(), 20);
+            yield return (DicomTransferSyntax.JPEGProcess14, new DicomJpegLossless14Codec(), null);
+            yield return (DicomTransferSyntax.JPEGProcess14SV1, new DicomJpegLossless14SV1Codec(), null);
+            yield return (DicomTransferSyntax.JPEGLSLossless, new DicomJpegLsLosslessCodec(), null);
+            yield return (DicomTransferSyntax.JPEGLSNearLossless, new DicomJpegLsNearLosslessCodec(), 2);
+            yield return (DicomTransferSyntax.JPEG2000Lossless, new DicomJpeg2000LosslessCodec(), null);
+            yield return (DicomTransferSyntax.JPEG2000Lossy, new DicomJpeg2000LossyCodec(), 6);
+            yield return (DicomTransferSyntax.HTJ2KLossless, new DicomHtJpeg2000LosslessCodec(), null);
+            yield return (DicomTransferSyntax.HTJ2KLosslessRPCL, new DicomHtJpeg2000LosslessRpclCodec(), null);
+            yield return (DicomTransferSyntax.HTJ2K, new DicomHtJpeg2000LossyCodec(), 128);
+        }
+    }
 }

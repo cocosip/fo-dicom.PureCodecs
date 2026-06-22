@@ -220,14 +220,13 @@ public sealed class FullCompatibilityMatrixTests
         get
         {
             var data = new TheoryData<DicomTransferSyntax, IDicomCodec, int?>();
-            foreach (var row in Phase1TransferSyntaxes.RoundTripCodecs)
+            foreach (var row in Phase1TransferSyntaxes.RoundTripCodecRows)
             {
-                if (row[0] is DicomTransferSyntax syntax
-                    && syntax != DicomTransferSyntax.JPEGProcess1
-                    && syntax != DicomTransferSyntax.JPEGProcess2_4
-                    && syntax != DicomTransferSyntax.HTJ2K)
+                if (row.Syntax != DicomTransferSyntax.JPEGProcess1
+                    && row.Syntax != DicomTransferSyntax.JPEGProcess2_4
+                    && row.Syntax != DicomTransferSyntax.HTJ2K)
                 {
-                    data.Add(syntax, (IDicomCodec)row[1], (int?)row[2]);
+                    data.Add(row.Syntax, row.Codec, row.Tolerance);
                 }
             }
 
@@ -240,13 +239,12 @@ public sealed class FullCompatibilityMatrixTests
         get
         {
             var data = new TheoryData<DicomTransferSyntax, IDicomCodec, int?>();
-            foreach (var row in Phase1TransferSyntaxes.RoundTripCodecs)
+            foreach (var row in Phase1TransferSyntaxes.RoundTripCodecRows)
             {
-                if (row[0] is DicomTransferSyntax syntax
-                    && syntax != DicomTransferSyntax.JPEGProcess14
-                    && syntax != DicomTransferSyntax.JPEGProcess14SV1)
+                if (row.Syntax != DicomTransferSyntax.JPEGProcess14
+                    && row.Syntax != DicomTransferSyntax.JPEGProcess14SV1)
                 {
-                    data.Add(syntax, (IDicomCodec)row[1], (int?)row[2]);
+                    data.Add(row.Syntax, row.Codec, row.Tolerance);
                 }
             }
 
