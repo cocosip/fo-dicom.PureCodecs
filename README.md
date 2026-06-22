@@ -1,8 +1,8 @@
 # fo-dicom.PureCodecs
 
-`fo-dicom.PureCodecs` is a pure C# replacement package for `fo-dicom.Codecs`.
+`fo-dicom.PureCodecs` is a pure C# replacement for `fo-dicom.Codecs`.
 
-The package ships as one NuGet package that contains separate managed codec-family assemblies for RLE, JPEG, JPEG-LS, and JPEG 2000 / HTJ2K. Production assemblies target `netstandard2.0` only and do not use native codec DLLs, P/Invoke, or native fallback paths.
+The NuGet package ID is `FoDicom.PureCodecs`. It ships as one package that contains separate managed codec-family assemblies for RLE, JPEG, JPEG-LS, and JPEG 2000 / HTJ2K. Production assemblies target `netstandard2.0` only and do not use native codec DLLs, P/Invoke, or native fallback paths.
 
 NuGet dependency versions are managed centrally in `Directory.Packages.props`. Project files keep `PackageReference` items versionless; add or update dependency versions in `Directory.Packages.props`.
 
@@ -13,7 +13,7 @@ The package version is maintained manually in `src/fo-dicom.PureCodecs/fo-dicom.
 Use the published package when it is available:
 
 ```bash
-dotnet add package fo-dicom.PureCodecs
+dotnet add package FoDicom.PureCodecs
 ```
 
 ## Usage
@@ -66,7 +66,7 @@ The phase 1 package targets the completed codec support in `fo-dicom.Codecs`, ex
 The NuGet package contains one public package identity with five managed assemblies under `lib/netstandard2.0`:
 
 ```text
-fo-dicom.PureCodecs.nupkg
+FoDicom.PureCodecs.nupkg
   lib/netstandard2.0/
     fo-dicom.PureCodecs.dll
     fo-dicom.PureCodecs.Jpeg.dll
@@ -105,7 +105,7 @@ Known phase 1 limitations are tracked in [`docs/development/phase-1-known-limita
 
 ## Package Consumer Smoke Validation
 
-The repository includes smoke scripts that pack `fo-dicom.PureCodecs`, install the generated NuGet package into sample consumer apps, and verify that the package contains only the expected managed `netstandard2.0` assemblies.
+The repository includes smoke scripts that pack `FoDicom.PureCodecs`, install the generated NuGet package into sample consumer apps, and verify that the package contains only the expected managed `netstandard2.0` assemblies.
 
 Use the platform-native script in CI:
 
@@ -128,17 +128,12 @@ GitHub Actions runs CI on pull requests and pushes to `master` or `main`. Tag pu
 The package version is not generated from the tag and is not overridden during packing. Before publishing a release, update `<Version>` in `src/fo-dicom.PureCodecs/fo-dicom.PureCodecs.csproj`, commit that change, and create a matching tag:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
-The workflow validates that the pushed tag matches the project version. For example, `<Version>0.1.0</Version>` must be released with tag `v0.1.0`.
+The workflow validates that the pushed tag matches the project version. For example, `<Version>0.2.0</Version>` must be released with tag `v0.2.0`.
 
-NuGet publishing uses NuGet.org Trusted Publishing through GitHub OIDC. Configure a nuget.org trusted publishing policy with:
+NuGet publishing uses a NuGet.org API key. Create a GitHub environment named `release`, or use a repository secret, and add a secret named `NUGET_API_KEY` with a nuget.org API key that can publish `FoDicom.PureCodecs`.
 
-- Repository Owner: `cocosip`
-- Repository: `fo-dicom.PureCodecs`
-- Workflow File: `ci-cd.yml`
-- Environment: `release`
-
-Create a GitHub environment named `release` and add an environment secret named `NUGET_USER` with the NuGet.org profile name.
+The workflow fails before publishing if `NUGET_API_KEY` is missing.
