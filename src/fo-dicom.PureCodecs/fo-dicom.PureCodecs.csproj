@@ -4,7 +4,7 @@
     <AssemblyName>fo-dicom.PureCodecs</AssemblyName>
     <RootNamespace>FellowOakDicom.PureCodecs</RootNamespace>
     <PackageId>FoDicom.PureCodecs</PackageId>
-    <Version>0.3.0</Version>
+    <Version>0.3.1</Version>
     <Authors>fo-dicom.PureCodecs contributors</Authors>
     <Company>fo-dicom.PureCodecs contributors</Company>
     <Description>Pure C# codec package for fo-dicom.</Description>
