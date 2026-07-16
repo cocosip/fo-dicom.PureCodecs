@@ -6,7 +6,11 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
     public sealed class JpegLsFrameCodec
     {
-        public byte[] EncodeFrame(DicomPixelData pixelData, byte[] rawFrame, int nearLossless)
+        public byte[] EncodeFrame(
+            DicomPixelData pixelData,
+            byte[] rawFrame,
+            int nearLossless,
+            JpegLsInterleaveMode interleaveMode)
         {
             if (pixelData == null)
             {
@@ -26,14 +30,20 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                 throw CreateException($"JPEG-LS raw frame sample count {samples.Length} does not match expected count {expectedSamples}.");
             }
 
-            var scanCodec = new JpegLsScanCodec(pixelData.Width, pixelData.Height, pixelData.SamplesPerPixel, pixelData.BitsStored, nearLossless);
+            var scanCodec = new JpegLsScanCodec(
+                pixelData.Width,
+                pixelData.Height,
+                pixelData.SamplesPerPixel,
+                pixelData.BitsStored,
+                nearLossless,
+                interleaveMode);
             var scan = scanCodec.Encode(samples);
 
             var writer = new JpegLsMarkerWriter();
             writer.WriteStandalone(JpegLsMarker.SOI);
             writer.WriteSegment(JpegLsMarker.SOF55, CreateStartOfFramePayload(pixelData));
             writer.WriteSegment(JpegLsMarker.LSE, CreatePresetCodingParametersPayload(pixelData.BitsStored, nearLossless));
-            writer.WriteSegment(JpegLsMarker.SOS, CreateStartOfScanPayload(pixelData.SamplesPerPixel, nearLossless, JpegLsInterleaveMode.None));
+            writer.WriteSegment(JpegLsMarker.SOS, CreateStartOfScanPayload(pixelData.SamplesPerPixel, nearLossless, interleaveMode));
             writer.WriteRaw(scan);
             writer.WriteStandalone(JpegLsMarker.EOI);
             return writer.ToArray();

@@ -5,6 +5,7 @@ using FellowOakDicom.IO.Buffer;
 using FellowOakDicom.PureCodecs.JpegLs;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
+using NativeJpegLsLosslessCodec = FellowOakDicom.Imaging.NativeCodec.DicomJpegLsLosslessCodec;
 
 namespace FellowOakDicom.PureCodecs.Tests;
 
@@ -40,6 +41,27 @@ public sealed class JpegLsCodecRoundTripTests
             13, 23, 33, 14, 24, 34, 15, 25, 35,
             16, 26, 36, 17, 27, 37, 18, 28, 38,
         }));
+    }
+
+    [Fact]
+    public void Lossless_rgb_interleaved_output_decodes_exactly_with_fo_dicom_codecs()
+    {
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(frame: new byte[]
+        {
+            10, 20, 30, 11, 21, 31, 12, 22, 32,
+            13, 23, 33, 14, 24, 34, 15, 25, 35,
+            16, 26, 36, 17, 27, 37, 18, 28, 38,
+        }));
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGLSLossless);
+        var decoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+
+        var pureCodec = new DicomJpegLsLosslessCodec();
+        pureCodec.Encode(source, compressed, pureCodec.GetDefaultParameters());
+
+        var nativeCodec = new NativeJpegLsLosslessCodec();
+        nativeCodec.Decode(compressed, decoded, nativeCodec.GetDefaultParameters());
+
+        PixelDataAssertions.FramesMatchExactly(source, decoded);
     }
 
     [Fact]

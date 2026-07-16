@@ -36,6 +36,14 @@ public sealed class ToolsCompressionPlanTests
     }
 
     [Fact]
+    public void Parse_accepts_jpegls_lossless_format()
+    {
+        var options = ToolOptions.Parse(new[] { "D:\\60.dcm", "--format", "jpegls-lossless" });
+
+        Assert.Equal("jpegls-lossless", options.Format);
+    }
+
+    [Fact]
     public void Parse_rejects_unknown_options()
     {
         var exception = Assert.Throws<ArgumentException>(

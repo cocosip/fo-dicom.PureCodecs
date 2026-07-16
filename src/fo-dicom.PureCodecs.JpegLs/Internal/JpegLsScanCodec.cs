@@ -66,6 +66,12 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             var writer = new JpegLsGolombCodeWriter();
 
             var states = CreateComponentStates();
+            if (_interleaveMode == JpegLsInterleaveMode.Sample)
+            {
+                EncodeSampleInterleaved(writer, samples, reconstructed, states);
+                return writer.ToArray();
+            }
+
             foreach (var state in CreateProcessingOrder(states))
             {
                 EncodeComponent(writer, samples, reconstructed, state);
@@ -85,6 +91,12 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             var samples = new int[_width * _height * _componentCount];
 
             var states = CreateComponentStates();
+            if (_interleaveMode == JpegLsInterleaveMode.Sample)
+            {
+                DecodeSampleInterleaved(reader, samples, states);
+                return samples;
+            }
+
             foreach (var state in CreateProcessingOrder(states))
             {
                 DecodeComponent(reader, samples, state);
@@ -165,6 +177,216 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
                 state.UpdateLineEdge(samples[GetSampleIndex(0, y, state.Component)]);
             }
+        }
+
+        private void EncodeSampleInterleaved(
+            JpegLsGolombCodeWriter writer,
+            int[] original,
+            int[] reconstructed,
+            ProcessingState[] states)
+        {
+            for (var y = 0; y < _height; y++)
+            {
+                for (var x = 0; x < _width; x++)
+                {
+                    if (IsSampleRunMode(reconstructed, states, x, y))
+                    {
+                        x += EncodeSampleRunMode(writer, original, reconstructed, states, x, y) - 1;
+                        continue;
+                    }
+
+                    foreach (var state in states)
+                    {
+                        EncodeRegularSample(writer, original, reconstructed, state, x, y);
+                    }
+                }
+
+                foreach (var state in states)
+                {
+                    state.UpdateLineEdge(reconstructed[GetSampleIndex(0, y, state.Component)]);
+                }
+            }
+        }
+
+        private void DecodeSampleInterleaved(
+            JpegLsGolombCodeReader reader,
+            int[] samples,
+            ProcessingState[] states)
+        {
+            for (var y = 0; y < _height; y++)
+            {
+                for (var x = 0; x < _width; x++)
+                {
+                    if (IsSampleRunMode(samples, states, x, y))
+                    {
+                        x += DecodeSampleRunMode(reader, samples, states, x, y) - 1;
+                        continue;
+                    }
+
+                    foreach (var state in states)
+                    {
+                        DecodeRegularSample(reader, samples, state, x, y);
+                    }
+                }
+
+                foreach (var state in states)
+                {
+                    state.UpdateLineEdge(samples[GetSampleIndex(0, y, state.Component)]);
+                }
+            }
+        }
+
+        private bool IsSampleRunMode(int[] samples, ProcessingState[] states, int x, int y)
+        {
+            foreach (var state in states)
+            {
+                GetNeighbors(samples, state, x, y, out var left, out var above, out var aboveLeft, out var aboveRight);
+                if (!IsRunMode(left, above, aboveLeft, aboveRight, state.Model.Traits))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private int EncodeSampleRunMode(
+            JpegLsGolombCodeWriter writer,
+            int[] original,
+            int[] reconstructed,
+            ProcessingState[] states,
+            int x,
+            int y)
+        {
+            var scanner = states[0].Scanner;
+            var runLength = 0;
+            while (x + runLength < _width)
+            {
+                var isRunPixel = true;
+                foreach (var state in states)
+                {
+                    GetNeighbors(reconstructed, state, x + runLength, y, out var left, out _, out _, out _);
+                    var index = GetSampleIndex(x + runLength, y, state.Component);
+                    if (Math.Abs(original[index] - left) > _nearLossless)
+                    {
+                        isRunPixel = false;
+                        break;
+                    }
+
+                    reconstructed[index] = left;
+                }
+
+                if (!isRunPixel)
+                {
+                    break;
+                }
+
+                runLength++;
+            }
+
+            var endOfLine = x + runLength == _width;
+            scanner.EncodeRunLength(writer, runLength, endOfLine);
+            if (endOfLine)
+            {
+                return runLength;
+            }
+
+            var interruptionX = x + runLength;
+            var context = scanner.RunInterruptionContexts[0];
+            foreach (var state in states)
+            {
+                GetNeighbors(reconstructed, state, interruptionX, y, out var left, out var above, out _, out _);
+                var index = GetSampleIndex(interruptionX, y, state.Component);
+                var errorValue = state.Model.Traits.ComputeErrorValue((original[index] - above) * Sign(above - left));
+                scanner.EncodeRunInterruption(writer, context, errorValue);
+                reconstructed[index] = state.Model.Traits.ComputeReconstructedSample(above, errorValue * Sign(above - left));
+            }
+
+            scanner.DecrementRunIndex();
+            return runLength + 1;
+        }
+
+        private int DecodeSampleRunMode(
+            JpegLsGolombCodeReader reader,
+            int[] samples,
+            ProcessingState[] states,
+            int x,
+            int y)
+        {
+            var scanner = states[0].Scanner;
+            var runLength = scanner.DecodeRunLength(reader, _width - x);
+            foreach (var state in states)
+            {
+                GetNeighbors(samples, state, x, y, out var left, out _, out _, out _);
+                for (var index = 0; index < runLength; index++)
+                {
+                    samples[GetSampleIndex(x + index, y, state.Component)] = left;
+                }
+            }
+
+            if (x + runLength >= _width)
+            {
+                return runLength;
+            }
+
+            var interruptionX = x + runLength;
+            var context = scanner.RunInterruptionContexts[0];
+            foreach (var state in states)
+            {
+                GetNeighbors(samples, state, interruptionX, y, out var left, out var above, out _, out _);
+                var errorValue = scanner.DecodeRunInterruption(reader, context);
+                samples[GetSampleIndex(interruptionX, y, state.Component)] = state.Model.Traits.ComputeReconstructedSample(
+                    above,
+                    errorValue * Sign(above - left));
+            }
+
+            scanner.DecrementRunIndex();
+            return runLength + 1;
+        }
+
+        private void EncodeRegularSample(
+            JpegLsGolombCodeWriter writer,
+            int[] original,
+            int[] reconstructed,
+            ProcessingState state,
+            int x,
+            int y)
+        {
+            GetNeighbors(reconstructed, state, x, y, out var left, out var above, out var aboveLeft, out var aboveRight);
+            var context = state.Model.GetContext(left, above, aboveLeft, aboveRight, out var sign, out var predicted);
+            var index = GetSampleIndex(x, y, state.Component);
+            var parameter = context.GetGolombParameter();
+            var correctedPrediction = state.Model.Traits.CorrectPrediction(predicted + ApplySign(context.C, sign));
+            var errorValue = state.Model.Traits.ComputeErrorValue(ApplySign(original[index] - correctedPrediction, sign));
+            var mappedError = MapErrorValue(context.GetErrorCorrection(parameter, _nearLossless) ^ errorValue);
+
+            writer.EncodeMappedValue(parameter, mappedError, state.Model.Traits.Limit, state.Model.Traits.QuantizedBitsPerPixel);
+            context.Update(errorValue, _nearLossless);
+            reconstructed[index] = state.Model.Traits.ComputeReconstructedSample(correctedPrediction, ApplySign(errorValue, sign));
+        }
+
+        private void DecodeRegularSample(
+            JpegLsGolombCodeReader reader,
+            int[] samples,
+            ProcessingState state,
+            int x,
+            int y)
+        {
+            GetNeighbors(samples, state, x, y, out var left, out var above, out var aboveLeft, out var aboveRight);
+            var context = state.Model.GetContext(left, above, aboveLeft, aboveRight, out var sign, out var predicted);
+            var parameter = context.GetGolombParameter();
+            var correctedPrediction = state.Model.Traits.CorrectPrediction(predicted + ApplySign(context.C, sign));
+            var mappedError = reader.DecodeMappedValue(parameter, state.Model.Traits.Limit, state.Model.Traits.QuantizedBitsPerPixel);
+            var errorValue = UnmapErrorValue(mappedError);
+            if (parameter == 0)
+            {
+                errorValue ^= context.GetErrorCorrection(parameter, _nearLossless);
+            }
+
+            context.Update(errorValue, _nearLossless);
+            samples[GetSampleIndex(x, y, state.Component)] = state.Model.Traits.ComputeReconstructedSample(
+                correctedPrediction,
+                ApplySign(errorValue, sign));
         }
 
         private int EncodeRunMode(
@@ -293,6 +515,9 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                     new JpegLsRunModeContext(0, sharedModel.Traits.Range),
                     new JpegLsRunModeContext(1, sharedModel.Traits.Range),
                 };
+            var sharedScanner = _interleaveMode == JpegLsInterleaveMode.Sample
+                ? new JpegLsRunModeScanner(sharedModel!.Traits, sharedRunContexts)
+                : null;
             for (var component = 0; component < _componentCount; component++)
             {
                 var model = sharedModel ?? new JpegLsContextModel(_maximumSampleValue, _nearLossless, resetThreshold: 64);
@@ -301,7 +526,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                     0,
                     _height,
                     model,
-                    new JpegLsRunModeScanner(model.Traits, sharedRunContexts),
+                    sharedScanner ?? new JpegLsRunModeScanner(model.Traits, sharedRunContexts),
                     edgeState: null);
             }
 
@@ -334,11 +559,6 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                 }
 
                 return order;
-            }
-
-            if (_interleaveMode == JpegLsInterleaveMode.Sample)
-            {
-                throw new DicomCodecException("JPEG-LS sample interleave is not supported by this scan codec.");
             }
 
             throw new DicomCodecException($"JPEG-LS interleave mode {_interleaveMode} is not supported.");

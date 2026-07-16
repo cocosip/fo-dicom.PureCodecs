@@ -9,6 +9,14 @@ public sealed class DicomCompressionTool
 {
     public IReadOnlyList<CompressionResult> CompressAll(string inputPath, string? outputDirectory)
     {
+        return Compress(inputPath, outputDirectory, targetFormat: null);
+    }
+
+    public IReadOnlyList<CompressionResult> Compress(
+        string inputPath,
+        string? outputDirectory,
+        CompressionTargetFormat? targetFormat)
+    {
         if (!File.Exists(inputPath))
         {
             throw new FileNotFoundException("Input DICOM file was not found.", inputPath);
@@ -22,8 +30,11 @@ public sealed class DicomCompressionTool
         Directory.CreateDirectory(plan.OutputDirectory);
 
         var inputSize = new FileInfo(inputPath).Length;
-        var results = new List<CompressionResult>(plan.Items.Count);
-        foreach (var item in plan.Items)
+        var items = targetFormat is null
+            ? plan.Items
+            : plan.Items.Where(item => item.Format.TransferSyntax == targetFormat.TransferSyntax).ToArray();
+        var results = new List<CompressionResult>(items.Count);
+        foreach (var item in items)
         {
             if (item.IsUnsupported)
             {

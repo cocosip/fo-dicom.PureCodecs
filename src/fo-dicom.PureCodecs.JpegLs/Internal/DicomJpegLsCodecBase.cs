@@ -35,7 +35,11 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             {
                 try
                 {
-                    var encoded = _frameCodec.EncodeFrame(oldPixelData, ToArray(oldPixelData.GetFrame(frame)), nearLossless);
+                    var encoded = _frameCodec.EncodeFrame(
+                        oldPixelData,
+                        ToArray(oldPixelData.GetFrame(frame)),
+                        nearLossless,
+                        GetInterleaveMode(oldPixelData));
                     newPixelData.AddFrame(new MemoryByteBuffer(PadToEvenLength(encoded)));
                 }
                 catch (Exception exception)
@@ -76,6 +80,18 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             var bytes = new byte[buffer.Size];
             Buffer.BlockCopy(buffer.Data, 0, bytes, 0, bytes.Length);
             return bytes;
+        }
+
+        private static JpegLsInterleaveMode GetInterleaveMode(DicomPixelData pixelData)
+        {
+            if (pixelData.SamplesPerPixel == 1)
+            {
+                return JpegLsInterleaveMode.None;
+            }
+
+            return pixelData.PlanarConfiguration == PlanarConfiguration.Interleaved
+                ? JpegLsInterleaveMode.Sample
+                : JpegLsInterleaveMode.Line;
         }
 
         private static byte[] PadToEvenLength(byte[] frame)

@@ -40,7 +40,8 @@ internal static class Program
         var file = DicomFile.Open(inputPath, FileReadOption.ReadAll);
         PrintImageInfo(file.Dataset);
 
-        var results = new DicomCompressionTool().CompressAll(inputPath, options.OutputDirectory);
+        var targetFormat = ResolveTargetFormat(options.Format);
+        var results = new DicomCompressionTool().Compress(inputPath, options.OutputDirectory, targetFormat);
         var outputDirectory = results.Count > 0
             ? Path.GetDirectoryName(results[0].Item.OutputPath)
             : options.OutputDirectory;
@@ -111,11 +112,23 @@ internal static class Program
         return value.Trim().Trim('"', '\'');
     }
 
+    private static CompressionTargetFormat? ResolveTargetFormat(string? format)
+    {
+        if (string.IsNullOrWhiteSpace(format))
+        {
+            return null;
+        }
+
+        var targetFormat = CompressionTargetFormats.All.SingleOrDefault(item =>
+            string.Equals(item.Suffix, format, StringComparison.OrdinalIgnoreCase));
+        return targetFormat ?? throw new ArgumentException($"Unknown format {format}.");
+    }
+
     private static void PrintUsage()
     {
         Console.WriteLine("Usage:");
-        Console.WriteLine("  dotnet run <input-file> [--output-dir <directory>]");
-        Console.WriteLine("  fo-dicom.PureCodecs.Tools.exe <input-file> [--output-dir <directory>]");
+        Console.WriteLine("  dotnet run <input-file> [--output-dir <directory>] [--format <format>]");
+        Console.WriteLine("  fo-dicom.PureCodecs.Tools.exe <input-file> [--output-dir <directory>] [--format <format>]");
     }
 
 }

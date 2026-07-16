@@ -2,10 +2,11 @@ namespace FellowOakDicom.PureCodecs.Tools;
 
 public sealed class ToolOptions
 {
-    private ToolOptions(string? inputPath, string? outputDirectory, bool showHelp)
+    private ToolOptions(string? inputPath, string? outputDirectory, string? format, bool showHelp)
     {
         InputPath = inputPath;
         OutputDirectory = outputDirectory;
+        Format = format;
         ShowHelp = showHelp;
     }
 
@@ -13,29 +14,32 @@ public sealed class ToolOptions
 
     public string? OutputDirectory { get; }
 
+    public string? Format { get; }
+
     public bool ShowHelp { get; }
 
     public static ToolOptions Parse(IReadOnlyList<string> args)
     {
         if (args.Count == 0)
         {
-            return new ToolOptions(inputPath: null, outputDirectory: null, showHelp: true);
+            return new ToolOptions(inputPath: null, outputDirectory: null, format: null, showHelp: true);
         }
 
         var index = 0;
         if (IsHelp(args[index]))
         {
-            return new ToolOptions(inputPath: null, outputDirectory: null, showHelp: true);
+            return new ToolOptions(inputPath: null, outputDirectory: null, format: null, showHelp: true);
         }
 
         string? inputPath = null;
         string? outputDirectory = null;
+        string? format = null;
         while (index < args.Count)
         {
             var arg = args[index];
             if (IsHelp(arg))
             {
-                return new ToolOptions(inputPath: null, outputDirectory: null, showHelp: true);
+                return new ToolOptions(inputPath: null, outputDirectory: null, format: null, showHelp: true);
             }
 
             if (string.Equals(arg, "--output-dir", StringComparison.OrdinalIgnoreCase) ||
@@ -48,6 +52,19 @@ public sealed class ToolOptions
                 }
 
                 outputDirectory = TrimShellQuotes(args[index]);
+                index++;
+                continue;
+            }
+
+            if (string.Equals(arg, "--format", StringComparison.OrdinalIgnoreCase))
+            {
+                index++;
+                if (index >= args.Count)
+                {
+                    throw new ArgumentException("--format requires a format name.");
+                }
+
+                format = TrimShellQuotes(args[index]);
                 index++;
                 continue;
             }
@@ -66,7 +83,7 @@ public sealed class ToolOptions
             index++;
         }
 
-        return new ToolOptions(inputPath, outputDirectory, showHelp: false);
+        return new ToolOptions(inputPath, outputDirectory, format, showHelp: false);
     }
 
     private static bool IsHelp(string value)
