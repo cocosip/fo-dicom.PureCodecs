@@ -4,6 +4,7 @@ using FellowOakDicom.Imaging.Codec;
 using FellowOakDicom.PureCodecs.Jpeg;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
+using NativeJpegProcess4Codec = FellowOakDicom.Imaging.NativeCodec.DicomJpegProcess4Codec;
 
 namespace FellowOakDicom.PureCodecs.Tests;
 
@@ -42,22 +43,26 @@ public sealed class JpegDctCodecRoundTripTests
         var exception = Assert.Throws<DicomCodecException>(
             () => codec.Encode(rawPixelData, compressedPixelData, codec.GetDefaultParameters()));
 
-        Assert.Contains("JPEG", exception.Message);
-        Assert.Contains("BitsAllocated", exception.Message);
+        Assert.Equal("Unable to create JPEG Process 1 codec for bits stored == 16", exception.Message);
     }
 
     [Fact]
-    public void Process2_4_12_bit_path_currently_fails_with_managed_exception_when_fixture_is_not_available()
+    public void Process2_4_round_trip_preserves_12_bit_monochrome_with_native_decoder_interoperability()
     {
         var codec = new DicomJpegProcess2_4Codec();
         var rawPixelData = CreateMonochrome12PixelData();
         var compressedPixelData = CreateTargetPixelData(rawPixelData, DicomTransferSyntax.JPEGProcess2_4);
+        var decodedPixelData = CreateTargetPixelData(rawPixelData, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var nativeDecodedPixelData = CreateTargetPixelData(rawPixelData, DicomTransferSyntax.ExplicitVRLittleEndian);
 
-        var exception = Assert.Throws<DicomCodecException>(
-            () => codec.Encode(rawPixelData, compressedPixelData, codec.GetDefaultParameters()));
+        codec.Encode(rawPixelData, compressedPixelData, codec.GetDefaultParameters());
+        codec.Decode(compressedPixelData, decodedPixelData, codec.GetDefaultParameters());
+        var nativeCodec = new NativeJpegProcess4Codec();
+        nativeCodec.Decode(compressedPixelData, nativeDecodedPixelData, nativeCodec.GetDefaultParameters());
 
-        Assert.Contains("JPEG", exception.Message);
-        Assert.Contains("BitsAllocated", exception.Message);
+        PixelDataAssertions.FramesMatchWithinTolerance(rawPixelData, decodedPixelData, tolerance: 320);
+        PixelDataAssertions.FramesMatchWithinTolerance(rawPixelData, nativeDecodedPixelData, tolerance: 320);
+        Assert.Equal((byte)12, GetSof1Precision(ToArray(compressedPixelData.GetFrame(0))));
     }
 
     private static void AssertRoundTrip(IDicomCodec codec, DicomTransferSyntax syntax)
@@ -116,7 +121,36 @@ public sealed class JpegDctCodecRoundTripTests
         };
 
         var pixelData = DicomPixelData.Create(dataset, true);
-        pixelData.AddFrame(new FellowOakDicom.IO.Buffer.MemoryByteBuffer(new byte[24]));
+        const ushort maximum = 4095;
+        var samples = new ushort[] { 0, (ushort)(maximum / 16), (ushort)(maximum / 8), (ushort)(maximum / 4), (ushort)(maximum / 2), (ushort)(maximum * 3 / 4), maximum, (ushort)(maximum * 15 / 16), (ushort)(maximum * 11 / 16), (ushort)(maximum * 7 / 16), (ushort)(maximum * 3 / 16), (ushort)(maximum / 32) };
+        var frame = new byte[samples.Length * 2];
+        for (var index = 0; index < samples.Length; index++)
+        {
+            frame[index * 2] = (byte)samples[index];
+            frame[index * 2 + 1] = (byte)(samples[index] >> 8);
+        }
+
+        pixelData.AddFrame(new FellowOakDicom.IO.Buffer.MemoryByteBuffer(frame));
         return pixelData;
+    }
+
+    private static byte GetSof1Precision(byte[] jpeg)
+    {
+        for (var index = 0; index + 4 < jpeg.Length; index++)
+        {
+            if (jpeg[index] == 0xff && jpeg[index + 1] == 0xc1)
+            {
+                return jpeg[index + 4];
+            }
+        }
+
+        throw new Xunit.Sdk.XunitException("JPEG frame does not contain an SOF1 marker.");
+    }
+
+    private static byte[] ToArray(FellowOakDicom.IO.Buffer.IByteBuffer buffer)
+    {
+        var bytes = new byte[buffer.Size];
+        System.Buffer.BlockCopy(buffer.Data, 0, bytes, 0, bytes.Length);
+        return bytes;
     }
 }

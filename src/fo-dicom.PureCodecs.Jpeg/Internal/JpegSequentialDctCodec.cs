@@ -48,8 +48,24 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 throw new ArgumentNullException(nameof(samples));
             }
 
+            return Encode(ToIntegerSamples(samples), width, height, componentCount, samplePrecision: 8, quality, useYbrFull422);
+        }
+
+        public byte[] Encode12Bit(ushort[] samples, int width, int height, int quality)
+        {
+            if (samples == null)
+            {
+                throw new ArgumentNullException(nameof(samples));
+            }
+
+            return Encode(ToIntegerSamples(samples), width, height, componentCount: 1, samplePrecision: 12, quality, useYbrFull422: false);
+        }
+
+        private byte[] Encode(int[] samples, int width, int height, int componentCount, int samplePrecision, int quality, bool useYbrFull422)
+        {
             ValidateDimensions(width, height);
             ValidateComponentCount(componentCount);
+            ValidateSamplePrecision(samplePrecision);
             if (useYbrFull422 && componentCount != 3)
             {
                 throw CreateException("JPEG YBR_FULL_422 encoding requires three components.");
@@ -61,13 +77,13 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             var quantizationTables = CreateQuantizationTables(componentCount, quality);
-            CreateHuffmanTables(samples, width, height, componentCount, quantizationTables, useYbrFull422, out var dcTables, out var acTables);
-            var scan = EncodeScan(samples, width, height, componentCount, quantizationTables, dcTables, acTables, useYbrFull422);
+            CreateHuffmanTables(samples, width, height, componentCount, samplePrecision, quantizationTables, useYbrFull422, out var dcTables, out var acTables);
+            var scan = EncodeScan(samples, width, height, componentCount, samplePrecision, quantizationTables, dcTables, acTables, useYbrFull422);
 
             var writer = new JpegMarkerWriter();
             writer.WriteStandalone(JpegMarker.SOI);
             writer.WriteSegment(JpegMarker.DQT, CreateQuantizationPayload(quantizationTables));
-            writer.WriteSegment(_process == JpegSequentialProcess.Baseline ? JpegMarker.SOF0 : JpegMarker.SOF1, CreateStartOfFramePayload(width, height, componentCount, useYbrFull422));
+            writer.WriteSegment(_process == JpegSequentialProcess.Baseline ? JpegMarker.SOF0 : JpegMarker.SOF1, CreateStartOfFramePayload(width, height, componentCount, samplePrecision, useYbrFull422));
             writer.WriteSegment(JpegMarker.DHT, CreateHuffmanPayload(dcTables, acTables));
             writer.WriteSegment(JpegMarker.SOS, CreateStartOfScanPayload(componentCount));
             writer.WriteRaw(scan);
@@ -82,6 +98,30 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
         public byte[] Decode(byte[] jpegFrame, int expectedWidth, int expectedHeight, int expectedComponentCount)
         {
+            var samples = DecodeSamples(jpegFrame, expectedWidth, expectedHeight, expectedComponentCount, expectedSamplePrecision: 8);
+            var output = new byte[samples.Length];
+            for (var index = 0; index < samples.Length; index++)
+            {
+                output[index] = (byte)samples[index];
+            }
+
+            return output;
+        }
+
+        public ushort[] Decode12Bit(byte[] jpegFrame, int expectedWidth, int expectedHeight)
+        {
+            var samples = DecodeSamples(jpegFrame, expectedWidth, expectedHeight, expectedComponentCount: 1, expectedSamplePrecision: 12);
+            var output = new ushort[samples.Length];
+            for (var index = 0; index < samples.Length; index++)
+            {
+                output[index] = (ushort)samples[index];
+            }
+
+            return output;
+        }
+
+        private int[] DecodeSamples(byte[] jpegFrame, int expectedWidth, int expectedHeight, int expectedComponentCount, int expectedSamplePrecision)
+        {
             if (jpegFrame == null)
             {
                 throw new ArgumentNullException(nameof(jpegFrame));
@@ -89,7 +129,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
             ValidateDimensions(expectedWidth, expectedHeight);
             ValidateComponentCount(expectedComponentCount);
-            var parsed = ParseFrame(jpegFrame);
+            ValidateSamplePrecision(expectedSamplePrecision);
+            var parsed = ParseFrame(jpegFrame, expectedSamplePrecision);
             if (parsed.Width != expectedWidth || parsed.Height != expectedHeight || parsed.ComponentCount != expectedComponentCount)
             {
                 throw CreateException("JPEG sequential frame shape does not match expected pixel data.");
@@ -99,10 +140,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         }
 
         private static void CreateHuffmanTables(
-            byte[] samples,
+            int[] samples,
             int width,
             int height,
             int componentCount,
+            int samplePrecision,
             JpegQuantizationTable[] quantizationTables,
             bool useYbrFull422,
             out JpegHuffmanTable[] dcTables,
@@ -118,7 +160,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             var previousDc = new int[componentCount];
-            VisitQuantizedBlocks(samples, width, height, componentCount, quantizationTables, useYbrFull422, (component, zigzag) =>
+            VisitQuantizedBlocks(samples, width, height, componentCount, samplePrecision, quantizationTables, useYbrFull422, (component, zigzag) =>
             {
                 var table = GetComponentTableId(component, componentCount);
                 var dc = ToInt(zigzag[0]);
@@ -161,10 +203,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         }
 
         private static byte[] EncodeScan(
-            byte[] samples,
+            int[] samples,
             int width,
             int height,
             int componentCount,
+            int samplePrecision,
             JpegQuantizationTable[] quantizationTables,
             JpegHuffmanTable[] dcTables,
             JpegHuffmanTable[] acTables,
@@ -172,7 +215,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         {
             var bitWriter = new JpegEntropyBitWriter();
             var previousDc = new int[componentCount];
-            VisitQuantizedBlocks(samples, width, height, componentCount, quantizationTables, useYbrFull422, (component, zigzag) =>
+            VisitQuantizedBlocks(samples, width, height, componentCount, samplePrecision, quantizationTables, useYbrFull422, (component, zigzag) =>
             {
                 var table = GetComponentTableId(component, componentCount);
                 var dc = ToInt(zigzag[0]);
@@ -211,10 +254,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         }
 
         private static void VisitQuantizedBlocks(
-            byte[] samples,
+            int[] samples,
             int width,
             int height,
             int componentCount,
+            int samplePrecision,
             JpegQuantizationTable[] quantizationTables,
             bool useYbrFull422,
             Action<int, double[]> visitor)
@@ -230,8 +274,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                         for (var horizontalBlock = 0; horizontalBlock < horizontalBlocks; horizontalBlock++)
                         {
                             var block = useYbrFull422 && component > 0
-                                ? ReadSubsampledChromaBlock(samples, width, height, componentCount, component, blockX / 2, blockY)
-                                : ReadSampleBlock(samples, width, height, componentCount, component, blockX + (horizontalBlock * 8), blockY);
+                                ? ReadSubsampledChromaBlock(samples, width, height, componentCount, component, blockX / 2, blockY, samplePrecision)
+                                : ReadSampleBlock(samples, width, height, componentCount, component, blockX + (horizontalBlock * 8), blockY, samplePrecision);
                             var table = quantizationTables[GetComponentTableId(component, componentCount)];
                             visitor(component, JpegZigZag.ToZigZag(table.Quantize(JpegDct.Forward(block))));
                         }
@@ -240,7 +284,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
         }
 
-        private static byte[] DecodeScan(byte[] scanData, ParsedSequentialFrame frame)
+        private static int[] DecodeScan(byte[] scanData, ParsedSequentialFrame frame)
         {
             var maxHorizontal = 1;
             var maxVertical = 1;
@@ -257,7 +301,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 var component = frame.Frame.Components[index];
                 var width = DivideRoundUp(frame.Width * component.HorizontalSamplingFactor, maxHorizontal);
                 var height = DivideRoundUp(frame.Height * component.VerticalSamplingFactor, maxVertical);
-                componentPlanes[index] = new ComponentPlane(component, width, height);
+                componentPlanes[index] = new ComponentPlane(component, width, height, frame.Frame.SamplePrecision);
             }
 
             var reader = new JpegEntropyBitReader(scanData);
@@ -293,7 +337,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 }
             }
 
-            var output = new byte[frame.Width * frame.Height * frame.Frame.Components.Length];
+            var output = new int[frame.Width * frame.Height * frame.Frame.Components.Length];
             for (var y = 0; y < frame.Height; y++)
             {
                 for (var x = 0; x < frame.Width; x++)
@@ -354,7 +398,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return JpegDct.Inverse(quantizationTable.Dequantize(JpegZigZag.FromZigZag(coefficients)));
         }
 
-        private static ParsedSequentialFrame ParseFrame(byte[] jpegFrame)
+        private static ParsedSequentialFrame ParseFrame(byte[] jpegFrame, int expectedSamplePrecision)
         {
             var reader = new JpegMarkerReader(jpegFrame);
             var soi = reader.ReadNextSkippingMetadata();
@@ -406,9 +450,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 throw CreateException("JPEG sequential frame is missing SOF.");
             }
 
-            if (frame.SamplePrecision != 8)
+            if (frame.SamplePrecision != expectedSamplePrecision)
             {
-                throw CreateException("JPEG sequential codec currently supports only 8-bit samples.");
+                throw CreateException("JPEG sequential frame sample precision does not match expected pixel data.");
             }
 
             ValidateComponentCount(frame.Components.Length);
@@ -428,7 +472,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return parsed;
         }
 
-        private static JpegBlock8x8 ReadSampleBlock(byte[] samples, int width, int height, int componentCount, int component, int blockX, int blockY)
+        private static JpegBlock8x8 ReadSampleBlock(int[] samples, int width, int height, int componentCount, int component, int blockX, int blockY, int samplePrecision)
         {
             var block = new JpegBlock8x8();
             for (var y = 0; y < 8; y++)
@@ -437,14 +481,14 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 for (var x = 0; x < 8; x++)
                 {
                     var sourceX = Math.Min(blockX + x, width - 1);
-                    block[y, x] = samples[(sourceY * width + sourceX) * componentCount + component] - 128;
+                    block[y, x] = samples[(sourceY * width + sourceX) * componentCount + component] - (1 << (samplePrecision - 1));
                 }
             }
 
             return block;
         }
 
-        private static JpegBlock8x8 ReadSubsampledChromaBlock(byte[] samples, int width, int height, int componentCount, int component, int blockX, int blockY)
+        private static JpegBlock8x8 ReadSubsampledChromaBlock(int[] samples, int width, int height, int componentCount, int component, int blockX, int blockY, int samplePrecision)
         {
             var block = new JpegBlock8x8();
             for (var y = 0; y < 8; y++)
@@ -456,20 +500,20 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                     var nextSourceX = Math.Min(sourceX + 1, width - 1);
                     var first = samples[(sourceY * width + sourceX) * componentCount + component];
                     var second = samples[(sourceY * width + nextSourceX) * componentCount + component];
-                    block[y, x] = ((first + second + 1) / 2) - 128;
+                    block[y, x] = ((first + second + 1) / 2) - (1 << (samplePrecision - 1));
                 }
             }
 
             return block;
         }
 
-        private static void WriteSampleBlock(byte[] output, int width, int height, int componentCount, int component, int blockX, int blockY, JpegBlock8x8 block)
+        private static void WriteSampleBlock(int[] output, int width, int height, int componentCount, int component, int blockX, int blockY, JpegBlock8x8 block, int samplePrecision)
         {
             for (var y = 0; y < 8 && blockY + y < height; y++)
             {
                 for (var x = 0; x < 8 && blockX + x < width; x++)
                 {
-                    output[((blockY + y) * width + blockX + x) * componentCount + component] = ClampToByte(ToInt(block[y, x] + 128));
+                    output[((blockY + y) * width + blockX + x) * componentCount + component] = ClampToSamplePrecision(ToInt(block[y, x] + (1 << (samplePrecision - 1))), samplePrecision);
                 }
             }
         }
@@ -487,6 +531,12 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             return (byte)value;
+        }
+
+        private static int ClampToSamplePrecision(int value, int samplePrecision)
+        {
+            var maximum = (1 << samplePrecision) - 1;
+            return Math.Max(0, Math.Min(maximum, value));
         }
 
         private static JpegQuantizationTable[] CreateQuantizationTables(int componentCount, int quality)
@@ -635,10 +685,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
         }
 
-        private static byte[] CreateStartOfFramePayload(int width, int height, int componentCount, bool useYbrFull422)
+        private static byte[] CreateStartOfFramePayload(int width, int height, int componentCount, int samplePrecision, bool useYbrFull422)
         {
             var payload = new byte[6 + componentCount * 3];
-            payload[0] = 8;
+            payload[0] = (byte)samplePrecision;
             payload[1] = (byte)(height >> 8);
             payload[2] = (byte)height;
             payload[3] = (byte)(width >> 8);
@@ -775,6 +825,43 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
         }
 
+        private void ValidateSamplePrecision(int samplePrecision)
+        {
+            if (samplePrecision == 8)
+            {
+                return;
+            }
+
+            if (_process == JpegSequentialProcess.Extended && samplePrecision == 12)
+            {
+                return;
+            }
+
+            throw CreateException("JPEG sequential codec supports 8-bit samples and 12-bit samples only for Process 2/4.");
+        }
+
+        private static int[] ToIntegerSamples(byte[] samples)
+        {
+            var output = new int[samples.Length];
+            for (var index = 0; index < samples.Length; index++)
+            {
+                output[index] = samples[index];
+            }
+
+            return output;
+        }
+
+        private static int[] ToIntegerSamples(ushort[] samples)
+        {
+            var output = new int[samples.Length];
+            for (var index = 0; index < samples.Length; index++)
+            {
+                output[index] = samples[index];
+            }
+
+            return output;
+        }
+
         private static DicomCodecException CreateException(string message)
         {
             return new DicomCodecException(message);
@@ -865,14 +952,16 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
         private sealed class ComponentPlane
         {
-            private readonly byte[] _samples;
+            private readonly int[] _samples;
+            private readonly int _samplePrecision;
 
-            public ComponentPlane(JpegFrameComponent component, int width, int height)
+            public ComponentPlane(JpegFrameComponent component, int width, int height, int samplePrecision)
             {
                 Component = component;
                 Width = width;
                 Height = height;
-                _samples = new byte[width * height];
+                _samples = new int[width * height];
+                _samplePrecision = samplePrecision;
             }
 
             public JpegFrameComponent Component { get; }
@@ -881,7 +970,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
             public int Height { get; }
 
-            public byte GetSample(int x, int y)
+            public int GetSample(int x, int y)
             {
                 return _samples[y * Width + x];
             }
@@ -892,7 +981,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 {
                     for (var x = 0; x < 8 && blockX + x < Width; x++)
                     {
-                        _samples[(blockY + y) * Width + blockX + x] = ClampToByte(ToInt(block[y, x] + 128));
+                        _samples[(blockY + y) * Width + blockX + x] = ClampToSamplePrecision(ToInt(block[y, x] + (1 << (_samplePrecision - 1))), _samplePrecision);
                     }
                 }
             }

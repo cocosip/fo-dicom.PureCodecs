@@ -110,7 +110,7 @@ public sealed class ToolsCompressionPlanTests
     }
 
     [Fact]
-    public void CreateOutputPlan_skips_jpeg_baseline_for_16_bit_input()
+    public void CreateOutputPlan_leaves_high_bit_jpeg_baseline_validation_to_the_codec()
     {
         var plan = CompressionPlan.Create(
             Path.Combine("dicom", "sample.dcm"),
@@ -120,8 +120,8 @@ public sealed class ToolsCompressionPlanTests
         var baselineItem = Assert.Single(
             plan.Items,
             item => item.Format.TransferSyntax == DicomTransferSyntax.JPEGProcess1);
-        Assert.True(baselineItem.IsUnsupported);
-        Assert.Equal("JPEG Baseline Process 1 supports only 8-bit input; this image has BitsStored=16.", baselineItem.SkipReason);
+        Assert.False(baselineItem.IsUnsupported);
+        Assert.Null(baselineItem.SkipReason);
     }
 
     [Fact]
@@ -136,7 +136,34 @@ public sealed class ToolsCompressionPlanTests
             plan.Items,
             item => item.Format.TransferSyntax == DicomTransferSyntax.JPEGProcess2_4);
         Assert.True(process24Item.IsUnsupported);
-        Assert.Equal("JPEG Extended Process 2/4 12-bit sequential DCT is not implemented by the current managed JPEG path.", process24Item.SkipReason);
+        Assert.Equal("JPEG sequential DCT supports only BitsAllocated 8 and BitsStored 8; this image has BitsAllocated=16, BitsStored=16.", process24Item.SkipReason);
+    }
+
+    [Fact]
+    public void CreateOutputPlan_allows_jpeg_process_2_4_for_12_bit_monochrome_input()
+    {
+        var plan = CompressionPlan.Create(
+            Path.Combine("dicom", "sample.dcm"),
+            outputDirectory: null,
+            DicomPixelDataFixtures.CreateBaseDataset(
+                rows: 2,
+                columns: 2,
+                samplesPerPixel: 1,
+                photometricInterpretation: PhotometricInterpretation.Monochrome2,
+                bitsAllocated: 16,
+                bitsStored: 12,
+                highBit: 11,
+                planarConfiguration: null,
+                numberOfFrames: 1,
+                transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
+                frame: new byte[] { 0, 0, 255, 15, 0, 8, 0, 4 }));
+
+        var process24Item = Assert.Single(
+            plan.Items,
+            item => item.Format.TransferSyntax == DicomTransferSyntax.JPEGProcess2_4);
+
+        Assert.False(process24Item.IsUnsupported);
+        Assert.Null(process24Item.SkipReason);
     }
 
     [Fact]

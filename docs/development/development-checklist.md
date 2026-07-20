@@ -212,7 +212,7 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Add unsupported photometric interpretation failures.
 - [x] Test Process 1 8-bit lossy round-trip with tolerance.
 - [x] Test Process 2/4 8-bit lossy round-trip with tolerance.
-- [x] Test Process 2/4 12-bit unsupported path with managed exception until fixture-backed support exists.
+- [x] Test Process 2/4 12-bit monochrome lossy round-trip with tolerance and native decoder interoperability.
 - [x] Test Process 14 exact round-trip for 8-bit data.
 - [x] Test Process 14 exact round-trip for 12-bit data.
 - [x] Test Process 14 exact round-trip for 16-bit data.

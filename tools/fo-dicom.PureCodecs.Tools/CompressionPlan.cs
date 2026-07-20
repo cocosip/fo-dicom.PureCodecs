@@ -44,23 +44,12 @@ public sealed class CompressionPlan
         var outputPath = Path.Combine(outputDirectory, $"{baseName}_{format.Suffix}.dcm");
         if (format.TransferSyntax == DicomTransferSyntax.JPEGProcess1 && pixelData.BitsStored > 8)
         {
-            return CompressionPlanItem.Unsupported(
-                format,
-                outputPath,
-                $"JPEG Baseline Process 1 supports only 8-bit input; this image has BitsStored={pixelData.BitsStored}.");
-        }
-
-        if (format.TransferSyntax == DicomTransferSyntax.JPEGProcess2_4 && pixelData.BitsStored > 8)
-        {
-            return CompressionPlanItem.Unsupported(
-                format,
-                outputPath,
-                "JPEG Extended Process 2/4 12-bit sequential DCT is not implemented by the current managed JPEG path.");
+            return CompressionPlanItem.Transcode(format, outputPath);
         }
 
         if (IsJpegSequentialDct(format.TransferSyntax))
         {
-            var unsupportedReason = GetJpegSequentialDctUnsupportedReason(pixelData);
+            var unsupportedReason = GetJpegSequentialDctUnsupportedReason(format.TransferSyntax, pixelData);
             if (unsupportedReason is not null)
             {
                 return CompressionPlanItem.Unsupported(format, outputPath, unsupportedReason);
@@ -76,8 +65,21 @@ public sealed class CompressionPlan
                transferSyntax == DicomTransferSyntax.JPEGProcess2_4;
     }
 
-    private static string? GetJpegSequentialDctUnsupportedReason(DicomPixelData pixelData)
+    private static string? GetJpegSequentialDctUnsupportedReason(DicomTransferSyntax transferSyntax, DicomPixelData pixelData)
     {
+        if (transferSyntax == DicomTransferSyntax.JPEGProcess2_4 &&
+            pixelData.BitsAllocated == 16 &&
+            pixelData.BitsStored == 12 &&
+            pixelData.SamplesPerPixel == 1)
+        {
+            var highBitPhotometric = pixelData.Dataset.GetSingleValueOrDefault(DicomTag.PhotometricInterpretation, string.Empty);
+            if (highBitPhotometric == PhotometricInterpretation.Monochrome1.Value ||
+                highBitPhotometric == PhotometricInterpretation.Monochrome2.Value)
+            {
+                return null;
+            }
+        }
+
         if (pixelData.BitsAllocated != 8 || pixelData.BitsStored != 8)
         {
             return $"JPEG sequential DCT supports only BitsAllocated 8 and BitsStored 8; this image has BitsAllocated={pixelData.BitsAllocated}, BitsStored={pixelData.BitsStored}.";

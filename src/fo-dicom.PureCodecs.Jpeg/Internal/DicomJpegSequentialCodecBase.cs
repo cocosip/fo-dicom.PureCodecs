@@ -37,6 +37,17 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             {
                 try
                 {
+                    if (UsesTwelveBitMonochromePath(oldPixelData))
+                    {
+                        var encoded12Bit = _frameCodec.Encode12Bit(
+                            ToUInt16Samples(ToArray(oldPixelData.GetFrame(frame))),
+                            oldPixelData.Width,
+                            oldPixelData.Height,
+                            jpegParameters.Quality);
+                        newPixelData.AddFrame(new MemoryByteBuffer(encoded12Bit));
+                        continue;
+                    }
+
                     var convertRgbToYbrFull = oldPixelData.SamplesPerPixel == 3
                         && oldPixelData.PhotometricInterpretation == PhotometricInterpretation.Rgb;
                     var sourceFrame = NormalizeFrameForEncode(oldPixelData, ToArray(oldPixelData.GetFrame(frame)));
@@ -76,6 +87,16 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             {
                 try
                 {
+                    if (UsesTwelveBitMonochromePath(newPixelData))
+                    {
+                        var decoded12Bit = _frameCodec.Decode12Bit(
+                            ToArray(oldPixelData.GetFrame(frame)),
+                            newPixelData.Width,
+                            newPixelData.Height);
+                        newPixelData.AddFrame(new MemoryByteBuffer(ToLittleEndianBytes(decoded12Bit)));
+                        continue;
+                    }
+
                     var decoded = _frameCodec.Decode(
                         ToArray(oldPixelData.GetFrame(frame)),
                         newPixelData.Width,
@@ -91,11 +112,21 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
         }
 
-        private static void ValidateSupportedPixelData(DicomPixelData pixelData)
+        private void ValidateSupportedPixelData(DicomPixelData pixelData)
         {
             if (pixelData == null)
             {
                 throw new ArgumentNullException(nameof(pixelData));
+            }
+
+            if (UsesTwelveBitMonochromePath(pixelData))
+            {
+                return;
+            }
+
+            if (TransferSyntax == DicomTransferSyntax.JPEGProcess1 && pixelData.BitsStored != 8)
+            {
+                throw new DicomCodecException($"Unable to create JPEG Process 1 codec for bits stored == {pixelData.BitsStored}");
             }
 
             if (pixelData.BitsAllocated != 8 || pixelData.BitsStored != 8)
@@ -119,6 +150,17 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             {
                 throw new DicomCodecException($"JPEG sequential DCT does not support photometric interpretation {value ?? "<missing>"}.");
             }
+        }
+
+        private bool UsesTwelveBitMonochromePath(DicomPixelData pixelData)
+        {
+            var photometric = pixelData.PhotometricInterpretation?.Value;
+            return TransferSyntax == DicomTransferSyntax.JPEGProcess2_4 &&
+                   pixelData.BitsAllocated == 16 &&
+                   pixelData.BitsStored == 12 &&
+                   pixelData.SamplesPerPixel == 1 &&
+                   (photometric == PhotometricInterpretation.Monochrome1.Value ||
+                    photometric == PhotometricInterpretation.Monochrome2.Value);
         }
 
         private static byte[] NormalizeFrameForEncode(DicomPixelData pixelData, byte[] frame)
@@ -167,6 +209,34 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         {
             var bytes = new byte[buffer.Size];
             Buffer.BlockCopy(buffer.Data, 0, bytes, 0, bytes.Length);
+            return bytes;
+        }
+
+        private static ushort[] ToUInt16Samples(byte[] bytes)
+        {
+            if ((bytes.Length & 1) != 0)
+            {
+                throw new DicomCodecException("JPEG Process 2/4 12-bit input must use a 16-bit DICOM sample container.");
+            }
+
+            var samples = new ushort[bytes.Length / 2];
+            for (var index = 0; index < samples.Length; index++)
+            {
+                samples[index] = (ushort)(bytes[index * 2] | (bytes[index * 2 + 1] << 8));
+            }
+
+            return samples;
+        }
+
+        private static byte[] ToLittleEndianBytes(ushort[] samples)
+        {
+            var bytes = new byte[samples.Length * 2];
+            for (var index = 0; index < samples.Length; index++)
+            {
+                bytes[index * 2] = (byte)samples[index];
+                bytes[index * 2 + 1] = (byte)(samples[index] >> 8);
+            }
+
             return bytes;
         }
     }

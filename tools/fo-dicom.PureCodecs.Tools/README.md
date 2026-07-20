@@ -132,15 +132,18 @@ Current unsupported rules:
 
 | Rule | Reason |
 | --- | --- |
-| Unsupported JPEG Baseline Process 1 when `BitsStored > 8` | JPEG Baseline Process 1 supports only 8-bit input. |
-| Unsupported JPEG Extended Process 2/4 when `BitsStored > 8` | The current managed JPEG path does not implement 12-bit sequential DCT. |
-| Unsupported JPEG sequential DCT when `BitsAllocated != 8` or `BitsStored != 8` | The current managed sequential DCT path supports only 8-bit samples. |
+| Unsupported JPEG Extended Process 2/4 high-bit color input | The managed high-bit path supports only monochrome `BitsAllocated=16`, `BitsStored=12` input. |
+| Unsupported JPEG sequential DCT outside the Process 2/4 12-bit monochrome form | The managed sequential DCT path otherwise supports only `BitsAllocated=8`, `BitsStored=8` samples. |
 | Unsupported JPEG sequential DCT when `SamplesPerPixel` is not `1` or `3` | The current managed sequential DCT path supports grayscale and 3-component color only. |
 | Unsupported JPEG sequential DCT for unsupported photometric interpretations | Supported values are `MONOCHROME1`, `MONOCHROME2`, `RGB`, `YBR_FULL`, and `YBR_FULL_422`. |
 
 Other unsupported combinations may still fail with a managed exception and will
 be reported as `Failed` for that format. A failed format does not stop the rest
 of the compression run.
+
+For NativeCodecs compatibility, JPEG Baseline Process 1 with `BitsStored > 8`
+is attempted and reported as `Failed` with the native-compatible Process 1
+bit-depth exception.
 
 ## Exit Codes
 

@@ -239,7 +239,7 @@ Error messages should include:
 
 - Process 1 8-bit raw -> JPEG -> raw round-trip with lossy tolerance.
 - Process 2/4 8-bit raw -> JPEG -> raw round-trip with lossy tolerance.
-- Process 2/4 12-bit coverage where sample data is available.
+- Process 2/4 12-bit monochrome coverage where sample data is available.
 - Process 14 8-bit, 12-bit, and 16-bit lossless exact round-trip.
 - Process 14 SV1 8-bit, 12-bit, and 16-bit lossless exact round-trip.
 - `YBR_FULL` and `YBR_FULL_422` decode behavior.
@@ -269,14 +269,14 @@ JPEG is complete when:
 Current implementation status:
 
 - JPEG Process 1 and Process 2/4 use a managed sequential DCT path with marker parsing, DQT, DHT, SOF0/SOF1, SOS, Huffman entropy coding, quantization, zigzag, forward DCT, and inverse DCT.
-- The DCT path supports 8-bit monochrome and 8-bit three-component interleaved data. Decode handles standard Efferent JPEG baseline `YBR_FULL` and `YBR_FULL_422` acceptance samples.
+- The DCT path supports 8-bit monochrome and three-component interleaved data, plus 12-bit monochrome data in a 16-bit DICOM sample container for Process 2/4. Decode handles standard Efferent JPEG baseline `YBR_FULL` and `YBR_FULL_422` acceptance samples.
 - JPEG Process 14 and Process 14 SV1 use a managed lossless predictive path with predictors 1 through 7, Huffman-coded differences, and exact 8-bit, 12-bit, and 16-bit monochrome round-trips.
 - `JpegCodecParams` provides quality, predictor, point transform, and `ConvertColorspaceToRGB`, with color conversion enabled by default for Process 1 and Process 2/4.
 - RGB planar input is normalized to interleaved layout for sequential DCT encode, and decoded output can be converted back to planar when the target pixel data requires it.
 
 Known limitations before full JPEG release readiness:
 
-- Process 2/4 12-bit sequential DCT codestream encode/decode is not implemented; current coverage records the unsupported path unless a fixture becomes available for a narrower decode-only case.
+- Process 2/4 high-bit support is monochrome-only for `BitsStored=12` in a 16-bit DICOM sample container; high-bit colour data remains unsupported.
 - The sequential DCT implementation prioritizes correctness and compatibility coverage over optimized performance.
 - Progressive JPEG, arithmetic coding, CMYK/YCCK, and restart interval MCU resynchronization beyond marker recognition are not implemented.
 - Efferent acceptance coverage currently verifies JPEG baseline YBRFull/YBR422 decode; broader transcode/render parity still belongs to the full compatibility matrix.
