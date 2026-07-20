@@ -37,18 +37,34 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             {
                 try
                 {
+                    var encodeAsYbrFull422 = oldPixelData.SamplesPerPixel == 3
+                        && oldPixelData.PhotometricInterpretation == PhotometricInterpretation.Rgb;
+                    var sourceFrame = NormalizeFrameForEncode(oldPixelData, ToArray(oldPixelData.GetFrame(frame)));
+                    if (encodeAsYbrFull422)
+                    {
+                        sourceFrame = JpegColorConverter.RgbToYbrFull(sourceFrame);
+                    }
+
                     var encoded = _frameCodec.Encode(
-                        NormalizeFrameForEncode(oldPixelData, ToArray(oldPixelData.GetFrame(frame))),
+                        sourceFrame,
                         oldPixelData.Width,
                         oldPixelData.Height,
                         oldPixelData.SamplesPerPixel,
-                        jpegParameters.Quality);
+                        jpegParameters.Quality,
+                        encodeAsYbrFull422);
                     newPixelData.AddFrame(new MemoryByteBuffer(encoded));
                 }
                 catch (Exception exception)
                 {
                     throw Wrap("encode", frame, exception);
                 }
+            }
+
+            if (oldPixelData.SamplesPerPixel == 3
+                && oldPixelData.PhotometricInterpretation == PhotometricInterpretation.Rgb)
+            {
+                newPixelData.Dataset.AddOrUpdate(DicomTag.PhotometricInterpretation, PhotometricInterpretation.YbrFull422.Value);
+                newPixelData.Dataset.AddOrUpdate(DicomTag.PlanarConfiguration, (ushort)PlanarConfiguration.Interleaved);
             }
         }
 

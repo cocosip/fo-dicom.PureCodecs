@@ -31,7 +31,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return Encode(samples, width, height, componentCount: 1, quality);
         }
 
-        public byte[] Encode(byte[] samples, int width, int height, int componentCount, int quality)
+        public byte[] Encode(byte[] samples, int width, int height, int componentCount, int quality, bool useYbrFull422 = false)
         {
             if (samples == null)
             {
@@ -40,18 +40,23 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
             ValidateDimensions(width, height);
             ValidateComponentCount(componentCount);
+            if (useYbrFull422 && componentCount != 3)
+            {
+                throw CreateException("JPEG YBR_FULL_422 encoding requires three components.");
+            }
+
             if (samples.Length != width * height * componentCount)
             {
                 throw CreateException($"JPEG sequential sample count {samples.Length} does not match dimensions {width}x{height}x{componentCount}.");
             }
 
             var quantizationTable = CreateQuantizationTable(quality);
-            var scan = EncodeScan(samples, width, height, componentCount, quantizationTable);
+            var scan = EncodeScan(samples, width, height, componentCount, quantizationTable, useYbrFull422);
 
             var writer = new JpegMarkerWriter();
             writer.WriteStandalone(JpegMarker.SOI);
             writer.WriteSegment(JpegMarker.DQT, CreateQuantizationPayload(quantizationTable));
-            writer.WriteSegment(_process == JpegSequentialProcess.Baseline ? JpegMarker.SOF0 : JpegMarker.SOF1, CreateStartOfFramePayload(width, height, componentCount));
+            writer.WriteSegment(_process == JpegSequentialProcess.Baseline ? JpegMarker.SOF0 : JpegMarker.SOF1, CreateStartOfFramePayload(width, height, componentCount, useYbrFull422));
             writer.WriteSegment(JpegMarker.DHT, CreateDefaultHuffmanPayload());
             writer.WriteSegment(JpegMarker.SOS, CreateStartOfScanPayload(componentCount));
             writer.WriteRaw(scan);
@@ -82,48 +87,55 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return DecodeScan(parsed.ScanData, parsed);
         }
 
-        private byte[] EncodeScan(byte[] samples, int width, int height, int componentCount, JpegQuantizationTable quantizationTable)
+        private byte[] EncodeScan(byte[] samples, int width, int height, int componentCount, JpegQuantizationTable quantizationTable, bool useYbrFull422)
         {
             var bitWriter = new JpegEntropyBitWriter();
             var previousDc = new int[componentCount];
+            var mcuWidth = useYbrFull422 ? 16 : 8;
             for (var blockY = 0; blockY < height; blockY += 8)
             {
-                for (var blockX = 0; blockX < width; blockX += 8)
+                for (var blockX = 0; blockX < width; blockX += mcuWidth)
                 {
                     for (var component = 0; component < componentCount; component++)
                     {
-                        var block = ReadSampleBlock(samples, width, height, componentCount, component, blockX, blockY);
-                        var coefficients = quantizationTable.Quantize(JpegDct.Forward(block));
-                        var zigzag = JpegZigZag.ToZigZag(coefficients);
-                        var dc = ToInt(zigzag[0]);
-                        EncodeDifference(bitWriter, dc - previousDc[component]);
-                        previousDc[component] = dc;
-
-                        var zeroRun = 0;
-                        for (var index = 1; index < zigzag.Length; index++)
+                        var horizontalBlocks = useYbrFull422 && component == 0 ? 2 : 1;
+                        for (var horizontalBlock = 0; horizontalBlock < horizontalBlocks; horizontalBlock++)
                         {
-                            var value = ToInt(zigzag[index]);
-                            if (value == 0)
+                            var block = useYbrFull422 && component > 0
+                                ? ReadSubsampledChromaBlock(samples, width, height, componentCount, component, blockX / 2, blockY)
+                                : ReadSampleBlock(samples, width, height, componentCount, component, blockX + (horizontalBlock * 8), blockY);
+                            var coefficients = quantizationTable.Quantize(JpegDct.Forward(block));
+                            var zigzag = JpegZigZag.ToZigZag(coefficients);
+                            var dc = ToInt(zigzag[0]);
+                            EncodeDifference(bitWriter, dc - previousDc[component]);
+                            previousDc[component] = dc;
+
+                            var zeroRun = 0;
+                            for (var index = 1; index < zigzag.Length; index++)
                             {
-                                zeroRun++;
-                                continue;
+                                var value = ToInt(zigzag[index]);
+                                if (value == 0)
+                                {
+                                    zeroRun++;
+                                    continue;
+                                }
+
+                                while (zeroRun > 15)
+                                {
+                                    _huffmanTable.Encode(bitWriter, 0xF0);
+                                    zeroRun -= 16;
+                                }
+
+                                var category = GetCategory(value);
+                                _huffmanTable.Encode(bitWriter, (zeroRun << 4) | category);
+                                bitWriter.WriteBits(EncodeMagnitude(value, category), category);
+                                zeroRun = 0;
                             }
 
-                            while (zeroRun > 15)
+                            if (zeroRun > 0)
                             {
-                                _huffmanTable.Encode(bitWriter, 0xF0);
-                                zeroRun -= 16;
+                                _huffmanTable.Encode(bitWriter, 0);
                             }
-
-                            var category = GetCategory(value);
-                            _huffmanTable.Encode(bitWriter, (zeroRun << 4) | category);
-                            bitWriter.WriteBits(EncodeMagnitude(value, category), category);
-                            zeroRun = 0;
-                        }
-
-                        if (zeroRun > 0)
-                        {
-                            _huffmanTable.Encode(bitWriter, 0);
                         }
                     }
                 }
@@ -390,6 +402,25 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return block;
         }
 
+        private static JpegBlock8x8 ReadSubsampledChromaBlock(byte[] samples, int width, int height, int componentCount, int component, int blockX, int blockY)
+        {
+            var block = new JpegBlock8x8();
+            for (var y = 0; y < 8; y++)
+            {
+                var sourceY = Math.Min(blockY + y, height - 1);
+                for (var x = 0; x < 8; x++)
+                {
+                    var sourceX = Math.Min((blockX + x) * 2, width - 1);
+                    var nextSourceX = Math.Min(sourceX + 1, width - 1);
+                    var first = samples[(sourceY * width + sourceX) * componentCount + component];
+                    var second = samples[(sourceY * width + nextSourceX) * componentCount + component];
+                    block[y, x] = ((first + second + 1) / 2) - 128;
+                }
+            }
+
+            return block;
+        }
+
         private static void WriteSampleBlock(byte[] output, int width, int height, int componentCount, int component, int blockX, int blockY, JpegBlock8x8 block)
         {
             for (var y = 0; y < 8 && blockY + y < height; y++)
@@ -549,7 +580,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
         }
 
-        private static byte[] CreateStartOfFramePayload(int width, int height, int componentCount)
+        private static byte[] CreateStartOfFramePayload(int width, int height, int componentCount, bool useYbrFull422)
         {
             var payload = new byte[6 + componentCount * 3];
             payload[0] = 8;
@@ -562,7 +593,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             {
                 var offset = 6 + component * 3;
                 payload[offset] = (byte)(component + 1);
-                payload[offset + 1] = 0x11;
+                payload[offset + 1] = useYbrFull422 && component == 0 ? (byte)0x21 : (byte)0x11;
                 payload[offset + 2] = 0;
             }
 

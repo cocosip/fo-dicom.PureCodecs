@@ -4,6 +4,32 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
     public static class JpegColorConverter
     {
+        public static byte[] RgbToYbrFull(byte[] rgb)
+        {
+            if (rgb == null)
+            {
+                throw new ArgumentNullException(nameof(rgb));
+            }
+
+            if (rgb.Length % 3 != 0)
+            {
+                throw JpegMarkerReader.CreateException("JPEG RGB frame length must be divisible by 3.");
+            }
+
+            var ybr = new byte[rgb.Length];
+            for (var index = 0; index < rgb.Length; index += 3)
+            {
+                var red = rgb[index];
+                var green = rgb[index + 1];
+                var blue = rgb[index + 2];
+                ybr[index] = Clamp((0.299 * red) + (0.587 * green) + (0.114 * blue));
+                ybr[index + 1] = Clamp(128 - (0.168736 * red) - (0.331264 * green) + (0.5 * blue));
+                ybr[index + 2] = Clamp(128 + (0.5 * red) - (0.418688 * green) - (0.081312 * blue));
+            }
+
+            return ybr;
+        }
+
         public static byte[] YbrFullToRgb(byte[] ybr)
         {
             if (ybr == null)

@@ -80,6 +80,21 @@ public sealed class JpegDicomIntegrationTests
     }
 
     [Fact]
+    public void Process1_encode_converts_rgb_to_ybr_full_422_with_422_jpeg_sampling()
+    {
+        var codec = new DicomJpegProcess1Codec();
+        var rawPixelData = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 16, columns: 16));
+        var compressedPixelData = CreateTargetPixelData(rawPixelData, DicomTransferSyntax.JPEGProcess1);
+
+        codec.Encode(rawPixelData, compressedPixelData, codec.GetDefaultParameters());
+
+        Assert.Equal(PhotometricInterpretation.YbrFull422, compressedPixelData.PhotometricInterpretation);
+        Assert.Equal(
+            new byte[] { 0x21, 0x11, 0x11 },
+            GetSofSamplingFactors(ToArray(compressedPixelData.GetFrame(0))));
+    }
+
+    [Fact]
     public void Process1_rejects_unsupported_photometric_interpretation()
     {
         var codec = new DicomJpegProcess1Codec();
@@ -232,5 +247,27 @@ public sealed class JpegDicomIntegrationTests
         var bytes = new byte[buffer.Size];
         System.Buffer.BlockCopy(buffer.Data, 0, bytes, 0, bytes.Length);
         return bytes;
+    }
+
+    private static byte[] GetSofSamplingFactors(byte[] jpeg)
+    {
+        for (var index = 0; index + 9 < jpeg.Length; index++)
+        {
+            if (jpeg[index] != 0xff || jpeg[index + 1] != 0xc0)
+            {
+                continue;
+            }
+
+            var componentCount = jpeg[index + 9];
+            var samplingFactors = new byte[componentCount];
+            for (var component = 0; component < componentCount; component++)
+            {
+                samplingFactors[component] = jpeg[index + 11 + component * 3];
+            }
+
+            return samplingFactors;
+        }
+
+        throw new Xunit.Sdk.XunitException("JPEG frame does not contain an SOF0 marker.");
     }
 }
