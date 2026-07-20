@@ -12,12 +12,12 @@ namespace FellowOakDicom.PureCodecs.Tests;
 public sealed class JpegLsCodecRoundTripTests
 {
     [Fact]
-    public void Default_parameters_match_fo_dicom_codecs_near_lossless_error()
+    public void Default_parameters_match_native_tools_near_lossless_error()
     {
         var parameters = new DicomJpegLsNearLosslessCodec().GetDefaultParameters();
         var jpegLsParameters = Assert.IsType<DicomJpegLsParams>(parameters);
 
-        Assert.Equal(2, jpegLsParameters.AllowedError);
+        Assert.Equal(3, jpegLsParameters.AllowedError);
     }
 
     [Fact]

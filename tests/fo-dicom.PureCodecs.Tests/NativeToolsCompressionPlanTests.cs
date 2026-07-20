@@ -10,6 +10,28 @@ namespace FellowOakDicom.PureCodecs.Tests;
 public sealed class NativeToolsCompressionPlanTests
 {
     [Fact]
+    public void TrimJpegLsFramePadding_discards_bytes_after_eoi_and_preserves_dicom_even_length()
+    {
+        var trimMethod = typeof(DicomCompressionTool).GetMethod(
+            "TrimJpegLsFramePadding",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+
+        Assert.NotNull(trimMethod);
+
+        var oddLength = Assert.IsType<byte[]>(trimMethod!.Invoke(null, new object[]
+        {
+            new byte[] { 0xff, 0xd8, 0x01, 0xff, 0xd9, 0xa5, 0x7e }
+        }));
+        var evenLength = Assert.IsType<byte[]>(trimMethod.Invoke(null, new object[]
+        {
+            new byte[] { 0xff, 0xd8, 0x01, 0x02, 0xff, 0xd9, 0xa5 }
+        }));
+
+        Assert.Equal(new byte[] { 0xff, 0xd8, 0x01, 0xff, 0xd9, 0x00 }, oddLength);
+        Assert.Equal(new byte[] { 0xff, 0xd8, 0x01, 0x02, 0xff, 0xd9 }, evenLength);
+    }
+
+    [Fact]
     public void Parse_accepts_single_input_file_with_format_and_output_directory()
     {
         var inputPath = Path.Combine("dicom", "sample.dcm");

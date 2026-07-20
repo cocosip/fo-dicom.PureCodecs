@@ -332,8 +332,8 @@ public sealed class ToolsCompressionPlanTests
 
     [Theory]
     [InlineData("JPEG-LS Lossless", @"Regression\Transcoded\1_jpegls_lossless.dcm", 0)]
-    [InlineData("JPEG-LS Near-Lossless", @"Regression\Transcoded\1_jpegls_near_lossless.dcm", 2)]
-    public void CompressAll_jpegls_outputs_from_local_real_fixture_match_reference_frame_size_and_round_trip(
+    [InlineData("JPEG-LS Near-Lossless", @"Regression\Transcoded\1_jpegls_near_lossless.dcm", 3)]
+    public void CompressAll_jpegls_outputs_from_local_real_fixture_emit_expected_near_value_and_round_trip(
         string formatName,
         string referencePath,
         int tolerance)
@@ -361,9 +361,10 @@ public sealed class ToolsCompressionPlanTests
 
         Assert.Equal(referencePixelData.Syntax, compressedPixelData.Syntax);
         Assert.Equal(sourcePixelData.NumberOfFrames, compressedPixelData.NumberOfFrames);
-        Assert.Equal(referencePixelData.GetFrame(0).Size, compressedPixelData.GetFrame(0).Size);
+        Assert.Equal(tolerance, GetJpegLsNearLossless(compressedPixelData.GetFrame(0).Data));
         if (tolerance == 0)
         {
+            Assert.Equal(referencePixelData.GetFrame(0).Size, compressedPixelData.GetFrame(0).Size);
             PixelDataAssertions.FramesMatchExactly(sourcePixelData, decodedPixelData);
         }
         else
@@ -373,6 +374,22 @@ public sealed class ToolsCompressionPlanTests
 
         using var rendered = new DicomImage(result.Item.OutputPath).RenderImage();
         Assert.NotNull(rendered);
+    }
+
+    private static int GetJpegLsNearLossless(byte[] codestream)
+    {
+        for (var index = 0; index + 3 < codestream.Length; index++)
+        {
+            if (codestream[index] != 0xff || codestream[index + 1] != 0xda)
+            {
+                continue;
+            }
+
+            var length = (codestream[index + 2] << 8) | codestream[index + 3];
+            return codestream[index + length - 1];
+        }
+
+        throw new Xunit.Sdk.XunitException("JPEG-LS codestream does not contain SOS.");
     }
 
     [Theory]
