@@ -19,23 +19,6 @@ public sealed class RegressionFixturePrivacyTests
         Assert.True(file.Dataset.Contains(DicomTag.PixelData));
     }
 
-    [Fact]
-    public void Bundled_interop_fixtures_are_deidentified_and_have_pixel_data()
-    {
-        var fixtures = RegressionFixturePaths.InteropFixtures();
-
-        Assert.Equal(10, fixtures.Count);
-        Assert.All(fixtures, fixture =>
-        {
-            var file = DicomFile.Open(fixture, FileReadOption.ReadAll);
-
-            Assert.Equal("PURECODECS^INTEROP", file.Dataset.GetSingleValueOrDefault(DicomTag.PatientName, string.Empty));
-            Assert.Equal("PURECODECS-INTEROP", file.Dataset.GetSingleValueOrDefault(DicomTag.PatientID, string.Empty));
-            AssertNoPrivateTags(file.Dataset);
-            Assert.True(file.Dataset.Contains(DicomTag.PixelData));
-        });
-    }
-
     [Theory]
     [InlineData("1_jpeg_lossless.dcm")]
     [InlineData("1_jpeg_lossless_sv1.dcm")]

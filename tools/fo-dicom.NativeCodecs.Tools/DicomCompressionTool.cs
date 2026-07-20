@@ -2,6 +2,7 @@ using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 using FellowOakDicom.Imaging.NativeCodec;
+using FellowOakDicom.IO.Buffer;
 using NativeJpeg2000Params = FellowOakDicom.Imaging.NativeCodec.DicomJpeg2000Params;
 
 namespace FellowOakDicom.NativeCodecs.Tools;
@@ -40,6 +41,7 @@ public sealed class DicomCompressionTool
             try
             {
                 var outputDataset = Transcode(file.Dataset, pixelData.Syntax, item.Format.TransferSyntax);
+                TrimJpegLsFrames(outputDataset, item.Format.TransferSyntax);
                 new DicomFile(outputDataset).Save(item.OutputPath);
                 var outputSize = new FileInfo(item.OutputPath).Length;
                 var ratio = outputSize > 0 ? inputSize / (double)outputSize : 0.0;
@@ -73,6 +75,58 @@ public sealed class DicomCompressionTool
         return targetSyntax == DicomTransferSyntax.JPEG2000Lossy
             ? new NativeJpeg2000Params { Irreversible = true, Rate = 16 }
             : null;
+    }
+
+    public static byte[] TrimJpegLsFramePadding(byte[] frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+
+        for (var index = 0; index + 1 < frame.Length; index++)
+        {
+            if (frame[index] != 0xff || frame[index + 1] != 0xd9)
+            {
+                continue;
+            }
+
+            var length = index + 2;
+            var trimmed = new byte[length + (length & 1)];
+            Buffer.BlockCopy(frame, 0, trimmed, 0, length);
+            return trimmed;
+        }
+
+        return frame;
+    }
+
+    private static void TrimJpegLsFrames(DicomDataset dataset, DicomTransferSyntax targetSyntax)
+    {
+        if (targetSyntax != DicomTransferSyntax.JPEGLSLossless &&
+            targetSyntax != DicomTransferSyntax.JPEGLSNearLossless)
+        {
+            return;
+        }
+
+        var pixelData = DicomPixelData.Create(dataset);
+        var frames = new byte[pixelData.NumberOfFrames][];
+        var changed = false;
+        for (var frame = 0; frame < frames.Length; frame++)
+        {
+            var original = pixelData.GetFrame(frame).Data;
+            var trimmed = TrimJpegLsFramePadding(original);
+            frames[frame] = trimmed;
+            changed |= trimmed.Length != original.Length;
+        }
+
+        if (!changed)
+        {
+            return;
+        }
+
+        dataset.Remove(DicomTag.PixelData);
+        var trimmedPixelData = DicomPixelData.Create(dataset, true);
+        foreach (var frame in frames)
+        {
+            trimmedPixelData.AddFrame(new MemoryByteBuffer(frame));
+        }
     }
 
     private static void ConfigureDicomServices()

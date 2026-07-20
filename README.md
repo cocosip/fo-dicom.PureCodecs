@@ -103,6 +103,20 @@ The compatibility target is the public behavior of `fo-dicom.Codecs` for complet
 
 Known phase 1 limitations are tracked in [`docs/development/phase-1-known-limitations.md`](docs/development/phase-1-known-limitations.md).
 
+## Native Interoperability Validation
+
+The Native/Pure codec interoperability matrix is a standalone process-isolated runner, not an xUnit test. It runs one worker process per transfer syntax and defaults to four concurrent formats:
+
+```powershell
+dotnet run --project tools/fo-dicom.PureCodecs.InteropValidation -- --parallel 4
+```
+
+Run one format directly while diagnosing a codec:
+
+```powershell
+dotnet run --project tools/fo-dicom.PureCodecs.InteropValidation -- --worker jpeg-ls-lossless
+```
+
 ## Package Consumer Smoke Validation
 
 The repository includes smoke scripts that pack `FoDicom.PureCodecs`, install the generated NuGet package into sample consumer apps, and verify that the package contains only the expected managed `netstandard2.0` assemblies.
