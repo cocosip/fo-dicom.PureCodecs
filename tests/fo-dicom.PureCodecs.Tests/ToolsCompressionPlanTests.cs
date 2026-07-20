@@ -193,6 +193,22 @@ public sealed class ToolsCompressionPlanTests
         AssertSequentialJpegSkipped(plan, "JPEG sequential DCT does not support photometric interpretation HSV.");
     }
 
+    [Fact]
+    public void CreateOutputPlan_allows_jpeg_sequential_dct_for_8_bit_palette_color()
+    {
+        var plan = CompressionPlan.Create(
+            Path.Combine("dicom", "sample.dcm"),
+            outputDirectory: null,
+            DicomPixelDataFixtures.CreatePaletteColor8());
+
+        foreach (var syntax in new[] { DicomTransferSyntax.JPEGProcess1, DicomTransferSyntax.JPEGProcess2_4 })
+        {
+            var item = Assert.Single(plan.Items, item => item.Format.TransferSyntax == syntax);
+            Assert.False(item.IsUnsupported);
+            Assert.Null(item.SkipReason);
+        }
+    }
+
     [Theory]
     [InlineData(@"Regression\Transcoded\1_jpeg_lossless.dcm", "1_jpeg_lossless.dcm")]
     [InlineData("Regression/Transcoded/1_jpegls_lossless.dcm", "1_jpegls_lossless.dcm")]

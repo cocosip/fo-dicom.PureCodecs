@@ -21,6 +21,17 @@ public sealed class JpegDctCodecRoundTripTests
         AssertRoundTrip(new DicomJpegProcess2_4Codec(), DicomTransferSyntax.JPEGProcess2_4);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Sequential_dct_round_trip_preserves_8_bit_palette_color_with_tolerance(bool baseline)
+    {
+        IDicomCodec codec = baseline ? new DicomJpegProcess1Codec() : new DicomJpegProcess2_4Codec();
+        var syntax = baseline ? DicomTransferSyntax.JPEGProcess1 : DicomTransferSyntax.JPEGProcess2_4;
+
+        AssertRoundTrip(codec, syntax, DicomPixelDataFixtures.CreatePaletteColor8(rows: 16, columns: 16));
+    }
+
     [Fact]
     public void Process1_rejects_16_bit_source()
     {
@@ -51,7 +62,12 @@ public sealed class JpegDctCodecRoundTripTests
 
     private static void AssertRoundTrip(IDicomCodec codec, DicomTransferSyntax syntax)
     {
-        var rawPixelData = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8(rows: 16, columns: 16));
+        AssertRoundTrip(codec, syntax, DicomPixelDataFixtures.CreateMonochrome8(rows: 16, columns: 16));
+    }
+
+    private static void AssertRoundTrip(IDicomCodec codec, DicomTransferSyntax syntax, DicomDataset source)
+    {
+        var rawPixelData = DicomPixelData.Create(source);
         var compressedPixelData = CreateTargetPixelData(rawPixelData, syntax);
         var decodedPixelData = CreateTargetPixelData(rawPixelData, DicomTransferSyntax.ExplicitVRLittleEndian);
 
@@ -60,6 +76,8 @@ public sealed class JpegDctCodecRoundTripTests
 
         PixelDataAssertions.FramesMatchWithinTolerance(rawPixelData, decodedPixelData, tolerance: 20);
         PixelDataAssertions.AssertFrameCount(rawPixelData, compressedPixelData);
+        Assert.Equal(rawPixelData.PhotometricInterpretation, compressedPixelData.PhotometricInterpretation);
+        Assert.Equal(rawPixelData.PhotometricInterpretation, decodedPixelData.PhotometricInterpretation);
     }
 
     private static DicomPixelData CreateTargetPixelData(DicomPixelData source, DicomTransferSyntax transferSyntax)

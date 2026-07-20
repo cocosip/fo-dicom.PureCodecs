@@ -91,6 +91,7 @@ public sealed class CompressionPlan
         var photometric = pixelData.Dataset.GetSingleValueOrDefault(DicomTag.PhotometricInterpretation, string.Empty);
         if (photometric != PhotometricInterpretation.Monochrome1.Value &&
             photometric != PhotometricInterpretation.Monochrome2.Value &&
+            photometric != PhotometricInterpretation.PaletteColor.Value &&
             photometric != PhotometricInterpretation.Rgb.Value &&
             photometric != "YBR_FULL" &&
             photometric != "YBR_FULL_422")

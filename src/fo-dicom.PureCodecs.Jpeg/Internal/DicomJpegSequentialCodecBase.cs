@@ -112,6 +112,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             var value = photometric?.Value;
             if (value != PhotometricInterpretation.Monochrome1.Value
                 && value != PhotometricInterpretation.Monochrome2.Value
+                && value != PhotometricInterpretation.PaletteColor.Value
                 && value != PhotometricInterpretation.Rgb.Value
                 && value != "YBR_FULL"
                 && value != "YBR_FULL_422")
