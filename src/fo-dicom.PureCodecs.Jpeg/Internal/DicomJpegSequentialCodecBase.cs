@@ -141,7 +141,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
             else if (parameters.ConvertColorspaceToRGB && photometric == "YBR_FULL_422")
             {
-                normalized = JpegColorConverter.YbrFull422ToRgb(normalized);
+                normalized = JpegColorConverter.YbrFullToRgb(normalized);
             }
 
             if (targetPixelData.SamplesPerPixel == 3 && targetPixelData.PlanarConfiguration == PlanarConfiguration.Planar)
@@ -172,7 +172,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
     public sealed class JpegCodecParams : DicomCodecParams
     {
-        public int Quality { get; set; } = 95;
+        public int Quality { get; set; } = 75;
 
         public bool ConvertColorspaceToRGB { get; set; } = true;
 

@@ -95,6 +95,20 @@ public sealed class JpegDicomIntegrationTests
     }
 
     [Fact]
+    public void Process1_rgb_encode_then_decode_returns_rgb_within_lossy_tolerance()
+    {
+        var codec = new DicomJpegProcess1Codec();
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 16, columns: 16));
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess1);
+        var decoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
+
+        PixelDataAssertions.FramesMatchWithinTolerance(source, decoded, tolerance: 20);
+    }
+
+    [Fact]
     public void Process1_rejects_unsupported_photometric_interpretation()
     {
         var codec = new DicomJpegProcess1Codec();
