@@ -14,6 +14,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         public const byte DQT = 0xDB;
         public const byte DRI = 0xDD;
         public const byte APP0 = 0xE0;
+        public const byte APP14 = 0xEE;
         public const byte APP15 = 0xEF;
         public const byte COM = 0xFE;
 

@@ -33,7 +33,13 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 pixelCount,
                 pixelData.SamplesPerPixel,
                 pixelData.PlanarConfiguration);
-            var huffmanTable = CreateReferenceLosslessHuffmanTable(pixelData.BitsStored);
+            var huffmanTable = JpegLosslessScanCodec.CreateOptimalHuffmanTableForFrame(
+                interleavedSamples,
+                pixelData.Width,
+                pixelData.Height,
+                pixelData.SamplesPerPixel,
+                pixelData.BitsStored,
+                selectionValue);
             var scanCodec = JpegLosslessScanCodec.Create(huffmanTable);
             var scan = scanCodec.EncodeInterleaved(
                 interleavedSamples,
@@ -45,10 +51,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
             var writer = new JpegMarkerWriter();
             writer.WriteStandalone(JpegMarker.SOI);
-            writer.WriteSegment(JpegMarker.APP0, CreateJfifPayload());
+            WriteColorSpaceMarker(writer, pixelData);
             writer.WriteSegment(JpegMarker.SOF3, CreateStartOfFramePayload(pixelData));
             writer.WriteSegment(JpegMarker.DHT, huffmanTable.CreateDhtPayload(tableClass: 0, tableId: 0));
-            writer.WriteSegment(JpegMarker.SOS, CreateStartOfScanPayload(pixelData.SamplesPerPixel, selectionValue));
+            writer.WriteSegment(JpegMarker.SOS, CreateStartOfScanPayload(pixelData, selectionValue));
             writer.WriteRaw(scan);
             writer.WriteStandalone(JpegMarker.EOI);
             return writer.ToArray();
@@ -184,7 +190,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             var offset = 6;
             for (var component = 0; component < pixelData.SamplesPerPixel; component++)
             {
-                payload[offset++] = (byte)(component + 1);
+                payload[offset++] = GetComponentIdentifier(pixelData, component);
                 payload[offset++] = 0x11;
                 payload[offset++] = 0;
             }
@@ -192,14 +198,14 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return payload;
         }
 
-        private static byte[] CreateStartOfScanPayload(int samplesPerPixel, int selectionValue)
+        private static byte[] CreateStartOfScanPayload(DicomPixelData pixelData, int selectionValue)
         {
-            var payload = new byte[1 + samplesPerPixel * 2 + 3];
-            payload[0] = (byte)samplesPerPixel;
+            var payload = new byte[1 + pixelData.SamplesPerPixel * 2 + 3];
+            payload[0] = (byte)pixelData.SamplesPerPixel;
             var offset = 1;
-            for (var component = 0; component < samplesPerPixel; component++)
+            for (var component = 0; component < pixelData.SamplesPerPixel; component++)
             {
-                payload[offset++] = (byte)(component + 1);
+                payload[offset++] = GetComponentIdentifier(pixelData, component);
                 payload[offset++] = 0;
             }
 
@@ -207,6 +213,33 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             payload[offset++] = 0;
             payload[offset] = 0;
             return payload;
+        }
+
+        private static void WriteColorSpaceMarker(JpegMarkerWriter writer, DicomPixelData pixelData)
+        {
+            if (pixelData.PhotometricInterpretation == PhotometricInterpretation.Rgb)
+            {
+                writer.WriteSegment(JpegMarker.APP14, CreateAdobePayload());
+                return;
+            }
+
+            writer.WriteSegment(JpegMarker.APP0, CreateJfifPayload());
+        }
+
+        private static byte GetComponentIdentifier(DicomPixelData pixelData, int component)
+        {
+            if (pixelData.PhotometricInterpretation != PhotometricInterpretation.Rgb)
+            {
+                return (byte)(component + 1);
+            }
+
+            return component switch
+            {
+                0 => (byte)'R',
+                1 => (byte)'G',
+                2 => (byte)'B',
+                _ => throw CreateException($"JPEG Lossless RGB component {component} is not supported."),
+            };
         }
 
         private static byte[] CreateJfifPayload()
@@ -230,16 +263,23 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             };
         }
 
-        private static JpegHuffmanTable CreateReferenceLosslessHuffmanTable(int bitsStored)
+        private static byte[] CreateAdobePayload()
         {
-            if (bitsStored >= 12)
+            return new byte[]
             {
-                return JpegHuffmanTable.Build(
-                    new byte[] { 0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 2 },
-                    new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 });
-            }
-
-            return JpegLosslessScanCodec.CreateDefaultHuffmanTableForFrame();
+                (byte)'A',
+                (byte)'d',
+                (byte)'o',
+                (byte)'b',
+                (byte)'e',
+                0,
+                100,
+                0,
+                0,
+                0,
+                0,
+                0,
+            };
         }
 
         private static void ParseHuffmanTables(byte[] payload, JpegHuffmanTable?[] tables)

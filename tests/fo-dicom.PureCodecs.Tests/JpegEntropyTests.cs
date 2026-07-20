@@ -55,7 +55,7 @@ public sealed class JpegEntropyTests
         writer.WriteBits(0b00101, 5);
         writer.WriteBits(0b11, 2);
 
-        Assert.Equal(new byte[] { 0b1010_0101, 0b1100_0000 }, writer.ToArray());
+        Assert.Equal(new byte[] { 0b1010_0101, 0xff, 0x00 }, writer.ToArray());
     }
 
     [Fact]
@@ -89,6 +89,6 @@ public sealed class JpegEntropyTests
         table.Encode(writer, 11);
         table.Encode(writer, 12);
 
-        Assert.Equal(new byte[] { 0b0001_1000 }, writer.ToArray());
+        Assert.Equal(new byte[] { 0b0001_1001 }, writer.ToArray());
     }
 }

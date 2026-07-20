@@ -306,7 +306,9 @@ public sealed class ToolsCompressionPlanTests
 
         Assert.Equal(referencePixelData.Syntax, compressedPixelData.Syntax);
         Assert.Equal(sourcePixelData.NumberOfFrames, compressedPixelData.NumberOfFrames);
-        Assert.Equal(referencePixelData.GetFrame(0).Size, compressedPixelData.GetFrame(0).Size);
+        Assert.Equal(
+            GetJpegCodestream(referencePixelData.GetFrame(0).Data),
+            GetJpegCodestream(compressedPixelData.GetFrame(0).Data));
         PixelDataAssertions.FramesMatchExactly(sourcePixelData, decodedPixelData);
         using var rendered = new DicomImage(result.Item.OutputPath).RenderImage();
         Assert.NotNull(rendered);
@@ -488,6 +490,23 @@ public sealed class ToolsCompressionPlanTests
             Assert.True(item.IsUnsupported);
             Assert.Equal(reason, item.SkipReason);
         }
+    }
+
+    private static byte[] GetJpegCodestream(byte[] frame)
+    {
+        for (var index = 0; index + 1 < frame.Length; index++)
+        {
+            if (frame[index] != 0xff || frame[index + 1] != 0xd9)
+            {
+                continue;
+            }
+
+            var codestream = new byte[index + 2];
+            Buffer.BlockCopy(frame, 0, codestream, 0, codestream.Length);
+            return codestream;
+        }
+
+        throw new Xunit.Sdk.XunitException("JPEG frame does not contain an EOI marker.");
     }
 
     private static void AssertNativeDecode(string path, DicomPixelData sourcePixelData, int tolerance)

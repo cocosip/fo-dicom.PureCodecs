@@ -22,6 +22,38 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return CreateDefaultHuffmanTable();
         }
 
+        internal static JpegHuffmanTable CreateOptimalHuffmanTableForFrame(
+            int[] samples,
+            int width,
+            int height,
+            int componentCount,
+            int samplePrecision,
+            int selectionValue)
+        {
+            ValidateShape(samples, width, height, samplePrecision, width * height * componentCount);
+            ValidateComponentCount(componentCount);
+
+            var frequencies = new int[256];
+            for (var y = 0; y < height; y++)
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    for (var component = 0; component < componentCount; component++)
+                    {
+                        var index = GetInterleavedIndex(width, componentCount, x, y, component);
+                        var sample = samples[index];
+                        ValidateSample(sample, samplePrecision);
+
+                        var prediction = PredictInterleaved(samples, width, componentCount, x, y, component, samplePrecision, selectionValue);
+                        var difference = sample - prediction;
+                        frequencies[GetCategory(difference)]++;
+                    }
+                }
+            }
+
+            return JpegHuffmanTable.CreateOptimal(frequencies);
+        }
+
         public static JpegLosslessScanCodec Create(JpegHuffmanTable table)
         {
             return new JpegLosslessScanCodec(table ?? throw new ArgumentNullException(nameof(table)));
@@ -59,7 +91,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                         ValidateSample(sample, samplePrecision);
 
                         var prediction = PredictInterleaved(samples, width, componentCount, x, y, component, samplePrecision, selectionValue);
-                        var difference = NormalizeDifference(sample - prediction, samplePrecision);
+                        var difference = sample - prediction;
                         var category = GetCategory(difference);
                         _table.Encode(writer, category);
                         if (category > 0)
@@ -202,23 +234,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             return encoded - ((1 << category) - 1);
-        }
-
-        private static int NormalizeDifference(int difference, int samplePrecision)
-        {
-            var modulus = 1 << samplePrecision;
-            var halfModulus = modulus >> 1;
-            if (difference >= halfModulus)
-            {
-                return difference - modulus;
-            }
-
-            if (difference < -halfModulus)
-            {
-                return difference + modulus;
-            }
-
-            return difference;
         }
 
         private static int NormalizeSample(int sample, int samplePrecision)

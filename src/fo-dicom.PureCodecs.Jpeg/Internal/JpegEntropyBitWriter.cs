@@ -44,7 +44,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             var copy = new List<byte>(_bytes);
             if (_bitsWritten > 0)
             {
-                var padded = _currentByte << (8 - _bitsWritten);
+                var paddingBitCount = 8 - _bitsWritten;
+                var padded = (_currentByte << paddingBitCount) | ((1 << paddingBitCount) - 1);
                 copy.Add((byte)padded);
                 if (padded == 0xFF)
                 {

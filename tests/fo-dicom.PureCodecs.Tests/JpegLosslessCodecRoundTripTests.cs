@@ -3,8 +3,10 @@ using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 using FellowOakDicom.IO.Buffer;
 using FellowOakDicom.PureCodecs.Jpeg;
+using FellowOakDicom.PureCodecs.Jpeg.Internal;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
+using NativeJpegLossless14Sv1Codec = FellowOakDicom.Imaging.NativeCodec.DicomJpegLossless14SV1Codec;
 
 namespace FellowOakDicom.PureCodecs.Tests;
 
@@ -40,6 +42,30 @@ public sealed class JpegLosslessCodecRoundTripTests
         codec.Decode(compressedPixelData, decodedPixelData, codec.GetDefaultParameters());
 
         PixelDataAssertions.FramesMatchExactly(rawPixelData, decodedPixelData);
+    }
+
+    [Fact]
+    public void Process14_sv1_rgb_encoding_matches_native_optimized_huffman_table()
+    {
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 16, columns: 16));
+        var pureCompressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess14SV1);
+        var nativeCompressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess14SV1);
+        var nativeDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var pureCodec = new DicomJpegLossless14SV1Codec();
+        var nativeCodec = new NativeJpegLossless14Sv1Codec();
+
+        pureCodec.Encode(source, pureCompressed, pureCodec.GetDefaultParameters());
+        nativeCodec.Encode(source, nativeCompressed, nativeCodec.GetDefaultParameters());
+
+        var nativeDht = GetDhtPayload(nativeCompressed.GetFrame(0).Data);
+        var pureDht = GetDhtPayload(pureCompressed.GetFrame(0).Data);
+        Assert.True(
+            nativeDht.SequenceEqual(pureDht),
+            $"Native DHT: {Convert.ToHexString(nativeDht)}{Environment.NewLine}Pure DHT: {Convert.ToHexString(pureDht)}");
+        Assert.Equal(nativeCompressed.GetFrame(0).Data, pureCompressed.GetFrame(0).Data);
+
+        nativeCodec.Decode(pureCompressed, nativeDecoded, nativeCodec.GetDefaultParameters());
+        PixelDataAssertions.FramesMatchExactly(source, nativeDecoded);
     }
 
     private static void AssertRoundTrip(IDicomCodec codec, DicomTransferSyntax syntax, int bitsAllocated)
@@ -91,6 +117,24 @@ public sealed class JpegLosslessCodecRoundTripTests
         }
 
         return DicomPixelData.Create(dataset, true);
+    }
+
+    private static byte[] GetDhtPayload(byte[] jpeg)
+    {
+        for (var index = 0; index + 3 < jpeg.Length; index++)
+        {
+            if (jpeg[index] != 0xff || jpeg[index + 1] != JpegMarker.DHT)
+            {
+                continue;
+            }
+
+            var length = (jpeg[index + 2] << 8) | jpeg[index + 3];
+            var payload = new byte[length - 2];
+            Buffer.BlockCopy(jpeg, index + 4, payload, 0, payload.Length);
+            return payload;
+        }
+
+        throw new Xunit.Sdk.XunitException("JPEG frame does not contain a DHT marker.");
     }
 
     private static byte[] CreateUInt16Frame(params int[] samples)
