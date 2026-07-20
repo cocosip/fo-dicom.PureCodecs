@@ -71,6 +71,113 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return new JpegHuffmanTable(decodeValues, encodeCodes, countsCopy, valuesCopy);
         }
 
+        public static JpegHuffmanTable CreateOptimal(int[] frequencies)
+        {
+            if (frequencies == null)
+            {
+                throw new ArgumentNullException(nameof(frequencies));
+            }
+
+            if (frequencies.Length != 256)
+            {
+                throw new ArgumentException("JPEG Huffman frequencies must contain 256 symbols.", nameof(frequencies));
+            }
+
+            var frequency = new long[257];
+            var codeSizes = new int[257];
+            var others = new int[257];
+            for (var index = 0; index < others.Length; index++)
+            {
+                others[index] = -1;
+            }
+
+            for (var index = 0; index < frequencies.Length; index++)
+            {
+                frequency[index] = frequencies[index];
+            }
+
+            // The pseudo-symbol prevents an all-ones code from being emitted.
+            frequency[256] = 1;
+            while (true)
+            {
+                var first = FindLeastFrequentSymbol(frequency);
+                var second = FindLeastFrequentSymbol(frequency, first);
+                if (second < 0)
+                {
+                    break;
+                }
+
+                frequency[first] += frequency[second];
+                frequency[second] = 0;
+                var firstBranchEnd = IncrementCodeSize(codeSizes, others, first);
+                others[firstBranchEnd] = second;
+                IncrementCodeSize(codeSizes, others, second);
+            }
+
+            var lengthCounts = new int[257];
+            for (var symbol = 0; symbol < 257; symbol++)
+            {
+                if (codeSizes[symbol] > 0)
+                {
+                    lengthCounts[codeSizes[symbol]]++;
+                }
+            }
+
+            for (var length = lengthCounts.Length - 1; length > 16; length--)
+            {
+                while (lengthCounts[length] > 0)
+                {
+                    var shorterLength = length - 2;
+                    while (shorterLength > 0 && lengthCounts[shorterLength] == 0)
+                    {
+                        shorterLength--;
+                    }
+
+                    if (shorterLength == 0)
+                    {
+                        throw new InvalidOperationException("Unable to limit JPEG Huffman code lengths.");
+                    }
+
+                    lengthCounts[length] -= 2;
+                    lengthCounts[length - 1]++;
+                    lengthCounts[shorterLength + 1] += 2;
+                    lengthCounts[shorterLength]--;
+                }
+            }
+
+            for (var length = 16; length > 0; length--)
+            {
+                if (lengthCounts[length] > 0)
+                {
+                    lengthCounts[length]--;
+                    break;
+                }
+            }
+
+            var counts = new byte[16];
+            var valueCount = 0;
+            for (var length = 1; length <= counts.Length; length++)
+            {
+                counts[length - 1] = checked((byte)lengthCounts[length]);
+                valueCount += lengthCounts[length];
+            }
+
+            var values = new byte[valueCount];
+            var valueIndex = 0;
+            for (var codeSize = 1; codeSize < codeSizes.Length; codeSize++)
+            {
+                for (var symbol = 0; symbol < frequencies.Length; symbol++)
+                {
+                    if (codeSizes[symbol] == codeSize)
+                    {
+                        values[valueIndex++] = (byte)symbol;
+                    }
+                }
+            }
+
+            return Build(counts, values);
+        }
+
         public byte[] CreateDhtPayload(int tableClass, int tableId)
         {
             if (tableClass < 0 || tableClass > 1)
@@ -128,6 +235,37 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         private static int Key(int bitLength, int code)
         {
             return (bitLength << 16) | code;
+        }
+
+        private static int FindLeastFrequentSymbol(long[] frequencies, int excluded = -1)
+        {
+            var result = -1;
+            for (var symbol = 0; symbol < frequencies.Length; symbol++)
+            {
+                if (symbol == excluded || frequencies[symbol] == 0)
+                {
+                    continue;
+                }
+
+                if (result < 0 || frequencies[symbol] <= frequencies[result])
+                {
+                    result = symbol;
+                }
+            }
+
+            return result;
+        }
+
+        private static int IncrementCodeSize(int[] codeSizes, int[] others, int symbol)
+        {
+            codeSizes[symbol]++;
+            while (others[symbol] >= 0)
+            {
+                symbol = others[symbol];
+                codeSizes[symbol]++;
+            }
+
+            return symbol;
         }
 
         private readonly struct HuffmanCode

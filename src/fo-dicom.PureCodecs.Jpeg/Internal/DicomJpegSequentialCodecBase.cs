@@ -37,10 +37,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             {
                 try
                 {
-                    var encodeAsYbrFull422 = oldPixelData.SamplesPerPixel == 3
+                    var convertRgbToYbrFull = oldPixelData.SamplesPerPixel == 3
                         && oldPixelData.PhotometricInterpretation == PhotometricInterpretation.Rgb;
                     var sourceFrame = NormalizeFrameForEncode(oldPixelData, ToArray(oldPixelData.GetFrame(frame)));
-                    if (encodeAsYbrFull422)
+                    if (convertRgbToYbrFull)
                     {
                         sourceFrame = JpegColorConverter.RgbToYbrFull(sourceFrame);
                     }
@@ -51,7 +51,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                         oldPixelData.Height,
                         oldPixelData.SamplesPerPixel,
                         jpegParameters.Quality,
-                        encodeAsYbrFull422);
+                        useYbrFull422: false);
                     newPixelData.AddFrame(new MemoryByteBuffer(encoded));
                 }
                 catch (Exception exception)
@@ -172,7 +172,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
     public sealed class JpegCodecParams : DicomCodecParams
     {
-        public int Quality { get; set; } = 75;
+        public int Quality { get; set; } = 90;
 
         public bool ConvertColorspaceToRGB { get; set; } = true;
 

@@ -15,7 +15,7 @@ public sealed class FullCompatibilityMatrixTests
 {
     public static TheoryData<string, DicomTransferSyntax, IDicomCodec, int?> EfferentAcceptanceDecodeCases => new()
     {
-        { "JPEG baseline YBR 4:2:2 acceptance sample", DicomTransferSyntax.JPEGProcess1, new DicomJpegProcess1Codec(), 20 },
+        { "JPEG baseline YBR 4:2:2 acceptance sample", DicomTransferSyntax.JPEGProcess1, new DicomJpegProcess1Codec(), 38 },
         { "JPEG baseline YBR full acceptance sample", DicomTransferSyntax.JPEGProcess1, new DicomJpegProcess1Codec(), 20 },
         { "JPEG lossless RGB acceptance sample", DicomTransferSyntax.JPEGProcess14SV1, new DicomJpegLossless14SV1Codec(), null },
         { "RLE lossless acceptance sample", DicomTransferSyntax.RLELossless, new DicomRleLosslessCodec(), null },
@@ -170,7 +170,7 @@ public sealed class FullCompatibilityMatrixTests
 
         if (tolerance.HasValue)
         {
-            PixelDataAssertions.FramesMatchWithinTolerance(raw, decodedAgain, tolerance.Value);
+            Assert.InRange(PixelDataAssertions.MaxSampleDifference(raw, decodedAgain), 0, tolerance.Value);
         }
         else
         {

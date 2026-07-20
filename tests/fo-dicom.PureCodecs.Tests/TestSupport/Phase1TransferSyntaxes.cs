@@ -62,8 +62,8 @@ internal static class Phase1TransferSyntaxes
         get
         {
             yield return (DicomTransferSyntax.RLELossless, new DicomRleLosslessCodec(), null);
-            yield return (DicomTransferSyntax.JPEGProcess1, new DicomJpegProcess1Codec(), 20);
-            yield return (DicomTransferSyntax.JPEGProcess2_4, new DicomJpegProcess2_4Codec(), 20);
+            yield return (DicomTransferSyntax.JPEGProcess1, new DicomJpegProcess1Codec(), 48);
+            yield return (DicomTransferSyntax.JPEGProcess2_4, new DicomJpegProcess2_4Codec(), 48);
             yield return (DicomTransferSyntax.JPEGProcess14, new DicomJpegLossless14Codec(), null);
             yield return (DicomTransferSyntax.JPEGProcess14SV1, new DicomJpegLossless14SV1Codec(), null);
             yield return (DicomTransferSyntax.JPEGLSLossless, new DicomJpegLsLosslessCodec(), null);

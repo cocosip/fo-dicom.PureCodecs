@@ -17,13 +17,23 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             72, 92, 95, 98, 112, 100, 103, 99,
         };
 
+        private static readonly int[] ChrominanceQuantization =
+        {
+            17, 18, 24, 47, 99, 99, 99, 99,
+            18, 21, 26, 66, 99, 99, 99, 99,
+            24, 26, 56, 99, 99, 99, 99, 99,
+            47, 66, 99, 99, 99, 99, 99, 99,
+            99, 99, 99, 99, 99, 99, 99, 99,
+            99, 99, 99, 99, 99, 99, 99, 99,
+            99, 99, 99, 99, 99, 99, 99, 99,
+            99, 99, 99, 99, 99, 99, 99, 99,
+        };
+
         private readonly JpegSequentialProcess _process;
-        private readonly JpegHuffmanTable _huffmanTable;
 
         public JpegSequentialDctCodec(JpegSequentialProcess process)
         {
             _process = process;
-            _huffmanTable = CreateDefaultHuffmanTable();
         }
 
         public byte[] Encode(byte[] samples, int width, int height, int quality)
@@ -50,14 +60,15 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 throw CreateException($"JPEG sequential sample count {samples.Length} does not match dimensions {width}x{height}x{componentCount}.");
             }
 
-            var quantizationTable = CreateQuantizationTable(quality);
-            var scan = EncodeScan(samples, width, height, componentCount, quantizationTable, useYbrFull422);
+            var quantizationTables = CreateQuantizationTables(componentCount, quality);
+            CreateHuffmanTables(samples, width, height, componentCount, quantizationTables, useYbrFull422, out var dcTables, out var acTables);
+            var scan = EncodeScan(samples, width, height, componentCount, quantizationTables, dcTables, acTables, useYbrFull422);
 
             var writer = new JpegMarkerWriter();
             writer.WriteStandalone(JpegMarker.SOI);
-            writer.WriteSegment(JpegMarker.DQT, CreateQuantizationPayload(quantizationTable));
+            writer.WriteSegment(JpegMarker.DQT, CreateQuantizationPayload(quantizationTables));
             writer.WriteSegment(_process == JpegSequentialProcess.Baseline ? JpegMarker.SOF0 : JpegMarker.SOF1, CreateStartOfFramePayload(width, height, componentCount, useYbrFull422));
-            writer.WriteSegment(JpegMarker.DHT, CreateDefaultHuffmanPayload());
+            writer.WriteSegment(JpegMarker.DHT, CreateHuffmanPayload(dcTables, acTables));
             writer.WriteSegment(JpegMarker.SOS, CreateStartOfScanPayload(componentCount));
             writer.WriteRaw(scan);
             writer.WriteStandalone(JpegMarker.EOI);
@@ -87,10 +98,127 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return DecodeScan(parsed.ScanData, parsed);
         }
 
-        private byte[] EncodeScan(byte[] samples, int width, int height, int componentCount, JpegQuantizationTable quantizationTable, bool useYbrFull422)
+        private static void CreateHuffmanTables(
+            byte[] samples,
+            int width,
+            int height,
+            int componentCount,
+            JpegQuantizationTable[] quantizationTables,
+            bool useYbrFull422,
+            out JpegHuffmanTable[] dcTables,
+            out JpegHuffmanTable[] acTables)
+        {
+            var tableCount = componentCount == 3 ? 2 : 1;
+            var dcFrequencies = new int[tableCount][];
+            var acFrequencies = new int[tableCount][];
+            for (var table = 0; table < tableCount; table++)
+            {
+                dcFrequencies[table] = new int[256];
+                acFrequencies[table] = new int[256];
+            }
+
+            var previousDc = new int[componentCount];
+            VisitQuantizedBlocks(samples, width, height, componentCount, quantizationTables, useYbrFull422, (component, zigzag) =>
+            {
+                var table = GetComponentTableId(component, componentCount);
+                var dc = ToInt(zigzag[0]);
+                dcFrequencies[table][GetCategory(dc - previousDc[component])]++;
+                previousDc[component] = dc;
+
+                var zeroRun = 0;
+                for (var index = 1; index < zigzag.Length; index++)
+                {
+                    var value = ToInt(zigzag[index]);
+                    if (value == 0)
+                    {
+                        zeroRun++;
+                        continue;
+                    }
+
+                    while (zeroRun > 15)
+                    {
+                        acFrequencies[table][0xF0]++;
+                        zeroRun -= 16;
+                    }
+
+                    acFrequencies[table][(zeroRun << 4) | GetCategory(value)]++;
+                    zeroRun = 0;
+                }
+
+                if (zeroRun > 0)
+                {
+                    acFrequencies[table][0]++;
+                }
+            });
+
+            dcTables = new JpegHuffmanTable[tableCount];
+            acTables = new JpegHuffmanTable[tableCount];
+            for (var table = 0; table < tableCount; table++)
+            {
+                dcTables[table] = JpegHuffmanTable.CreateOptimal(dcFrequencies[table]);
+                acTables[table] = JpegHuffmanTable.CreateOptimal(acFrequencies[table]);
+            }
+        }
+
+        private static byte[] EncodeScan(
+            byte[] samples,
+            int width,
+            int height,
+            int componentCount,
+            JpegQuantizationTable[] quantizationTables,
+            JpegHuffmanTable[] dcTables,
+            JpegHuffmanTable[] acTables,
+            bool useYbrFull422)
         {
             var bitWriter = new JpegEntropyBitWriter();
             var previousDc = new int[componentCount];
+            VisitQuantizedBlocks(samples, width, height, componentCount, quantizationTables, useYbrFull422, (component, zigzag) =>
+            {
+                var table = GetComponentTableId(component, componentCount);
+                var dc = ToInt(zigzag[0]);
+                EncodeDifference(bitWriter, dcTables[table], dc - previousDc[component]);
+                previousDc[component] = dc;
+
+                var zeroRun = 0;
+                for (var index = 1; index < zigzag.Length; index++)
+                {
+                    var value = ToInt(zigzag[index]);
+                    if (value == 0)
+                    {
+                        zeroRun++;
+                        continue;
+                    }
+
+                    while (zeroRun > 15)
+                    {
+                        acTables[table].Encode(bitWriter, 0xF0);
+                        zeroRun -= 16;
+                    }
+
+                    var category = GetCategory(value);
+                    acTables[table].Encode(bitWriter, (zeroRun << 4) | category);
+                    bitWriter.WriteBits(EncodeMagnitude(value, category), category);
+                    zeroRun = 0;
+                }
+
+                if (zeroRun > 0)
+                {
+                    acTables[table].Encode(bitWriter, 0);
+                }
+            });
+
+            return bitWriter.ToArray();
+        }
+
+        private static void VisitQuantizedBlocks(
+            byte[] samples,
+            int width,
+            int height,
+            int componentCount,
+            JpegQuantizationTable[] quantizationTables,
+            bool useYbrFull422,
+            Action<int, double[]> visitor)
+        {
             var mcuWidth = useYbrFull422 ? 16 : 8;
             for (var blockY = 0; blockY < height; blockY += 8)
             {
@@ -104,98 +232,12 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                             var block = useYbrFull422 && component > 0
                                 ? ReadSubsampledChromaBlock(samples, width, height, componentCount, component, blockX / 2, blockY)
                                 : ReadSampleBlock(samples, width, height, componentCount, component, blockX + (horizontalBlock * 8), blockY);
-                            var coefficients = quantizationTable.Quantize(JpegDct.Forward(block));
-                            var zigzag = JpegZigZag.ToZigZag(coefficients);
-                            var dc = ToInt(zigzag[0]);
-                            EncodeDifference(bitWriter, dc - previousDc[component]);
-                            previousDc[component] = dc;
-
-                            var zeroRun = 0;
-                            for (var index = 1; index < zigzag.Length; index++)
-                            {
-                                var value = ToInt(zigzag[index]);
-                                if (value == 0)
-                                {
-                                    zeroRun++;
-                                    continue;
-                                }
-
-                                while (zeroRun > 15)
-                                {
-                                    _huffmanTable.Encode(bitWriter, 0xF0);
-                                    zeroRun -= 16;
-                                }
-
-                                var category = GetCategory(value);
-                                _huffmanTable.Encode(bitWriter, (zeroRun << 4) | category);
-                                bitWriter.WriteBits(EncodeMagnitude(value, category), category);
-                                zeroRun = 0;
-                            }
-
-                            if (zeroRun > 0)
-                            {
-                                _huffmanTable.Encode(bitWriter, 0);
-                            }
+                            var table = quantizationTables[GetComponentTableId(component, componentCount)];
+                            visitor(component, JpegZigZag.ToZigZag(table.Quantize(JpegDct.Forward(block))));
                         }
                     }
                 }
             }
-
-            return bitWriter.ToArray();
-        }
-
-        private byte[] DecodeScan(byte[] scanData, int width, int height, int componentCount, JpegQuantizationTable quantizationTable)
-        {
-            var output = new byte[width * height * componentCount];
-            var bitReader = new JpegEntropyBitReader(scanData);
-            var previousDc = new int[componentCount];
-
-            for (var blockY = 0; blockY < height; blockY += 8)
-            {
-                for (var blockX = 0; blockX < width; blockX += 8)
-                {
-                    for (var component = 0; component < componentCount; component++)
-                    {
-                        var coefficients = new double[64];
-                        var dcCategory = _huffmanTable.Decode(bitReader);
-                        var dcDifference = dcCategory == 0 ? 0 : DecodeMagnitude(bitReader.ReadBits(dcCategory), dcCategory);
-                        var dc = previousDc[component] + dcDifference;
-                        previousDc[component] = dc;
-                        coefficients[0] = dc;
-
-                        var index = 1;
-                        while (index < 64)
-                        {
-                            var symbol = _huffmanTable.Decode(bitReader);
-                            if (symbol == 0)
-                            {
-                                break;
-                            }
-
-                            if (symbol == 0xF0)
-                            {
-                                index += 16;
-                                continue;
-                            }
-
-                            var run = symbol >> 4;
-                            var category = symbol & 0x0F;
-                            index += run;
-                            if (index >= 64)
-                            {
-                                throw CreateException("JPEG sequential AC run exceeds block length.");
-                            }
-
-                            coefficients[index++] = DecodeMagnitude(bitReader.ReadBits(category), category);
-                        }
-
-                        var block = JpegDct.Inverse(quantizationTable.Dequantize(JpegZigZag.FromZigZag(coefficients)));
-                        WriteSampleBlock(output, width, height, componentCount, component, blockX, blockY, block);
-                    }
-                }
-            }
-
-            return output;
         }
 
         private static byte[] DecodeScan(byte[] scanData, ParsedSequentialFrame frame)
@@ -447,7 +489,15 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return (byte)value;
         }
 
-        private static JpegQuantizationTable CreateQuantizationTable(int quality)
+        private static JpegQuantizationTable[] CreateQuantizationTables(int componentCount, int quality)
+        {
+            var luminance = CreateQuantizationTable(LuminanceQuantization, quality);
+            return componentCount == 3
+                ? new[] { luminance, CreateQuantizationTable(ChrominanceQuantization, quality) }
+                : new[] { luminance };
+        }
+
+        private static JpegQuantizationTable CreateQuantizationTable(int[] source, int quality)
         {
             if (quality < 1 || quality > 100)
             {
@@ -458,20 +508,25 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             var divisors = new int[64];
             for (var index = 0; index < divisors.Length; index++)
             {
-                var value = (LuminanceQuantization[index] * scale + 50) / 100;
+                var value = (source[index] * scale + 50) / 100;
                 divisors[index] = Math.Max(1, Math.Min(255, value));
             }
 
             return new JpegQuantizationTable(divisors);
         }
 
-        private static byte[] CreateQuantizationPayload(JpegQuantizationTable table)
+        private static byte[] CreateQuantizationPayload(JpegQuantizationTable[] tables)
         {
-            var payload = new byte[65];
-            var zigzag = JpegZigZag.ToZigZag(table.ToBlock());
-            for (var index = 0; index < zigzag.Length; index++)
+            var payload = new byte[tables.Length * 65];
+            for (var table = 0; table < tables.Length; table++)
             {
-                payload[index + 1] = (byte)ToInt(zigzag[index]);
+                var zigzag = JpegZigZag.ToZigZag(tables[table].ToBlock());
+                var offset = table * 65;
+                payload[offset] = (byte)table;
+                for (var index = 0; index < zigzag.Length; index++)
+                {
+                    payload[offset + index + 1] = (byte)ToInt(zigzag[index]);
+                }
             }
 
             return payload;
@@ -594,7 +649,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 var offset = 6 + component * 3;
                 payload[offset] = (byte)(component + 1);
                 payload[offset + 1] = useYbrFull422 && component == 0 ? (byte)0x21 : (byte)0x11;
-                payload[offset + 2] = 0;
+                payload[offset + 2] = (byte)GetComponentTableId(component, componentCount);
             }
 
             return payload;
@@ -608,7 +663,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             {
                 var offset = 1 + component * 2;
                 payload[offset] = (byte)(component + 1);
-                payload[offset + 1] = 0;
+                var table = GetComponentTableId(component, componentCount);
+                payload[offset + 1] = (byte)((table << 4) | table);
             }
 
             var tail = 1 + componentCount * 2;
@@ -618,42 +674,46 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return payload;
         }
 
-        private static JpegHuffmanTable CreateDefaultHuffmanTable()
+        private static byte[] CreateHuffmanPayload(JpegHuffmanTable[] dcTables, JpegHuffmanTable[] acTables)
         {
-            var counts = new byte[16];
-            counts[7] = 255;
-            var values = new byte[255];
-            for (var index = 0; index < values.Length; index++)
+            var payloads = new byte[dcTables.Length * 2][];
+            for (var table = 0; table < dcTables.Length; table++)
             {
-                values[index] = (byte)index;
+                payloads[table * 2] = dcTables[table].CreateDhtPayload(tableClass: 0, tableId: table);
+                payloads[table * 2 + 1] = acTables[table].CreateDhtPayload(tableClass: 1, tableId: table);
             }
 
-            return JpegHuffmanTable.Build(counts, values);
+            return CombinePayloads(payloads);
         }
 
-        private static byte[] CreateDefaultHuffmanPayload()
+        private static byte[] CombinePayloads(byte[][] payloads)
         {
-            var tableSize = 1 + 16 + 255;
-            var payload = new byte[tableSize * 2];
-            WriteDefaultHuffmanPayload(payload, offset: 0, tableInfo: 0x00);
-            WriteDefaultHuffmanPayload(payload, offset: tableSize, tableInfo: 0x10);
+            var length = 0;
+            for (var index = 0; index < payloads.Length; index++)
+            {
+                length += payloads[index].Length;
+            }
+
+            var payload = new byte[length];
+            var offset = 0;
+            for (var index = 0; index < payloads.Length; index++)
+            {
+                Buffer.BlockCopy(payloads[index], 0, payload, offset, payloads[index].Length);
+                offset += payloads[index].Length;
+            }
+
             return payload;
         }
 
-        private static void WriteDefaultHuffmanPayload(byte[] payload, int offset, byte tableInfo)
+        private static int GetComponentTableId(int component, int componentCount)
         {
-            payload[offset] = tableInfo;
-            payload[offset + 8] = 255;
-            for (var index = 0; index < 255; index++)
-            {
-                payload[offset + 17 + index] = (byte)index;
-            }
+            return componentCount == 3 && component > 0 ? 1 : 0;
         }
 
-        private void EncodeDifference(JpegEntropyBitWriter bitWriter, int difference)
+        private static void EncodeDifference(JpegEntropyBitWriter bitWriter, JpegHuffmanTable table, int difference)
         {
             var category = GetCategory(difference);
-            _huffmanTable.Encode(bitWriter, category);
+            table.Encode(bitWriter, category);
             if (category > 0)
             {
                 bitWriter.WriteBits(EncodeMagnitude(difference, category), category);

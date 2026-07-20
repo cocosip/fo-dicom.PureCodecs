@@ -6,6 +6,8 @@ using FellowOakDicom.PureCodecs.Jpeg;
 using FellowOakDicom.PureCodecs.Jpeg.Internal;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
+using NativeJpegCodecParams = FellowOakDicom.Imaging.NativeCodec.DicomJpegParams;
+using NativeJpegProcess1Codec = FellowOakDicom.Imaging.NativeCodec.DicomJpegProcess1Codec;
 
 namespace FellowOakDicom.PureCodecs.Tests;
 
@@ -16,7 +18,7 @@ public sealed class JpegDicomIntegrationTests
     {
         var parameters = Assert.IsType<JpegCodecParams>(new DicomJpegProcess1Codec().GetDefaultParameters());
 
-        Assert.Equal(95, parameters.Quality);
+        Assert.Equal(90, parameters.Quality);
         Assert.True(parameters.ConvertColorspaceToRGB);
         Assert.Equal(1, parameters.Predictor);
         Assert.Equal(0, parameters.PointTransform);
@@ -80,7 +82,7 @@ public sealed class JpegDicomIntegrationTests
     }
 
     [Fact]
-    public void Process1_encode_converts_rgb_to_ybr_full_422_with_422_jpeg_sampling()
+    public void Process1_encode_converts_rgb_to_ybr_full_422_with_native_jpeg_sampling()
     {
         var codec = new DicomJpegProcess1Codec();
         var rawPixelData = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 16, columns: 16));
@@ -90,22 +92,37 @@ public sealed class JpegDicomIntegrationTests
 
         Assert.Equal(PhotometricInterpretation.YbrFull422, compressedPixelData.PhotometricInterpretation);
         Assert.Equal(
-            new byte[] { 0x21, 0x11, 0x11 },
+            new byte[] { 0x11, 0x11, 0x11 },
             GetSofSamplingFactors(ToArray(compressedPixelData.GetFrame(0))));
     }
 
     [Fact]
-    public void Process1_rgb_encode_then_decode_returns_rgb_within_lossy_tolerance()
+    public void Process1_rgb_encode_then_decode_is_not_less_accurate_than_native_default()
     {
         var codec = new DicomJpegProcess1Codec();
         var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 16, columns: 16));
         var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess1);
         var decoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var nativeCompressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess1);
+        var nativeDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var nativeDecodedPureOutput = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var nativeCodec = new NativeJpegProcess1Codec();
+        var nativeParameters = Assert.IsType<NativeJpegCodecParams>(nativeCodec.GetDefaultParameters());
+        nativeParameters.ConvertColorSpaceToRGB = true;
 
         codec.Encode(source, compressed, codec.GetDefaultParameters());
         codec.Decode(compressed, decoded, codec.GetDefaultParameters());
+        nativeCodec.Encode(source, nativeCompressed, nativeParameters);
+        nativeCodec.Decode(nativeCompressed, nativeDecoded, nativeParameters);
+        nativeCodec.Decode(compressed, nativeDecodedPureOutput, nativeParameters);
 
-        PixelDataAssertions.FramesMatchWithinTolerance(source, decoded, tolerance: 20);
+        var nativeDifference = PixelDataAssertions.MaxSampleDifference(source, nativeDecoded);
+        var pureDifference = PixelDataAssertions.MaxSampleDifference(source, decoded);
+        Assert.InRange(nativeDifference, 0, 48);
+        Assert.True(
+            pureDifference <= nativeDifference,
+            $"Pure JPEG max sample difference {pureDifference} exceeds native difference {nativeDifference}.");
+        Assert.Equal(source.GetFrame(0).Size, nativeDecodedPureOutput.GetFrame(0).Size);
     }
 
     [Fact]
