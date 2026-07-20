@@ -19,6 +19,23 @@ public sealed class RegressionFixturePrivacyTests
         Assert.True(file.Dataset.Contains(DicomTag.PixelData));
     }
 
+    [Fact]
+    public void Bundled_interop_fixtures_are_deidentified_and_have_pixel_data()
+    {
+        var fixtures = RegressionFixturePaths.InteropFixtures();
+
+        Assert.Equal(10, fixtures.Count);
+        Assert.All(fixtures, fixture =>
+        {
+            var file = DicomFile.Open(fixture, FileReadOption.ReadAll);
+
+            Assert.Equal("PURECODECS^INTEROP", file.Dataset.GetSingleValueOrDefault(DicomTag.PatientName, string.Empty));
+            Assert.Equal("PURECODECS-INTEROP", file.Dataset.GetSingleValueOrDefault(DicomTag.PatientID, string.Empty));
+            AssertNoPrivateTags(file.Dataset);
+            Assert.True(file.Dataset.Contains(DicomTag.PixelData));
+        });
+    }
+
     [Theory]
     [InlineData("1_jpeg_lossless.dcm")]
     [InlineData("1_jpeg_lossless_sv1.dcm")]
@@ -33,5 +50,18 @@ public sealed class RegressionFixturePrivacyTests
         Assert.Equal("PURECODECS-001", file.Dataset.GetSingleValueOrDefault(DicomTag.PatientID, string.Empty));
         Assert.DoesNotContain(file.Dataset, item => item.Tag.IsPrivate);
         Assert.True(file.Dataset.Contains(DicomTag.PixelData));
+    }
+
+    private static void AssertNoPrivateTags(DicomDataset dataset)
+    {
+        Assert.DoesNotContain(dataset, item => item.Tag.IsPrivate);
+
+        foreach (var sequence in dataset.OfType<DicomSequence>())
+        {
+            foreach (var item in sequence)
+            {
+                AssertNoPrivateTags(item);
+            }
+        }
     }
 }

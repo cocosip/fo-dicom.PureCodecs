@@ -9,6 +9,13 @@ internal static class RegressionFixturePaths
         return Resolve("Regression", "Transcoded", fileName);
     }
 
+    public static IReadOnlyList<string> InteropFixtures()
+    {
+        return Enumerable.Range(1, 10)
+            .Select(index => Resolve("Regression", "Interop", $"sample-{index:D2}.dcm"))
+            .ToArray();
+    }
+
     public static string Jpeg2000Baseline(string fileName)
     {
         return Resolve("Regression", "Jpeg2000Baseline", fileName);
