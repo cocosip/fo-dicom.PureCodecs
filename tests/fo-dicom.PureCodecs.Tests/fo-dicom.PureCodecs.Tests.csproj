@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\tools\fo-dicom.NativeCodecs.Tools\fo-dicom.NativeCodecs.Tools.csproj" />
     <ProjectReference Include="..\..\tools\fo-dicom.PureCodecs.Tools\fo-dicom.PureCodecs.Tools.csproj" />
     <ProjectReference Include="..\..\src\fo-dicom.PureCodecs\fo-dicom.PureCodecs.csproj" />
     <ProjectReference Include="..\..\src\fo-dicom.PureCodecs.Jpeg\fo-dicom.PureCodecs.Jpeg.csproj" />
