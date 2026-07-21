@@ -582,7 +582,18 @@ root-cause model.
 - [x] Add `--verify` to validate the six bundled benchmark fixtures with PureCodecs before timing.
 - [x] Measure codec-boundary and `DicomTranscoder` encode/decode operations with allocation diagnostics.
 - [x] Capture a complete short-run baseline for RLE, JPEG Baseline, JPEG Lossless SV1, JPEG-LS, JPEG 2000 Lossless, and JPEG 2000 Lossy.
-- [ ] Compare the matched C# baseline with an equivalent Go benchmark before selecting the first optimization hotspot.
+- [x] Use the isolated C# baseline to select the first optimization hotspot; Go comparison is out of scope.
+
+### JPEG Baseline Decode Optimization
+
+- [x] Identify repeated inverse-DCT cosine evaluation as the first measured JPEG Baseline decode hotspot.
+- [x] Cache the 64 coordinate/frequency cosine values while preserving the existing coefficient, rounding, color, and DICOM paths.
+- [x] Add fixed DC/AC inverse-DCT sample coverage and run the Native JPEG integration checks.
+- [x] Verify all six benchmark fixtures and the complete unit suite independently from BenchmarkDotNet.
+- [x] Reduce the isolated `CodecDecode` JPEG Baseline short-run mean from 564.8 ms to 112.8 ms on .NET 10.0.8.
+
+The ShortRun result is a directional comparison only; use a longer run before
+claiming a precise performance regression threshold.
 
 Run a bounded local baseline with:
 

@@ -4,6 +4,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
     public static class JpegDct
     {
+        private static readonly double[] Cosines = CreateCosines();
+
         public static JpegBlock8x8 Forward(JpegBlock8x8 samples)
         {
             if (samples == null)
@@ -54,8 +56,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                             sum += Scale(u)
                                 * Scale(v)
                                 * coefficients[v, u]
-                                * Math.Cos(((2 * x + 1) * u * Math.PI) / 16.0)
-                                * Math.Cos(((2 * y + 1) * v * Math.PI) / 16.0);
+                                * Cosines[x * JpegBlock8x8.Size + u]
+                                * Cosines[y * JpegBlock8x8.Size + v];
                         }
                     }
 
@@ -69,6 +71,21 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         private static double Scale(int index)
         {
             return index == 0 ? 1.0 / Math.Sqrt(2.0) : 1.0;
+        }
+
+        private static double[] CreateCosines()
+        {
+            var cosines = new double[JpegBlock8x8.CoefficientCount];
+            for (var coordinate = 0; coordinate < JpegBlock8x8.Size; coordinate++)
+            {
+                for (var frequency = 0; frequency < JpegBlock8x8.Size; frequency++)
+                {
+                    cosines[coordinate * JpegBlock8x8.Size + frequency] =
+                        Math.Cos(((2 * coordinate + 1) * frequency * Math.PI) / 16.0);
+                }
+            }
+
+            return cosines;
         }
     }
 }

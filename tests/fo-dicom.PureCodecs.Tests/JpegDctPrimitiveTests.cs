@@ -121,4 +121,33 @@ public sealed class JpegDctPrimitiveTests
             Assert.Equal(samples[index], reconstructed[index], tolerance: 0.0001);
         }
     }
+
+    [Fact]
+    public void Inverse_dct_preserves_reference_dc_and_ac_samples()
+    {
+        var coefficients = new JpegBlock8x8();
+        coefficients[0, 0] = 80;
+        coefficients[0, 1] = 40;
+
+        var reconstructed = JpegDct.Inverse(coefficients);
+        var expectedRow = new[]
+        {
+            16.935199226610738,
+            15.879378012096794,
+            13.928474791935511,
+            11.379496896414716,
+            8.6205031035852855,
+            6.0715252080644913,
+            4.1206219879032053,
+            3.0648007733892628,
+        };
+
+        for (var y = 0; y < JpegBlock8x8.Size; y++)
+        {
+            for (var x = 0; x < JpegBlock8x8.Size; x++)
+            {
+                Assert.Equal(expectedRow[x], reconstructed[y, x], tolerance: 0.0000000001);
+            }
+        }
+    }
 }
