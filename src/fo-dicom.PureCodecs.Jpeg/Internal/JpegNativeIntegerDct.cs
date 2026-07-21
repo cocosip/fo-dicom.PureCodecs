@@ -30,8 +30,40 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 throw new ArgumentOutOfRangeException(nameof(samplePrecision));
             }
 
-            var pass1Bits = samplePrecision == 8 ? 2 : 1;
             var data = new long[JpegBlock8x8.CoefficientCount];
+            var coefficients = new JpegBlock8x8();
+            ForwardInto(samples, samplePrecision, coefficients, data);
+            return coefficients;
+        }
+
+        internal static void ForwardInto(JpegBlock8x8 samples, int samplePrecision, JpegBlock8x8 coefficients, long[] data)
+        {
+            if (samples == null)
+            {
+                throw new ArgumentNullException(nameof(samples));
+            }
+
+            if (coefficients == null)
+            {
+                throw new ArgumentNullException(nameof(coefficients));
+            }
+
+            if (data == null)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
+
+            if (data.Length != JpegBlock8x8.CoefficientCount)
+            {
+                throw new ArgumentException("JPEG native DCT workspace requires 64 coefficients.", nameof(data));
+            }
+
+            if (samplePrecision < 2 || samplePrecision > 12)
+            {
+                throw new ArgumentOutOfRangeException(nameof(samplePrecision));
+            }
+
+            var pass1Bits = samplePrecision == 8 ? 2 : 1;
             for (var index = 0; index < data.Length; index++)
             {
                 data[index] = checked((long)samples[index]);
@@ -47,45 +79,54 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 TransformColumn(data, column, pass1Bits);
             }
 
-            var coefficients = new JpegBlock8x8();
             for (var index = 0; index < data.Length; index++)
             {
                 coefficients[index] = data[index];
             }
-
-            return coefficients;
         }
 
         private static void TransformRow(long[] data, int offset, int pass1Bits)
         {
-            Calculate(data[offset], data[offset + 1], data[offset + 2], data[offset + 3], data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7], pass1Bits, out var output);
+            Calculate(
+                data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+                data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7],
+                out var output0, out var output1, out var output2, out var output3,
+                out var output4, out var output5, out var output6, out var output7);
 
-            data[offset] = output[0] << pass1Bits;
-            data[offset + 1] = Descale(output[1], ConstBits - pass1Bits);
-            data[offset + 2] = Descale(output[2], ConstBits - pass1Bits);
-            data[offset + 3] = Descale(output[3], ConstBits - pass1Bits);
-            data[offset + 4] = output[4] << pass1Bits;
-            data[offset + 5] = Descale(output[5], ConstBits - pass1Bits);
-            data[offset + 6] = Descale(output[6], ConstBits - pass1Bits);
-            data[offset + 7] = Descale(output[7], ConstBits - pass1Bits);
+            data[offset] = output0 << pass1Bits;
+            data[offset + 1] = Descale(output1, ConstBits - pass1Bits);
+            data[offset + 2] = Descale(output2, ConstBits - pass1Bits);
+            data[offset + 3] = Descale(output3, ConstBits - pass1Bits);
+            data[offset + 4] = output4 << pass1Bits;
+            data[offset + 5] = Descale(output5, ConstBits - pass1Bits);
+            data[offset + 6] = Descale(output6, ConstBits - pass1Bits);
+            data[offset + 7] = Descale(output7, ConstBits - pass1Bits);
         }
 
         private static void TransformColumn(long[] data, int offset, int pass1Bits)
         {
             const int stride = JpegBlock8x8.Size;
-            Calculate(data[offset], data[offset + stride], data[offset + stride * 2], data[offset + stride * 3], data[offset + stride * 4], data[offset + stride * 5], data[offset + stride * 6], data[offset + stride * 7], pass1Bits, out var output);
+            Calculate(
+                data[offset], data[offset + stride], data[offset + stride * 2], data[offset + stride * 3],
+                data[offset + stride * 4], data[offset + stride * 5], data[offset + stride * 6], data[offset + stride * 7],
+                out var output0, out var output1, out var output2, out var output3,
+                out var output4, out var output5, out var output6, out var output7);
 
-            data[offset] = Descale(output[0], pass1Bits);
-            data[offset + stride] = Descale(output[1], ConstBits + pass1Bits);
-            data[offset + stride * 2] = Descale(output[2], ConstBits + pass1Bits);
-            data[offset + stride * 3] = Descale(output[3], ConstBits + pass1Bits);
-            data[offset + stride * 4] = Descale(output[4], pass1Bits);
-            data[offset + stride * 5] = Descale(output[5], ConstBits + pass1Bits);
-            data[offset + stride * 6] = Descale(output[6], ConstBits + pass1Bits);
-            data[offset + stride * 7] = Descale(output[7], ConstBits + pass1Bits);
+            data[offset] = Descale(output0, pass1Bits);
+            data[offset + stride] = Descale(output1, ConstBits + pass1Bits);
+            data[offset + stride * 2] = Descale(output2, ConstBits + pass1Bits);
+            data[offset + stride * 3] = Descale(output3, ConstBits + pass1Bits);
+            data[offset + stride * 4] = Descale(output4, pass1Bits);
+            data[offset + stride * 5] = Descale(output5, ConstBits + pass1Bits);
+            data[offset + stride * 6] = Descale(output6, ConstBits + pass1Bits);
+            data[offset + stride * 7] = Descale(output7, ConstBits + pass1Bits);
         }
 
-        private static void Calculate(long input0, long input1, long input2, long input3, long input4, long input5, long input6, long input7, int pass1Bits, out long[] output)
+        private static void Calculate(
+            long input0, long input1, long input2, long input3,
+            long input4, long input5, long input6, long input7,
+            out long output0, out long output1, out long output2, out long output3,
+            out long output4, out long output5, out long output6, out long output7)
         {
             var tmp0 = input0 + input7;
             var tmp7 = input0 - input7;
@@ -101,13 +142,12 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             var tmp11 = tmp1 + tmp2;
             var tmp12 = tmp1 - tmp2;
 
-            output = new long[8];
-            output[0] = tmp10 + tmp11;
-            output[4] = tmp10 - tmp11;
+            output0 = tmp10 + tmp11;
+            output4 = tmp10 - tmp11;
 
             var z1 = (tmp12 + tmp13) * Fix_0_541196100;
-            output[2] = z1 + tmp13 * Fix_0_765366865;
-            output[6] = z1 - tmp12 * Fix_1_847759065;
+            output2 = z1 + tmp13 * Fix_0_765366865;
+            output6 = z1 - tmp12 * Fix_1_847759065;
 
             z1 = tmp4 + tmp7;
             var z2 = tmp5 + tmp6;
@@ -126,10 +166,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             z3 += z5;
             z4 += z5;
 
-            output[7] = tmp4 + z1 + z3;
-            output[5] = tmp5 + z2 + z4;
-            output[3] = tmp6 + z2 + z3;
-            output[1] = tmp7 + z1 + z4;
+            output7 = tmp4 + z1 + z3;
+            output5 = tmp5 + z2 + z4;
+            output3 = tmp6 + z2 + z3;
+            output1 = tmp7 + z1 + z4;
         }
 
         private static long Descale(long value, int bitCount)

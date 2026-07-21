@@ -134,6 +134,72 @@ public sealed class JpegDicomIntegrationTests
     }
 
     [Fact]
+    public void Process1_decodes_native_ybr_full_422_fixture_within_measured_native_tolerance()
+    {
+        var fixture = ExternalFixtureCatalog.Resolve().AcceptanceFixtures
+            .Single(item => item.Name == "JPEG baseline YBR 4:2:2 acceptance sample");
+        var compressed = DicomPixelData.Create(DicomFile.Open(fixture.Path).Dataset);
+        var pureDecoded = CreateRgbTargetPixelData(compressed);
+        var nativeDecoded = CreateRgbTargetPixelData(compressed);
+        var pureCodec = new DicomJpegProcess1Codec();
+        var nativeCodec = new NativeJpegProcess1Codec();
+        var nativeParameters = Assert.IsType<NativeJpegCodecParams>(nativeCodec.GetDefaultParameters());
+
+        pureCodec.Decode(compressed, pureDecoded, pureCodec.GetDefaultParameters());
+        nativeCodec.Decode(compressed, nativeDecoded, nativeParameters);
+
+        var maxDifference = PixelDataAssertions.MaxSampleDifference(nativeDecoded, pureDecoded);
+        Assert.InRange(maxDifference, 0, 3);
+        Assert.Equal(PhotometricInterpretation.Rgb, pureDecoded.PhotometricInterpretation);
+        Assert.Equal(PlanarConfiguration.Interleaved, pureDecoded.PlanarConfiguration);
+    }
+
+    [Theory]
+    [InlineData(4)]
+    [InlineData(5)]
+    public void Process1_decodes_native_narrow_ybr_full_422_within_measured_native_tolerance(int columns)
+    {
+        var fixture = ExternalFixtureCatalog.Resolve().AcceptanceFixtures
+            .Single(item => item.Name == "JPEG baseline YBR 4:2:2 acceptance sample");
+        var compressed = CreateNarrowYbrFull422Fixture(DicomPixelData.Create(DicomFile.Open(fixture.Path).Dataset), rows: 8, columns);
+        var pureDecoded = CreateRgbTargetPixelData(compressed);
+        var nativeDecoded = CreateRgbTargetPixelData(compressed);
+        var pureCodec = new DicomJpegProcess1Codec();
+        var nativeCodec = new NativeJpegProcess1Codec();
+        var nativeParameters = Assert.IsType<NativeJpegCodecParams>(nativeCodec.GetDefaultParameters());
+
+        pureCodec.Decode(compressed, pureDecoded, pureCodec.GetDefaultParameters());
+        nativeCodec.Decode(compressed, nativeDecoded, nativeParameters);
+
+        var maxDifference = PixelDataAssertions.MaxSampleDifference(nativeDecoded, pureDecoded);
+        Assert.Equal(0, maxDifference);
+        Assert.Equal(new byte[] { 0x21, 0x11, 0x11 }, GetSofSamplingFactors(ToArray(compressed.GetFrame(0))));
+    }
+
+    [Fact]
+    public void Process1_reencodes_native_ybr_full_422_fixture_for_native_decode_within_measured_tolerance()
+    {
+        var fixture = ExternalFixtureCatalog.Resolve().AcceptanceFixtures
+            .Single(item => item.Name == "JPEG baseline YBR 4:2:2 acceptance sample");
+        var source = DicomPixelData.Create(DicomFile.Open(fixture.Path).Dataset);
+        var raw = CreateRgbTargetPixelData(source);
+        var pureCompressed = CreateTargetPixelData(raw, DicomTransferSyntax.JPEGProcess1);
+        var nativeDecoded = CreateRgbTargetPixelData(raw);
+        var pureCodec = new DicomJpegProcess1Codec();
+        var nativeCodec = new NativeJpegProcess1Codec();
+        var nativeParameters = Assert.IsType<NativeJpegCodecParams>(nativeCodec.GetDefaultParameters());
+
+        pureCodec.Decode(source, raw, pureCodec.GetDefaultParameters());
+        pureCodec.Encode(raw, pureCompressed, pureCodec.GetDefaultParameters());
+        nativeCodec.Decode(pureCompressed, nativeDecoded, nativeParameters);
+
+        var maxDifference = PixelDataAssertions.MaxSampleDifference(raw, nativeDecoded);
+        Assert.InRange(maxDifference, 0, 33);
+        Assert.Equal(PhotometricInterpretation.YbrFull422, pureCompressed.PhotometricInterpretation);
+        Assert.Equal(1, pureCompressed.NumberOfFrames);
+    }
+
+    [Fact]
     public void Process1_rejects_unsupported_photometric_interpretation()
     {
         var codec = new DicomJpegProcess1Codec();
@@ -252,6 +318,31 @@ public sealed class JpegDicomIntegrationTests
         dataset.AddOrUpdate(DicomTag.PhotometricInterpretation, PhotometricInterpretation.Rgb.Value);
         dataset.AddOrUpdate(DicomTag.PlanarConfiguration, (ushort)PlanarConfiguration.Interleaved);
         return DicomPixelData.Create(dataset, true);
+    }
+
+    private static DicomPixelData CreateNarrowYbrFull422Fixture(DicomPixelData source, int rows, int columns)
+    {
+        var dataset = CreateTargetDataset(source, DicomTransferSyntax.JPEGProcess1);
+        dataset.AddOrUpdate(DicomTag.Rows, (ushort)rows);
+        dataset.AddOrUpdate(DicomTag.Columns, (ushort)columns);
+        var frame = ToArray(source.GetFrame(0));
+        for (var index = 0; index + 8 < frame.Length; index++)
+        {
+            if (frame[index] != 0xff || frame[index + 1] != 0xc0)
+            {
+                continue;
+            }
+
+            frame[index + 5] = (byte)(rows >> 8);
+            frame[index + 6] = (byte)rows;
+            frame[index + 7] = (byte)(columns >> 8);
+            frame[index + 8] = (byte)columns;
+            var compressed = DicomPixelData.Create(dataset, true);
+            compressed.AddFrame(new MemoryByteBuffer(frame));
+            return compressed;
+        }
+
+        throw new Xunit.Sdk.XunitException("JPEG fixture does not contain an SOF0 marker.");
     }
 
     private static DicomPixelData CreateTargetPixelData(DicomPixelData source, DicomTransferSyntax transferSyntax)

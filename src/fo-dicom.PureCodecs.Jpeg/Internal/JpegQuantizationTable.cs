@@ -54,6 +54,22 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             var quantized = new JpegBlock8x8();
+            QuantizeNativeIntegerDctInto(block, quantized);
+            return quantized;
+        }
+
+        internal void QuantizeNativeIntegerDctInto(JpegBlock8x8 block, JpegBlock8x8 quantized)
+        {
+            if (block == null)
+            {
+                throw new ArgumentNullException(nameof(block));
+            }
+
+            if (quantized == null)
+            {
+                throw new ArgumentNullException(nameof(quantized));
+            }
+
             for (var index = 0; index < JpegBlock8x8.CoefficientCount; index++)
             {
                 var coefficient = checked((long)block[index]);
@@ -63,8 +79,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 var value = absolute >= divisor ? absolute / divisor : 0;
                 quantized[index] = coefficient < 0 ? -value : value;
             }
-
-            return quantized;
         }
 
         public JpegBlock8x8 Dequantize(JpegBlock8x8 block)
@@ -77,10 +91,24 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             var dequantized = new JpegBlock8x8();
             for (var index = 0; index < JpegBlock8x8.CoefficientCount; index++)
             {
-                dequantized[index] = block[index] * _divisors[index];
+                dequantized[index] = block[index];
             }
 
+            DequantizeInPlace(dequantized);
             return dequantized;
+        }
+
+        internal void DequantizeInPlace(JpegBlock8x8 block)
+        {
+            if (block == null)
+            {
+                throw new ArgumentNullException(nameof(block));
+            }
+
+            for (var index = 0; index < JpegBlock8x8.CoefficientCount; index++)
+            {
+                block[index] = block[index] * _divisors[index];
+            }
         }
 
         public JpegBlock8x8 ToBlock()

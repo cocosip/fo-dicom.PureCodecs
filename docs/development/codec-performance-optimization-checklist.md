@@ -51,12 +51,15 @@ sufficient evidence of compatibility.
 - [x] Prove that repeated inverse-DCT cosine evaluation is a decode hotspot.
 - [x] Cache the 64 inverse-DCT cosine values without changing arithmetic order, color conversion, or DICOM framing.
 - [x] Add inverse-DCT reference-sample coverage and run Native JPEG integration checks.
-- [x] Verify `702/702` unit tests, all benchmark fixtures, and the matched short benchmark.
+- [x] Verify `706/706` unit tests, all benchmark fixtures, and the matched short benchmark.
 - [x] Reduce the measured short-run codec-decode mean from 564.8 ms to 112.8 ms on .NET 10.0.8.
-- [ ] Establish an exact Pure-output fixture guard plus a measured Native pixel-difference bound for allocation-only decode work.
-- [ ] Profile and remove only per-block decode intermediates after the fixture guard is in place.
-- [ ] Re-measure decode time and allocation after the allocation-only change.
-- [ ] Profile baseline encode separately before selecting an encode hotspot.
+- [x] Match Native libjpeg-turbo 4:2:2 fancy chroma upsampling, constrain the real-fixture RGB output to the measured Native maximum difference of 3, and verify 4x8 and 5x8 cropped Native 2:1 frames match exactly.
+- [x] Remove decode block zigzag and dequantization intermediates; reduce codec-decode allocation from 47.54 MB/op to 30.49 MB/op.
+- [x] Profile baseline encode separately and establish Native decoding of Pure re-encoded output within the measured maximum difference of 33.
+- [x] Remove per-row and per-column integer-DCT temporary arrays; reduce codec-encode allocation from 180.62 MB/op to 114.88 MB/op.
+- [x] Reuse per-block sample, DCT, quantization, zigzag, and DCT workspace buffers across each encode traversal; reduce codec-encode allocation to 11.41 MB/op.
+- [x] Re-run the matched JPEG Baseline encode ShortRun: 43.79 ms and 11.41 MB/op; decode allocation remained 30.49 MB/op while time was host-variable.
+- [x] Complete the current JPEG Baseline optimization pass. Further work requires a new measured hotspot and the same Native correctness gate.
 
 ### 2. JPEG Extended Process 2/4 (`1.2.840.10008.1.2.4.51`)
 
@@ -150,5 +153,6 @@ sufficient evidence of compatibility.
 ## Completed Optimization Summary
 
 - [x] JPEG Baseline decode: inverse-DCT cosine cache, committed as `136a718`.
-- [ ] JPEG Baseline decode: allocation-only block pipeline.
+- [x] JPEG Baseline decode: Native 4:2:2 fancy upsampling and allocation-only block pipeline.
+- [x] JPEG Baseline encode: integer-DCT and block-workspace allocation removal.
 - [ ] All remaining Phase 1 syntax-specific optimization passes.

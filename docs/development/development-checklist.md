@@ -594,6 +594,7 @@ The detailed per-transfer-syntax plan and completion checklist is
 - [x] Add fixed DC/AC inverse-DCT sample coverage and run the Native JPEG integration checks.
 - [x] Verify all six benchmark fixtures and the complete unit suite independently from BenchmarkDotNet.
 - [x] Reduce the isolated `CodecDecode` JPEG Baseline short-run mean from 564.8 ms to 112.8 ms on .NET 10.0.8.
+- [x] Complete the JPEG Baseline optimization pass with Native 4:2:2 fancy upsampling, measured Native fixture bounds, and block-workspace reuse.
 
 The ShortRun result is a directional comparison only; use a longer run before
 claiming a precise performance regression threshold.
