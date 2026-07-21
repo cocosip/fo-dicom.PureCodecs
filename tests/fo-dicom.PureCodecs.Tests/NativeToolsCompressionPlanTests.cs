@@ -10,6 +10,38 @@ namespace FellowOakDicom.PureCodecs.Tests;
 public sealed class NativeToolsCompressionPlanTests
 {
     [Fact]
+    public void TrimHtj2kFramePadding_discards_bytes_after_eoc_and_preserves_dicom_even_length()
+    {
+        var trimMethod = typeof(DicomCompressionTool).GetMethod(
+            "TrimHtj2kFramePadding",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+
+        Assert.NotNull(trimMethod);
+
+        var trimmed = Assert.IsType<byte[]>(trimMethod!.Invoke(null, new object[]
+        {
+            new byte[]
+            {
+                0xff, 0x4f,
+                0xff, 0x90, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x01,
+                0xff, 0x93, 0x01, 0x02,
+                0xff, 0xd9,
+                0xa5, 0x7e
+            }
+        }));
+
+        Assert.Equal(
+            new byte[]
+            {
+                0xff, 0x4f,
+                0xff, 0x90, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x01,
+                0xff, 0x93, 0x01, 0x02,
+                0xff, 0xd9
+            },
+            trimmed);
+    }
+
+    [Fact]
     public void TrimJpegLsFramePadding_discards_bytes_after_eoi_and_preserves_dicom_even_length()
     {
         var trimMethod = typeof(DicomCompressionTool).GetMethod(

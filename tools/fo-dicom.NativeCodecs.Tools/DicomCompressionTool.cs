@@ -42,6 +42,7 @@ public sealed class DicomCompressionTool
             {
                 var outputDataset = Transcode(file.Dataset, pixelData.Syntax, item.Format.TransferSyntax);
                 TrimJpegLsFrames(outputDataset, item.Format.TransferSyntax);
+                TrimHtj2kFrames(outputDataset, item.Format.TransferSyntax);
                 new DicomFile(outputDataset).Save(item.OutputPath);
                 var outputSize = new FileInfo(item.OutputPath).Length;
                 var ratio = outputSize > 0 ? inputSize / (double)outputSize : 0.0;
@@ -97,6 +98,81 @@ public sealed class DicomCompressionTool
         return frame;
     }
 
+    public static byte[] TrimHtj2kFramePadding(byte[] frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+
+        if (frame.Length < 4 || frame[0] != 0xff || frame[1] != 0x4f)
+        {
+            return frame;
+        }
+
+        var offset = 2;
+        while (offset + 1 < frame.Length)
+        {
+            if (frame[offset] != 0xff)
+            {
+                return frame;
+            }
+
+            var marker = frame[offset + 1];
+            if (marker == 0xd9)
+            {
+                var codestreamLength = offset + 2;
+                var trimmed = new byte[codestreamLength + (codestreamLength & 1)];
+                Buffer.BlockCopy(frame, 0, trimmed, 0, codestreamLength);
+                return trimmed;
+            }
+
+            if (marker == 0x90)
+            {
+                if (offset + 11 >= frame.Length)
+                {
+                    return frame;
+                }
+
+                var segmentLength = (frame[offset + 2] << 8) | frame[offset + 3];
+                var tilePartLength = ((uint)frame[offset + 6] << 24) |
+                    ((uint)frame[offset + 7] << 16) |
+                    ((uint)frame[offset + 8] << 8) |
+                    frame[offset + 9];
+                if (segmentLength != 10 || tilePartLength < 14 || tilePartLength > frame.Length - offset)
+                {
+                    return frame;
+                }
+
+                var sodOffset = offset + 2 + segmentLength;
+                if (sodOffset + 1 >= frame.Length || frame[sodOffset] != 0xff || frame[sodOffset + 1] != 0x93)
+                {
+                    return frame;
+                }
+
+                offset += (int)tilePartLength;
+                continue;
+            }
+
+            if (marker == 0x93)
+            {
+                return frame;
+            }
+
+            if (offset + 3 >= frame.Length)
+            {
+                return frame;
+            }
+
+            var length = (frame[offset + 2] << 8) | frame[offset + 3];
+            if (length < 2 || offset + 2 + length > frame.Length)
+            {
+                return frame;
+            }
+
+            offset += 2 + length;
+        }
+
+        return frame;
+    }
+
     private static void TrimJpegLsFrames(DicomDataset dataset, DicomTransferSyntax targetSyntax)
     {
         if (targetSyntax != DicomTransferSyntax.JPEGLSLossless &&
@@ -112,6 +188,39 @@ public sealed class DicomCompressionTool
         {
             var original = pixelData.GetFrame(frame).Data;
             var trimmed = TrimJpegLsFramePadding(original);
+            frames[frame] = trimmed;
+            changed |= trimmed.Length != original.Length;
+        }
+
+        if (!changed)
+        {
+            return;
+        }
+
+        dataset.Remove(DicomTag.PixelData);
+        var trimmedPixelData = DicomPixelData.Create(dataset, true);
+        foreach (var frame in frames)
+        {
+            trimmedPixelData.AddFrame(new MemoryByteBuffer(frame));
+        }
+    }
+
+    private static void TrimHtj2kFrames(DicomDataset dataset, DicomTransferSyntax targetSyntax)
+    {
+        if (targetSyntax != DicomTransferSyntax.HTJ2KLossless &&
+            targetSyntax != DicomTransferSyntax.HTJ2KLosslessRPCL &&
+            targetSyntax != DicomTransferSyntax.HTJ2K)
+        {
+            return;
+        }
+
+        var pixelData = DicomPixelData.Create(dataset);
+        var frames = new byte[pixelData.NumberOfFrames][];
+        var changed = false;
+        for (var frame = 0; frame < frames.Length; frame++)
+        {
+            var original = pixelData.GetFrame(frame).Data;
+            var trimmed = TrimHtj2kFramePadding(original);
             frames[frame] = trimmed;
             changed |= trimmed.Length != original.Length;
         }
