@@ -4,6 +4,19 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
     public static class JpegColorConverter
     {
+        private const int RgbYScale = 19595;
+        private const int GbgYScale = 38470;
+        private const int BgbYScale = 7471;
+        private const int RgbCbScale = 11059;
+        private const int GbgCbScale = 21709;
+        private const int BgbCbScale = 32768;
+        private const int RgbCrScale = 32768;
+        private const int GbgCrScale = 27439;
+        private const int BgbCrScale = 5329;
+        private const int ColorScaleBits = 16;
+        private const int ColorHalf = 1 << (ColorScaleBits - 1);
+        private const int CbCrOffset = 128 << ColorScaleBits;
+
         public static byte[] RgbToYbrFull(byte[] rgb)
         {
             if (rgb == null)
@@ -22,9 +35,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 var red = rgb[index];
                 var green = rgb[index + 1];
                 var blue = rgb[index + 2];
-                ybr[index] = Clamp((0.299 * red) + (0.587 * green) + (0.114 * blue));
-                ybr[index + 1] = Clamp(128 - (0.168736 * red) - (0.331264 * green) + (0.5 * blue));
-                ybr[index + 2] = Clamp(128 + (0.5 * red) - (0.418688 * green) - (0.081312 * blue));
+                ybr[index] = (byte)((RgbYScale * red + GbgYScale * green + BgbYScale * blue + ColorHalf) >> ColorScaleBits);
+                ybr[index + 1] = (byte)((-RgbCbScale * red - GbgCbScale * green + BgbCbScale * blue + CbCrOffset + ColorHalf - 1) >> ColorScaleBits);
+                ybr[index + 2] = (byte)((RgbCrScale * red - GbgCrScale * green - BgbCrScale * blue + CbCrOffset + ColorHalf - 1) >> ColorScaleBits);
             }
 
             return ybr;

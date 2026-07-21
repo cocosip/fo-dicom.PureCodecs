@@ -57,7 +57,15 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             writer.WriteSegment(JpegMarker.SOS, CreateStartOfScanPayload(pixelData, selectionValue));
             writer.WriteRaw(scan);
             writer.WriteStandalone(JpegMarker.EOI);
-            return writer.ToArray();
+            var frame = writer.ToArray();
+            if ((frame.Length & 1) == 0)
+            {
+                return frame;
+            }
+
+            var paddedFrame = new byte[frame.Length + 1];
+            Buffer.BlockCopy(frame, 0, paddedFrame, 0, frame.Length);
+            return paddedFrame;
         }
 
         public byte[] DecodeFrame(DicomPixelData targetPixelData, byte[] jpegFrame, int selectionValue)

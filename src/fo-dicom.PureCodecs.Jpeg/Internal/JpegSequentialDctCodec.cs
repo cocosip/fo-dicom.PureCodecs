@@ -82,13 +82,31 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
             var writer = new JpegMarkerWriter();
             writer.WriteStandalone(JpegMarker.SOI);
-            writer.WriteSegment(JpegMarker.DQT, CreateQuantizationPayload(quantizationTables));
-            writer.WriteSegment(_process == JpegSequentialProcess.Baseline ? JpegMarker.SOF0 : JpegMarker.SOF1, CreateStartOfFramePayload(width, height, componentCount, samplePrecision, useYbrFull422));
-            writer.WriteSegment(JpegMarker.DHT, CreateHuffmanPayload(dcTables, acTables));
+            writer.WriteSegment(JpegMarker.APP0, CreateJfifPayload());
+            for (var table = 0; table < quantizationTables.Length; table++)
+            {
+                writer.WriteSegment(JpegMarker.DQT, CreateQuantizationPayload(table, quantizationTables[table]));
+            }
+
+            writer.WriteSegment(samplePrecision == 8 ? JpegMarker.SOF0 : JpegMarker.SOF1, CreateStartOfFramePayload(width, height, componentCount, samplePrecision, useYbrFull422));
+            for (var table = 0; table < dcTables.Length; table++)
+            {
+                writer.WriteSegment(JpegMarker.DHT, dcTables[table].CreateDhtPayload(tableClass: 0, tableId: table));
+                writer.WriteSegment(JpegMarker.DHT, acTables[table].CreateDhtPayload(tableClass: 1, tableId: table));
+            }
+
             writer.WriteSegment(JpegMarker.SOS, CreateStartOfScanPayload(componentCount));
             writer.WriteRaw(scan);
             writer.WriteStandalone(JpegMarker.EOI);
-            return writer.ToArray();
+            var frame = writer.ToArray();
+            if ((frame.Length & 1) == 0)
+            {
+                return frame;
+            }
+
+            var paddedFrame = new byte[frame.Length + 1];
+            Buffer.BlockCopy(frame, 0, paddedFrame, 0, frame.Length);
+            return paddedFrame;
         }
 
         public byte[] Decode(byte[] jpegFrame, int expectedWidth, int expectedHeight)
@@ -277,7 +295,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                                 ? ReadSubsampledChromaBlock(samples, width, height, componentCount, component, blockX / 2, blockY, samplePrecision)
                                 : ReadSampleBlock(samples, width, height, componentCount, component, blockX + (horizontalBlock * 8), blockY, samplePrecision);
                             var table = quantizationTables[GetComponentTableId(component, componentCount)];
-                            visitor(component, JpegZigZag.ToZigZag(table.Quantize(JpegDct.Forward(block))));
+                            visitor(component, JpegZigZag.ToZigZag(table.QuantizeNativeIntegerDct(JpegNativeIntegerDct.Forward(block, samplePrecision))));
                         }
                     }
                 }
@@ -565,18 +583,19 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return new JpegQuantizationTable(divisors);
         }
 
-        private static byte[] CreateQuantizationPayload(JpegQuantizationTable[] tables)
+        private static byte[] CreateQuantizationPayload(int tableId, JpegQuantizationTable table)
         {
-            var payload = new byte[tables.Length * 65];
-            for (var table = 0; table < tables.Length; table++)
+            if (tableId < 0 || tableId > 15)
             {
-                var zigzag = JpegZigZag.ToZigZag(tables[table].ToBlock());
-                var offset = table * 65;
-                payload[offset] = (byte)table;
-                for (var index = 0; index < zigzag.Length; index++)
-                {
-                    payload[offset + index + 1] = (byte)ToInt(zigzag[index]);
-                }
+                throw new ArgumentOutOfRangeException(nameof(tableId));
+            }
+
+            var payload = new byte[65];
+            payload[0] = (byte)tableId;
+            var zigzag = JpegZigZag.ToZigZag(table.ToBlock());
+            for (var index = 0; index < zigzag.Length; index++)
+            {
+                payload[index + 1] = (byte)ToInt(zigzag[index]);
             }
 
             return payload;
@@ -724,35 +743,25 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return payload;
         }
 
-        private static byte[] CreateHuffmanPayload(JpegHuffmanTable[] dcTables, JpegHuffmanTable[] acTables)
+        private static byte[] CreateJfifPayload()
         {
-            var payloads = new byte[dcTables.Length * 2][];
-            for (var table = 0; table < dcTables.Length; table++)
+            return new byte[]
             {
-                payloads[table * 2] = dcTables[table].CreateDhtPayload(tableClass: 0, tableId: table);
-                payloads[table * 2 + 1] = acTables[table].CreateDhtPayload(tableClass: 1, tableId: table);
-            }
-
-            return CombinePayloads(payloads);
-        }
-
-        private static byte[] CombinePayloads(byte[][] payloads)
-        {
-            var length = 0;
-            for (var index = 0; index < payloads.Length; index++)
-            {
-                length += payloads[index].Length;
-            }
-
-            var payload = new byte[length];
-            var offset = 0;
-            for (var index = 0; index < payloads.Length; index++)
-            {
-                Buffer.BlockCopy(payloads[index], 0, payload, offset, payloads[index].Length);
-                offset += payloads[index].Length;
-            }
-
-            return payload;
+                (byte)'J',
+                (byte)'F',
+                (byte)'I',
+                (byte)'F',
+                0,
+                1,
+                1,
+                0,
+                0,
+                1,
+                0,
+                1,
+                0,
+                0
+            };
         }
 
         private static int GetComponentTableId(int component, int componentCount)

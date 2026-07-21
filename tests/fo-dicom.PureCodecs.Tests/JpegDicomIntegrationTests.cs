@@ -33,6 +33,14 @@ public sealed class JpegDicomIntegrationTests
     }
 
     [Fact]
+    public void Rgb_to_ybr_full_uses_native_fixed_point_rounding()
+    {
+        var ybr = JpegColorConverter.RgbToYbrFull(new byte[] { 0, 0, 7 });
+
+        Assert.Equal(new byte[] { 1, 131, 127 }, ybr);
+    }
+
+    [Fact]
     public void Ybr_full_422_to_rgb_conversion_expands_shared_chroma()
     {
         var rgb = JpegColorConverter.YbrFull422ToRgb(new byte[] { 100, 150, 128, 128 });

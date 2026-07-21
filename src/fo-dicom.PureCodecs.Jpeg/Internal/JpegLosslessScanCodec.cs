@@ -45,7 +45,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                         ValidateSample(sample, samplePrecision);
 
                         var prediction = PredictInterleaved(samples, width, componentCount, x, y, component, samplePrecision, selectionValue);
-                        var difference = sample - prediction;
+                        var difference = NormalizeDifferenceForEntropy(sample - prediction, samplePrecision);
                         frequencies[GetCategory(difference)]++;
                     }
                 }
@@ -91,7 +91,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                         ValidateSample(sample, samplePrecision);
 
                         var prediction = PredictInterleaved(samples, width, componentCount, x, y, component, samplePrecision, selectionValue);
-                        var difference = sample - prediction;
+                        var difference = NormalizeDifferenceForEntropy(sample - prediction, samplePrecision);
                         var category = GetCategory(difference);
                         _table.Encode(writer, category);
                         if (category > 0)
@@ -142,7 +142,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
                         var difference = category == 0
                             ? 0
-                            : DecodeMagnitude(reader.ReadBits(category), category);
+                            : category == 16
+                                ? 1 << 15
+                                : DecodeMagnitude(reader.ReadBits(category), category);
                         var prediction = PredictInterleaved(samples, width, componentCount, x, y, component, samplePrecision, selectionValue);
                         var sample = NormalizeSample(prediction + difference, samplePrecision);
                         ValidateSample(sample, samplePrecision);
@@ -213,6 +215,14 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             return category;
+        }
+
+        private static int NormalizeDifferenceForEntropy(int difference, int samplePrecision)
+        {
+            // libijg16 stores lossless differences in a signed 16-bit JDIFF row.
+            // At 16-bit precision, preserve that two's-complement wrap before
+            // deriving the Huffman category and amplitude bits.
+            return samplePrecision == 16 ? unchecked((short)difference) : difference;
         }
 
         private static int EncodeMagnitude(int difference, int category)

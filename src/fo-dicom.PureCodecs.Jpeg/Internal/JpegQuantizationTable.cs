@@ -46,6 +46,27 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return quantized;
         }
 
+        public JpegBlock8x8 QuantizeNativeIntegerDct(JpegBlock8x8 block)
+        {
+            if (block == null)
+            {
+                throw new ArgumentNullException(nameof(block));
+            }
+
+            var quantized = new JpegBlock8x8();
+            for (var index = 0; index < JpegBlock8x8.CoefficientCount; index++)
+            {
+                var coefficient = checked((long)block[index]);
+                var divisor = checked((long)_divisors[index] << 3);
+                var absolute = coefficient < 0 ? -coefficient : coefficient;
+                absolute += divisor >> 1;
+                var value = absolute >= divisor ? absolute / divisor : 0;
+                quantized[index] = coefficient < 0 ? -value : value;
+            }
+
+            return quantized;
+        }
+
         public JpegBlock8x8 Dequantize(JpegBlock8x8 block)
         {
             if (block == null)
