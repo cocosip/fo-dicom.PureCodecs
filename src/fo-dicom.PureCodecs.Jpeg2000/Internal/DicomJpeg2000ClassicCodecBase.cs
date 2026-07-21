@@ -120,7 +120,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
             if (parameters.Rate > 0)
             {
-                layerRates.Add(parameters.Rate);
+                layerRates.Add((double)parameters.Rate * bitsStored / bitsAllocated);
             }
 
             if (TransferSyntax == DicomTransferSyntax.JPEG2000Lossless && parameters.Rate > 0)

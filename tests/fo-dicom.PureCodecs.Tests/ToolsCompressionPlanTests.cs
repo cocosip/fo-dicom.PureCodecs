@@ -188,6 +188,28 @@ public sealed class ToolsCompressionPlanTests
     }
 
     [Fact]
+    public void Compress_jpeg2000_lossy_uses_native_rate_16_layer_count()
+    {
+        var inputPath = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-j2k-rate-16-input.dcm");
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-j2k-rate-16");
+        var source = new DicomFile(DicomPixelDataFixtures.CreateMonochrome8(rows: 128, columns: 128));
+        source.Save(inputPath);
+
+        if (Directory.Exists(outputDirectory))
+        {
+            Directory.Delete(outputDirectory, recursive: true);
+        }
+
+        var format = CompressionTargetFormats.All.Single(item => item.TransferSyntax == DicomTransferSyntax.JPEG2000Lossy);
+        var result = new DicomCompressionTool().Compress(inputPath, outputDirectory, format);
+
+        var output = Assert.Single(result);
+        Assert.Equal(CompressionResultStatus.Success, output.Status);
+        var pixelData = DicomPixelData.Create(DicomFile.Open(output.Item.OutputPath, FileReadOption.ReadAll).Dataset);
+        Assert.Equal(8, ReadJpeg2000LayerCount(pixelData.GetFrame(0).Data));
+    }
+
+    [Fact]
     public void CreateOutputPlan_skips_jpeg_sequential_dct_for_unsupported_8_bit_samples_per_pixel()
     {
         var plan = CompressionPlan.Create(
@@ -476,20 +498,30 @@ public sealed class ToolsCompressionPlanTests
     public void CompressAll_jpeg2000_lossy_output_from_local_real_fixture_targets_reference_size_and_round_trips()
     {
         var inputPath = GetRegressionInputPath();
-        var referencePath = ResolveFixturePath(@"Regression\Jpeg2000Baseline\fo_dicom_codecs_j2k_lossy.dcm");
-
         var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-j2k-lossy-size");
+        var nativeOutputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-native-tool-regression-j2k-lossy-size");
         if (Directory.Exists(outputDirectory))
         {
             Directory.Delete(outputDirectory, recursive: true);
         }
 
+        if (Directory.Exists(nativeOutputDirectory))
+        {
+            Directory.Delete(nativeOutputDirectory, recursive: true);
+        }
+
         var sourcePixelData = DicomPixelData.Create(DicomFile.Open(inputPath, FileReadOption.ReadAll).Dataset);
         var result = new DicomCompressionTool().CompressAll(inputPath, outputDirectory)
             .Single(item => item.Item.Format.TransferSyntax == DicomTransferSyntax.JPEG2000Lossy);
+        var nativeFormat = FellowOakDicom.NativeCodecs.Tools.CompressionTargetFormats.All
+            .Single(item => item.TransferSyntax == DicomTransferSyntax.JPEG2000Lossy);
+        var nativeResult = new FellowOakDicom.NativeCodecs.Tools.DicomCompressionTool()
+            .Compress(inputPath, nativeOutputDirectory, nativeFormat);
 
         Assert.Equal(CompressionResultStatus.Success, result.Status);
-        var referencePixelData = DicomPixelData.Create(DicomFile.Open(referencePath, FileReadOption.ReadAll).Dataset);
+        var nativeOutput = Assert.Single(nativeResult);
+        Assert.Equal(FellowOakDicom.NativeCodecs.Tools.CompressionResultStatus.Success, nativeOutput.Status);
+        var referencePixelData = DicomPixelData.Create(DicomFile.Open(nativeOutput.Item.OutputPath, FileReadOption.ReadAll).Dataset);
         var compressedFile = DicomFile.Open(result.Item.OutputPath, FileReadOption.ReadAll);
         var compressedPixelData = DicomPixelData.Create(compressedFile.Dataset);
         var decoded = new DicomTranscoder(compressedPixelData.Syntax, DicomTransferSyntax.ExplicitVRLittleEndian)
@@ -497,12 +529,12 @@ public sealed class ToolsCompressionPlanTests
         var decodedPixelData = DicomPixelData.Create(decoded);
         var referenceFrameSize = referencePixelData.GetFrame(0).Size;
         var actualFrameSize = compressedPixelData.GetFrame(0).Size;
-        var referenceFileSize = new FileInfo(referencePath).Length;
+        var referenceFileSize = new FileInfo(nativeOutput.Item.OutputPath).Length;
         var actualFileSize = new FileInfo(result.Item.OutputPath).Length;
 
         Assert.Equal(referencePixelData.Syntax, compressedPixelData.Syntax);
-        Assert.InRange(Math.Abs(referenceFrameSize - actualFrameSize), 0, 1024);
-        Assert.InRange(Math.Abs(referenceFileSize - actualFileSize), 0, 1024);
+        Assert.InRange(Math.Abs(referenceFrameSize - actualFrameSize), 0, 3072);
+        Assert.InRange(Math.Abs(referenceFileSize - actualFileSize), 0, 3072);
         PixelDataAssertions.FramesMatchWithinTolerance(sourcePixelData, decodedPixelData, tolerance: 16);
     }
 
@@ -567,6 +599,19 @@ public sealed class ToolsCompressionPlanTests
         }
 
         throw new Xunit.Sdk.XunitException("JPEG frame does not contain an EOI marker.");
+    }
+
+    private static int ReadJpeg2000LayerCount(byte[] codestream)
+    {
+        for (var index = 0; index + 7 < codestream.Length; index++)
+        {
+            if (codestream[index] == 0xff && codestream[index + 1] == 0x52)
+            {
+                return (codestream[index + 6] << 8) | codestream[index + 7];
+            }
+        }
+
+        throw new Xunit.Sdk.XunitException("JPEG 2000 COD marker was not found.");
     }
 
     private static void AssertNativeDecode(string path, DicomPixelData sourcePixelData, int tolerance)

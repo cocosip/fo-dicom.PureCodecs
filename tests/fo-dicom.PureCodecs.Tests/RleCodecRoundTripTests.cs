@@ -1,5 +1,6 @@
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
+using FellowOakDicom.Imaging.NativeCodec;
 using FellowOakDicom.IO.Buffer;
 using FellowOakDicom.PureCodecs.Rle;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
@@ -37,6 +38,26 @@ public sealed class RleCodecRoundTripTests
     public void Rle_round_trip_preserves_multi_frame_pixel_data()
     {
         AssertRoundTrip(DicomPixelDataFixtures.CreateMultiFrameMonochrome8());
+    }
+
+    [Fact]
+    public void Rle_encode_matches_fo_dicom_codecs_native_packetization()
+    {
+        var pixels = new byte[256 * 256];
+        var random = new Random(13841);
+        for (var index = 0; index < pixels.Length; index++)
+        {
+            pixels[index] = (byte)random.Next(16);
+        }
+
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8(rows: 256, columns: 256, frame: pixels));
+        var pureCompressed = CreateTargetPixelData(source, DicomTransferSyntax.RLELossless);
+        var nativeCompressed = CreateTargetPixelData(source, DicomTransferSyntax.RLELossless);
+
+        new DicomRleLosslessCodec().Encode(source, pureCompressed, new DicomRleLosslessCodec().GetDefaultParameters());
+        new DicomRleNativeCodec().Encode(source, nativeCompressed, new DicomRleNativeCodec().GetDefaultParameters());
+
+        Assert.Equal(nativeCompressed.GetFrame(0).Data, pureCompressed.GetFrame(0).Data);
     }
 
     [Fact]

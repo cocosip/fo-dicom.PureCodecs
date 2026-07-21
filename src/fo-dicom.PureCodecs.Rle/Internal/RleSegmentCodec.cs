@@ -85,50 +85,77 @@ namespace FellowOakDicom.PureCodecs.Rle.Internal
             }
 
             var encoded = new List<byte>(source.Length);
-            var index = 0;
-            while (index < source.Length)
+            var literalBuffer = new byte[132];
+            var literalLength = 0;
+            var previous = -1;
+            var repeatLength = 0;
+
+            for (var index = 0; index < source.Length; index++)
             {
-                var repeatLength = CountRepeat(source, index);
-                if (repeatLength >= 3)
+                var value = source[index];
+                if (value == previous)
                 {
-                    WriteRepeatRuns(encoded, source[index], repeatLength);
-                    index += repeatLength;
+                    repeatLength++;
+                    if (repeatLength > 2 && literalLength > 0)
+                    {
+                        FlushLiterals(encoded, literalBuffer, ref literalLength);
+                    }
+                    else if (repeatLength > MaximumRunLength)
+                    {
+                        WriteRepeatRuns(encoded, (byte)previous, MaximumRunLength);
+                        repeatLength -= MaximumRunLength;
+                    }
+
                     continue;
                 }
 
-                var literalStart = index;
-                index += repeatLength;
-                while (index < source.Length)
+                switch (repeatLength)
                 {
-                    repeatLength = CountRepeat(source, index);
-                    if (repeatLength >= 3)
-                    {
+                    case 0:
                         break;
-                    }
-
-                    index += repeatLength;
-                    if (index - literalStart >= MaximumRunLength)
-                    {
+                    case 1:
+                        literalBuffer[literalLength++] = (byte)previous;
                         break;
-                    }
+                    case 2:
+                        literalBuffer[literalLength++] = (byte)previous;
+                        literalBuffer[literalLength++] = (byte)previous;
+                        break;
+                    default:
+                        WriteRepeatRuns(encoded, (byte)previous, repeatLength);
+                        break;
                 }
 
-                WriteLiteralRuns(encoded, source, literalStart, index - literalStart);
+                FlushOversizedLiterals(encoded, literalBuffer, ref literalLength);
+                previous = value;
+                repeatLength = 1;
+            }
+
+            if (repeatLength < 2)
+            {
+                while (repeatLength > 0)
+                {
+                    literalBuffer[literalLength++] = (byte)previous;
+                    repeatLength--;
+                }
+            }
+
+            FlushLiterals(encoded, literalBuffer, ref literalLength);
+            if (repeatLength >= 2)
+            {
+                WriteRepeatRuns(encoded, (byte)previous, repeatLength);
             }
 
             return encoded.ToArray();
         }
 
-        private static int CountRepeat(byte[] source, int start)
+        private static void FlushOversizedLiterals(List<byte> encoded, byte[] literalBuffer, ref int literalLength)
         {
-            var value = source[start];
-            var count = 1;
-            while (start + count < source.Length && source[start + count] == value && count < MaximumRunLength)
+            while (literalLength > MaximumRunLength)
             {
-                count++;
+                WriteLiteral(encoded, literalBuffer, MaximumRunLength);
+                Buffer.BlockCopy(literalBuffer, MaximumRunLength, literalBuffer, 0, literalLength - MaximumRunLength);
+                literalLength -= MaximumRunLength;
             }
-
-            return count;
         }
 
         private static void WriteRepeatRuns(List<byte> encoded, byte value, int count)
@@ -142,19 +169,23 @@ namespace FellowOakDicom.PureCodecs.Rle.Internal
             }
         }
 
-        private static void WriteLiteralRuns(List<byte> encoded, byte[] source, int start, int count)
+        private static void FlushLiterals(List<byte> encoded, byte[] literalBuffer, ref int literalLength)
         {
-            while (count > 0)
+            while (literalLength > 0)
             {
-                var runLength = Math.Min(MaximumRunLength, count);
-                encoded.Add((byte)(runLength - 1));
-                for (var index = 0; index < runLength; index++)
-                {
-                    encoded.Add(source[start + index]);
-                }
+                var count = Math.Min(MaximumRunLength, literalLength);
+                WriteLiteral(encoded, literalBuffer, count);
+                Buffer.BlockCopy(literalBuffer, count, literalBuffer, 0, literalLength - count);
+                literalLength -= count;
+            }
+        }
 
-                start += runLength;
-                count -= runLength;
+        private static void WriteLiteral(List<byte> encoded, byte[] literalBuffer, int count)
+        {
+            encoded.Add((byte)(count - 1));
+            for (var index = 0; index < count; index++)
+            {
+                encoded.Add(literalBuffer[index]);
             }
         }
 

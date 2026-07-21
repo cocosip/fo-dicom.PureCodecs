@@ -115,14 +115,14 @@ public sealed class Jpeg2000StandardInternalTests
     }
 
     [Fact]
-    public void Classic_jpeg2000_layer_rates_do_not_scale_rate_by_stored_precision()
+    public void Classic_jpeg2000_layer_rates_scale_final_rate_by_stored_precision()
     {
         var parameters = new DicomJpeg2000Params { Rate = 20 };
         var lossy = new DicomJpeg2000LossyCodec();
 
         var rates = (double[])Invoke(lossy, "ResolveLayerRates", parameters, 12, 16);
 
-        Assert.Equal(new[] { 1280d, 640d, 320d, 160d, 80d, 40d, 20d }, rates);
+        Assert.Equal(new[] { 1280d, 640d, 320d, 160d, 80d, 40d, 15d }, rates);
     }
 
     [Fact]
