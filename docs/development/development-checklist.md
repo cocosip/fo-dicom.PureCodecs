@@ -577,6 +577,9 @@ root-cause model.
 
 ## Performance Benchmark Baseline
 
+The detailed per-transfer-syntax plan and completion checklist is
+[Codec Performance Optimization Checklist](codec-performance-optimization-checklist.md).
+
 - [x] Add a standalone `benchmarks/fo-dicom.PureCodecs.Benchmarks` project.
 - [x] Keep BenchmarkDotNet and benchmark validation out of the xUnit project-reference graph.
 - [x] Add `--verify` to validate the six bundled benchmark fixtures with PureCodecs before timing.
