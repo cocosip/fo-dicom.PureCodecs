@@ -478,6 +478,7 @@ public sealed class ToolsCompressionPlanTests
         Assert.True(
             referenceFrameSize == frame.Length,
             $"Expected JPEG 2000 frame size {referenceFrameSize} but got {frame.Length}.");
+        Assert.Equal(referenceFrame, frame);
         Assert.Equal(GetLogicalCodestreamLength(referenceFrame), GetLogicalCodestreamLength(frame));
         Assert.Equal(ReadSotTilePartLength(referenceFrame), ReadSotTilePartLength(frame));
         Assert.True(
@@ -491,6 +492,37 @@ public sealed class ToolsCompressionPlanTests
         else
         {
             PixelDataAssertions.FramesMatchWithinTolerance(sourcePixelData, decodedPixelData, tolerance);
+        }
+    }
+
+    [Fact]
+    public void Compress_jpeg2000_classic_lossless_local_real_2_matches_native_codestream_byte_for_byte()
+    {
+        var inputPath = RegressionFixturePaths.LocalReal2;
+        var referencePath = RegressionFixturePaths.Jpeg2000Baseline("fo_dicom_codecs_local2_j2k_lossless.dcm");
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-j2k-local-real-2", Guid.NewGuid().ToString("N"));
+        var format = CompressionTargetFormats.All.Single(item => item.TransferSyntax == DicomTransferSyntax.JPEG2000Lossless);
+
+        try
+        {
+            var result = Assert.Single(new DicomCompressionTool().Compress(inputPath, outputDirectory, format));
+
+            Assert.Equal(CompressionResultStatus.Success, result.Status);
+
+            var referenceFrame = DicomPixelData.Create(DicomFile.Open(referencePath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
+            var actualFrame = DicomPixelData.Create(DicomFile.Open(result.Item.OutputPath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
+
+            Assert.Equal(
+                string.Join(",", ReadJpeg2000PacketEndOffsets(referenceFrame)),
+                string.Join(",", ReadJpeg2000PacketEndOffsets(actualFrame)));
+            Assert.Equal(referenceFrame, actualFrame);
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
         }
     }
 
@@ -536,6 +568,157 @@ public sealed class ToolsCompressionPlanTests
         Assert.InRange(Math.Abs(referenceFrameSize - actualFrameSize), 0, 3072);
         Assert.InRange(Math.Abs(referenceFileSize - actualFileSize), 0, 3072);
         PixelDataAssertions.FramesMatchWithinTolerance(sourcePixelData, decodedPixelData, tolerance: 16);
+    }
+
+    [Fact]
+    public void Compress_htj2k_lossy_output_uses_native_default_qcd()
+    {
+        var inputPath = GetRegressionInputPath();
+        var pureOutputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-htj2k-default-qcd", Guid.NewGuid().ToString("N"));
+        var nativeOutputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-native-tool-regression-htj2k-default-qcd", Guid.NewGuid().ToString("N"));
+        var pureFormat = CompressionTargetFormats.All.Single(item => item.TransferSyntax == DicomTransferSyntax.HTJ2K);
+        var nativeFormat = FellowOakDicom.NativeCodecs.Tools.CompressionTargetFormats.All
+            .Single(item => item.TransferSyntax == DicomTransferSyntax.HTJ2K);
+
+        try
+        {
+            var nativeResult = Assert.Single(new FellowOakDicom.NativeCodecs.Tools.DicomCompressionTool()
+                .Compress(inputPath, nativeOutputDirectory, nativeFormat));
+            var pureResult = Assert.Single(new DicomCompressionTool()
+                .Compress(inputPath, pureOutputDirectory, pureFormat));
+
+            Assert.Equal(FellowOakDicom.NativeCodecs.Tools.CompressionResultStatus.Success, nativeResult.Status);
+            Assert.Equal(CompressionResultStatus.Success, pureResult.Status);
+
+            var nativeFrame = DicomPixelData.Create(DicomFile.Open(nativeResult.Item.OutputPath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
+            var pureFrame = DicomPixelData.Create(DicomFile.Open(pureResult.Item.OutputPath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
+
+            Assert.Equal(ReadJpeg2000QcdPayload(nativeFrame), ReadJpeg2000QcdPayload(pureFrame));
+            Assert.InRange(
+                Math.Abs(GetLogicalCodestreamLength(nativeFrame) - GetLogicalCodestreamLength(pureFrame)),
+                0,
+                64);
+        }
+        finally
+        {
+            if (Directory.Exists(pureOutputDirectory))
+            {
+                Directory.Delete(pureOutputDirectory, recursive: true);
+            }
+
+            if (Directory.Exists(nativeOutputDirectory))
+            {
+                Directory.Delete(nativeOutputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Compress_htj2k_lossy_sparse_12_bit_image_decodes_with_native_codecs()
+    {
+        var inputPath = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-htj2k-sparse-12-bit-" + Guid.NewGuid().ToString("N") + ".dcm");
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-htj2k-sparse-12-bit-" + Guid.NewGuid().ToString("N"));
+        var frame = CreateSparseTwelveBitFrame(rows: 288, columns: 288);
+        var sourceDataset = DicomPixelDataFixtures.CreateBaseDataset(
+            rows: 288,
+            columns: 288,
+            samplesPerPixel: 1,
+            photometricInterpretation: PhotometricInterpretation.Monochrome2,
+            bitsAllocated: 16,
+            bitsStored: 12,
+            highBit: 11,
+            planarConfiguration: null,
+            numberOfFrames: 1,
+            transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
+            frame: frame);
+
+        try
+        {
+            new DicomFile(sourceDataset).Save(inputPath);
+            var sourcePixelData = DicomPixelData.Create(sourceDataset);
+            var format = CompressionTargetFormats.All.Single(item => item.TransferSyntax == DicomTransferSyntax.HTJ2K);
+            var result = Assert.Single(new DicomCompressionTool().Compress(inputPath, outputDirectory, format));
+
+            Assert.Equal(CompressionResultStatus.Success, result.Status);
+
+            new DicomSetupBuilder()
+                .RegisterServices(services => services
+                    .AddFellowOakDicom()
+                    .AddTranscoderManager<NativeTranscoderManager>())
+                .SkipValidation()
+                .Build();
+
+            AssertNativeDecode(result.Item.OutputPath, sourcePixelData, tolerance: 512);
+        }
+        finally
+        {
+            if (File.Exists(inputPath))
+            {
+                File.Delete(inputPath);
+            }
+
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Compress_htj2k_lossless_12_bit_image_uses_native_component_precision_and_qcd()
+    {
+        var inputPath = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-htj2k-lossless-12-bit-" + Guid.NewGuid().ToString("N") + ".dcm");
+        var pureOutputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-htj2k-lossless-12-bit-" + Guid.NewGuid().ToString("N"));
+        var nativeOutputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-native-htj2k-lossless-12-bit-" + Guid.NewGuid().ToString("N"));
+        var sourceDataset = DicomPixelDataFixtures.CreateBaseDataset(
+            rows: 288,
+            columns: 288,
+            samplesPerPixel: 1,
+            photometricInterpretation: PhotometricInterpretation.Monochrome2,
+            bitsAllocated: 16,
+            bitsStored: 12,
+            highBit: 11,
+            planarConfiguration: null,
+            numberOfFrames: 1,
+            transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
+            frame: CreateSparseTwelveBitFrame(rows: 288, columns: 288));
+
+        try
+        {
+            new DicomFile(sourceDataset).Save(inputPath);
+            var pureFormat = CompressionTargetFormats.All.Single(item => item.TransferSyntax == DicomTransferSyntax.HTJ2KLossless);
+            var nativeFormat = FellowOakDicom.NativeCodecs.Tools.CompressionTargetFormats.All
+                .Single(item => item.TransferSyntax == DicomTransferSyntax.HTJ2KLossless);
+            var nativeResult = Assert.Single(new FellowOakDicom.NativeCodecs.Tools.DicomCompressionTool()
+                .Compress(inputPath, nativeOutputDirectory, nativeFormat));
+            var pureResult = Assert.Single(new DicomCompressionTool()
+                .Compress(inputPath, pureOutputDirectory, pureFormat));
+
+            Assert.Equal(FellowOakDicom.NativeCodecs.Tools.CompressionResultStatus.Success, nativeResult.Status);
+            Assert.Equal(CompressionResultStatus.Success, pureResult.Status);
+
+            var nativeFrame = DicomPixelData.Create(DicomFile.Open(nativeResult.Item.OutputPath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
+            var pureFrame = DicomPixelData.Create(DicomFile.Open(pureResult.Item.OutputPath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
+
+            Assert.Equal(ReadJpeg2000ComponentPrecision(nativeFrame), ReadJpeg2000ComponentPrecision(pureFrame));
+            Assert.Equal(ReadJpeg2000QcdPayload(nativeFrame), ReadJpeg2000QcdPayload(pureFrame));
+            Assert.Equal(ReadJpeg2000CommentPayload(nativeFrame), ReadJpeg2000CommentPayload(pureFrame));
+        }
+        finally
+        {
+            if (File.Exists(inputPath))
+            {
+                File.Delete(inputPath);
+            }
+
+            foreach (var outputDirectory in new[] { pureOutputDirectory, nativeOutputDirectory })
+            {
+                if (Directory.Exists(outputDirectory))
+                {
+                    Directory.Delete(outputDirectory, recursive: true);
+                }
+            }
+        }
     }
 
     [Fact]
@@ -614,6 +797,73 @@ public sealed class ToolsCompressionPlanTests
         throw new Xunit.Sdk.XunitException("JPEG 2000 COD marker was not found.");
     }
 
+    private static byte[] ReadJpeg2000QcdPayload(byte[] codestream)
+    {
+        for (var index = 0; index + 3 < codestream.Length; index++)
+        {
+            if (codestream[index] != 0xff || codestream[index + 1] != 0x5c)
+            {
+                continue;
+            }
+
+            var length = (codestream[index + 2] << 8) | codestream[index + 3];
+            if (length < 2 || index + 2 + length > codestream.Length)
+            {
+                break;
+            }
+
+            var payload = new byte[length - 2];
+            Buffer.BlockCopy(codestream, index + 4, payload, 0, payload.Length);
+            return payload;
+        }
+
+        throw new Xunit.Sdk.XunitException("JPEG 2000 QCD marker was not found.");
+    }
+
+    private static byte ReadJpeg2000ComponentPrecision(byte[] codestream)
+    {
+        for (var index = 0; index + 43 < codestream.Length; index++)
+        {
+            if (codestream[index] != 0xff || codestream[index + 1] != 0x51)
+            {
+                continue;
+            }
+
+            var length = (codestream[index + 2] << 8) | codestream[index + 3];
+            if (length < 41 || index + 43 >= codestream.Length)
+            {
+                break;
+            }
+
+            return codestream[index + 40];
+        }
+
+        throw new Xunit.Sdk.XunitException("JPEG 2000 SIZ marker was not found.");
+    }
+
+    private static byte[] ReadJpeg2000CommentPayload(byte[] codestream)
+    {
+        for (var index = 0; index + 3 < codestream.Length; index++)
+        {
+            if (codestream[index] != 0xff || codestream[index + 1] != 0x64)
+            {
+                continue;
+            }
+
+            var length = (codestream[index + 2] << 8) | codestream[index + 3];
+            if (length < 2 || index + 2 + length > codestream.Length)
+            {
+                break;
+            }
+
+            var payload = new byte[length - 2];
+            Buffer.BlockCopy(codestream, index + 4, payload, 0, payload.Length);
+            return payload;
+        }
+
+        throw new Xunit.Sdk.XunitException("JPEG 2000 COM marker was not found.");
+    }
+
     private static void AssertNativeDecode(string path, DicomPixelData sourcePixelData, int tolerance)
     {
         var compressedFile = DicomFile.Open(path, FileReadOption.ReadAll);
@@ -630,6 +880,84 @@ public sealed class ToolsCompressionPlanTests
         {
             PixelDataAssertions.FramesMatchWithinTolerance(sourcePixelData, decodedPixelData, tolerance);
         }
+    }
+
+    private static byte[] CreateSparseTwelveBitFrame(int rows, int columns)
+    {
+        var frame = new byte[rows * columns * 2];
+        for (var y = 64; y < rows - 64; y++)
+        {
+            for (var x = 64; x < columns - 64; x++)
+            {
+                var value = (ushort)((((x * 37) ^ (y * 97)) + ((x - 144) * (x - 144)) + ((y - 144) * (y - 144))) & 0x0fff);
+                var offset = ((y * columns) + x) * 2;
+                frame[offset] = (byte)value;
+                frame[offset + 1] = (byte)(value >> 8);
+            }
+        }
+
+        return frame;
+    }
+
+    private static IReadOnlyList<int> ReadJpeg2000PacketEndOffsets(byte[] frame)
+    {
+        var assembly = typeof(FellowOakDicom.PureCodecs.Jpeg2000.DicomJpeg2000LosslessCodec).Assembly;
+        var parserType = assembly.GetType("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Jpeg2000CodestreamParser", throwOnError: true)!;
+        var parsed = parserType.GetMethod("ParseSingleTilePart", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, new object[] { frame, "JPEG 2000", "JPEG 2000 classic" })!;
+        var parsedType = parsed.GetType();
+        var size = parsedType.GetProperty("Size")!.GetValue(parsed)!;
+        var codingStyle = parsedType.GetProperty("CodingStyle")!.GetValue(parsed)!;
+        var tileData = Assert.IsType<byte[]>(parsedType.GetProperty("TileData")!.GetValue(parsed));
+        var codingStyleType = codingStyle.GetType();
+        var frameDecoderType = assembly.GetType("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardFrameDecoder", throwOnError: true)!;
+        var components = Assert.IsAssignableFrom<Array>(frameDecoderType.GetMethod(
+            "CreateComponents",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, new[] { size, codingStyle }));
+        var packetDecoderType = assembly.GetType("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardPacketDecoder", throwOnError: true)!;
+        var decoder = Activator.CreateInstance(
+            packetDecoderType,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic,
+            binder: null,
+            args: new object[]
+            {
+                tileData,
+                components.Length,
+                codingStyleType.GetProperty("LayerCount")!.GetValue(codingStyle)!,
+                (int)codingStyleType.GetProperty("DecompositionLevels")!.GetValue(codingStyle)! + 1,
+                codingStyleType.GetProperty("ProgressionOrder")!.GetValue(codingStyle)!,
+                components,
+                codingStyleType.GetProperty("CodeBlockWidth")!.GetValue(codingStyle)!,
+                codingStyleType.GetProperty("CodeBlockHeight")!.GetValue(codingStyle)!,
+                codingStyleType.GetProperty("CodeBlockStyle")!.GetValue(codingStyle)!,
+                codingStyle
+            },
+            culture: null)!;
+        packetDecoderType.GetMethod("BuildCodeBlockMaps", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(decoder, null);
+
+        var decodePacket = packetDecoderType.GetMethod("DecodePacket", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var offset = packetDecoderType.GetField("_offset", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var packets = (System.Collections.IEnumerable)packetDecoderType.GetMethod(
+            "EnumeratePackets",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(decoder, null)!;
+        var offsets = new List<int>();
+        foreach (var packet in packets)
+        {
+            var packetType = packet.GetType();
+            decodePacket.Invoke(decoder, new[]
+            {
+                packetType.GetProperty("LayerIndex")!.GetValue(packet),
+                packetType.GetProperty("ResolutionLevel")!.GetValue(packet),
+                packetType.GetProperty("ComponentIndex")!.GetValue(packet),
+                packetType.GetProperty("PrecinctIndex")!.GetValue(packet)
+            });
+            offsets.Add((int)offset.GetValue(decoder)!);
+        }
+
+        return offsets;
     }
 
     private static int ReadRleSegmentCount(byte[] frame)

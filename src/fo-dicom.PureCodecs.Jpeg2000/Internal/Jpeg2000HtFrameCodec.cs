@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard;
 
@@ -24,16 +25,23 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var isSigned = pixelData.PixelRepresentation == PixelRepresentation.Signed;
             var samplesPerPixel = pixelData.SamplesPerPixel;
             var decompositionLevels = OpenJphDecompositionLevels;
+            var usesNativeDefaultLossyParameters = lossy && qualityTolerance == 0;
+            var codingBitDepth = !lossy || usesNativeDefaultLossyParameters ? bitsAllocated : bitsStored;
             var encodedSteps = lossy
-                ? Jpeg2000HtIrreversibleQuantization.CreateQualityScalarExpoundedSteps(
-                    decompositionLevels,
-                    bitsStored,
-                    CreateLossyQuality(qualityTolerance))
+                ? usesNativeDefaultLossyParameters
+                    ? Jpeg2000HtIrreversibleQuantization.CreateOpenJphScalarExpoundedSteps(
+                        decompositionLevels,
+                        codingBitDepth,
+                        baseDelta: -1.0f)
+                    : Jpeg2000HtIrreversibleQuantization.CreateQualityScalarExpoundedSteps(
+                        decompositionLevels,
+                        bitsStored,
+                        CreateLossyQuality(qualityTolerance))
                 : Array.Empty<ushort>();
             var encoder = new Jpeg2000HtTileEncoder();
             var tileParts = lossy
-                ? encoder.EncodeLossyTileParts(pixelData, frame, progressionOrder, decompositionLevels, encodedSteps)
-                : encoder.EncodeLosslessTileParts(pixelData, frame, progressionOrder, decompositionLevels);
+                ? encoder.EncodeLossyTileParts(pixelData, frame, progressionOrder, decompositionLevels, encodedSteps, codingBitDepth)
+                : encoder.EncodeLosslessTileParts(pixelData, frame, progressionOrder, decompositionLevels, codingBitDepth);
             byte[] qcdPayload;
             if (lossy)
             {
@@ -42,7 +50,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             else
             {
                 var reversibleExponentBits = Jpeg2000ReversibleBiboGains.CreateReversibleExponentBits(
-                    bitsStored,
+                    codingBitDepth,
                     samplesPerPixel == 3,
                     decompositionLevels);
                 qcdPayload = Jpeg2000MarkerPayloadBuilder.CreateReversibleQuantizationFromExponentBits(reversibleExponentBits);
@@ -54,10 +62,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
             var writer = new Jpeg2000CodestreamWriter();
             writer.WriteStandalone(Jpeg2000Marker.SOC);
-            writer.WriteSegment(Jpeg2000Marker.SIZ, Jpeg2000MarkerPayloadBuilder.CreateSize(width, height, bitsStored, isSigned, samplesPerPixel, capabilities: 0x4000));
+            writer.WriteSegment(Jpeg2000Marker.SIZ, Jpeg2000MarkerPayloadBuilder.CreateSize(width, height, codingBitDepth, isSigned, samplesPerPixel, capabilities: 0x4000));
             writer.WriteSegment(Jpeg2000Marker.CAP, Jpeg2000MarkerPayloadBuilder.CreateHighThroughputCapabilities(reversible: !lossy, magnitudeBound));
             writer.WriteSegment(Jpeg2000Marker.COD, CreateCodingStylePayload(progressionOrder, samplesPerPixel == 3, decompositionLevels, lossy));
             writer.WriteSegment(Jpeg2000Marker.QCD, qcdPayload);
+            writer.WriteSegment(Jpeg2000Marker.COM, CreateOpenJphCommentPayload());
             var writtenTileParts = ApplyOpenJphTilePartDivision(tileParts, progressionOrder);
             writer.WriteSegment(Jpeg2000Marker.TLM, Jpeg2000MarkerPayloadBuilder.CreateTilePartLengths(TilePartLengths(writtenTileParts)));
             for (var i = 0; i < writtenTileParts.Length; i++)
@@ -139,6 +148,15 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         private static int CreateLossyQuality(int tolerance)
         {
             return Math.Max(30, Math.Min(95, 96 - (Math.Max(1, tolerance) * 4)));
+        }
+
+        private static byte[] CreateOpenJphCommentPayload()
+        {
+            var text = Encoding.ASCII.GetBytes("OpenJPH Ver 0.21.2.");
+            var payload = new byte[text.Length + 2];
+            payload[1] = 1;
+            Buffer.BlockCopy(text, 0, payload, 2, text.Length);
+            return payload;
         }
 
         private static void ValidatePixelData(DicomPixelData pixelData, byte[] frame)

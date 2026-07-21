@@ -11,6 +11,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         private const int CodeBlockHeight = 64;
         private const int DefaultIrreversibleQuality = 80;
         private const int Tier1FractionalBits = 6;
+        private const double DoubleMachineEpsilon = 2.2204460492503131E-16;
 
         public byte[] Encode(
             DicomPixelData pixelData,
@@ -580,7 +581,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         private static int EstimateMainHeaderBytesBeforeSot(int componentCount, bool irreversible)
         {
-            var siz = 36 + (3 * componentCount);
+            var siz = 38 + (3 * componentCount);
             var cod = 12;
             var qcd = irreversible ? 35 : 19;
             var com = 37;
@@ -609,7 +610,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     for (var pass = 1; pass <= block.PassCount && pass <= block.PassLengths.Length; pass++)
                     {
                         var slope = GetAdjacentPassSlope(block, pass);
-                        if (slope <= 0)
+                        if (double.IsNaN(slope))
                         {
                             continue;
                         }
@@ -635,7 +636,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             var low = min;
             var high = max;
             var threshold = 0.0;
-            Dictionary<Jpeg2000EncodedBlock, int>? bestPasses = null;
+            var stableThreshold = 0.0;
             var lastAllocation = selectedPasses;
             var lastAllocationOk = false;
             for (var iteration = 0; iteration < 128; iteration++)
@@ -660,18 +661,21 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
                 lastAllocationOk = true;
                 high = threshold;
-                bestPasses = candidatePasses;
+                stableThreshold = threshold;
                 lastAllocation = candidatePasses;
             }
 
-            return bestPasses ?? selectedPasses;
+            var goodThreshold = stableThreshold == 0.0 ? threshold : stableThreshold;
+            return goodThreshold == 0.0
+                ? selectedPasses
+                : SelectPassesAtThreshold(blocksByResolution, previousPasses, goodThreshold);
         }
 
         private static double GetAdjacentPassSlope(Jpeg2000EncodedBlock block, int passCount)
         {
             if (passCount <= 0 || passCount > block.PassLengths.Length || passCount > block.PassDistortions.Length)
             {
-                return 0.0;
+                return double.NaN;
             }
 
             var previousPassCount = passCount - 1;
@@ -680,7 +684,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             var rateDelta = nextRate - previousRate;
             if (rateDelta == 0)
             {
-                return 0.0;
+                return double.NaN;
             }
 
             return GetDistortionDelta(block, previousPassCount, passCount) / rateDelta;
@@ -699,7 +703,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     var passCount = previousPasses.TryGetValue(block, out var passes) ? passes : 0;
                     for (var pass = passCount + 1; pass <= block.PassCount && pass <= block.PassLengths.Length; pass++)
                     {
-                        if (threshold - GetPassSlope(block, passCount, pass) < double.Epsilon)
+                        if (threshold - GetPassSlope(block, passCount, pass) < DoubleMachineEpsilon)
                         {
                             passCount = pass;
                         }

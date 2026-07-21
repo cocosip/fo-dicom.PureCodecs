@@ -17,6 +17,56 @@ public sealed class Jpeg2000StandardInternalTests
     private const int Tier1FractionalBits = 6;
 
     [Fact]
+    public void Local_real_2_lossless_packet_contributions_match_openjpeg()
+    {
+        var referencePath = RegressionFixturePaths.Jpeg2000Baseline("fo_dicom_codecs_local2_j2k_lossless.dcm");
+        var sourceFile = DicomFile.Open(RegressionFixturePaths.LocalReal2, FileReadOption.ReadAll);
+        var source = DicomPixelData.Create(sourceFile.Dataset);
+        var compressed = DicomPixelData.Create(CloneForTransferSyntax(sourceFile.Dataset, DicomTransferSyntax.JPEG2000Lossless), true);
+
+        new DicomJpeg2000LosslessCodec().Encode(source, compressed, new DicomJpeg2000Params { Irreversible = false });
+
+        var reference = DicomPixelData.Create(DicomFile.Open(referencePath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
+        var actual = compressed.GetFrame(0).Data;
+        var expectedContributions = DescribePacketContributions(reference);
+        var actualContributions = DescribePacketContributions(actual);
+
+        Assert.True(
+            expectedContributions.SequenceEqual(actualContributions),
+            DescribeFirstPacketContributionDifference(reference, actual)
+                + Environment.NewLine
+                + DescribeManagedTargetBlockPasses(source, reference, actual)
+                + Environment.NewLine
+                + DescribeNativePassBoundaryDifferences(source, reference));
+    }
+
+    [Fact]
+    public void Rate_control_header_budget_matches_native_main_header_length()
+    {
+        var bytes = (int)InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardFrameEncoder",
+            "EstimateMainHeaderBytesBeforeSot",
+            1,
+            false);
+
+        Assert.Equal(119, bytes);
+    }
+
+    [Fact]
+    public void Packet_bit_writer_flushes_stuffing_byte_after_ff_header_byte()
+    {
+        var writer = Create("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000PacketBitWriter");
+        for (var bit = 0; bit < 8; bit++)
+        {
+            Invoke(writer, "WriteBit", 1);
+        }
+
+        Invoke(writer, "Align");
+
+        Assert.Equal(new byte[] { 0xff, 0x00 }, ((IEnumerable)Property<object>(writer, "Bytes")).Cast<byte>());
+    }
+
+    [Fact]
     public void Tier1_round_trips_small_code_block_coefficients()
     {
         var coefficients = new[]
@@ -1706,6 +1756,22 @@ public sealed class Jpeg2000StandardInternalTests
     {
         var reference = DescribePacketContributions(referenceFrame);
         var pure = DescribePacketContributions(pureFrame);
+        var missing = reference.Except(pure).Take(20).ToArray();
+        var extra = pure.Except(reference).Take(20).ToArray();
+        if (missing.Length > 0 || extra.Length > 0)
+        {
+            return "contribution set differences:" + Environment.NewLine
+                + string.Join(Environment.NewLine, missing.Select(item => "reference only: " + item))
+                + Environment.NewLine
+                + string.Join(Environment.NewLine, extra.Select(item => "pure only: " + item))
+                + Environment.NewLine
+                + "reference layers:" + Environment.NewLine
+                + string.Join(Environment.NewLine, DescribePacketLayers(referenceFrame))
+                + Environment.NewLine
+                + "pure layers:" + Environment.NewLine
+                + string.Join(Environment.NewLine, DescribePacketLayers(pureFrame));
+        }
+
         var count = Math.Min(reference.Length, pure.Length);
         var differences = new System.Text.StringBuilder();
         for (var i = 0; i < count; i++)
@@ -1760,6 +1826,212 @@ public sealed class Jpeg2000StandardInternalTests
                     return $"layer={Property<int>(packet, "Layer")} comp={Property<int>(packet, "Component")} res={Property<int>(packet, "Resolution")} orient={Property<int>(block, "Orientation")} x={Property<int>(block, "LocalX")} y={Property<int>(block, "LocalY")} zero={Property<int>(block, "ZeroBitPlanes")} passes={Property<int>(contribution, "PassCount")} bytes={Property<int>(contribution, "ByteLength")}";
                 }))
             .ToArray();
+    }
+
+    private static string DescribeManagedTargetBlockPasses(DicomPixelData pixelData, byte[] referenceFrame, byte[] actualFrame)
+    {
+        var isSigned = pixelData.PixelRepresentation == PixelRepresentation.Signed;
+        var samples = (int[])InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardFrameEncoder",
+            "ReadSamples",
+            pixelData.GetFrame(0).Data,
+            pixelData.BitsAllocated,
+            pixelData.BitsStored,
+            isSigned,
+            false);
+        InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardFrameEncoder",
+            "ApplyForwardLevelShift",
+            new[] { samples },
+            pixelData.BitsStored,
+            isSigned);
+        var coefficients = (int[])InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
+            "Forward53",
+            samples,
+            pixelData.Width,
+            pixelData.Height,
+            5,
+            0,
+            0);
+        var blocks = ((IEnumerable)InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardFrameEncoder",
+            "BuildCodeBlocks",
+            coefficients,
+            pixelData.Width,
+            pixelData.Height,
+            5,
+            pixelData.BitsStored,
+            true,
+            null!)).Cast<object>();
+        var block = blocks.Single(item => Property<int>(item, "Orientation") == 3
+            && Property<int>(item, "X") == 2
+            && Property<int>(item, "Y") == 3);
+        var lengths = Property<int[]>(block, "PassLengths");
+        var distortions = Property<double[]>(block, "PassDistortions");
+        var blocksByResolution = InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardFrameEncoder",
+            "BuildCodeBlocksByResolution",
+            coefficients,
+            pixelData.Width,
+            pixelData.Height,
+            pixelData.BitsStored,
+            true,
+            null!,
+            0,
+            null!);
+        var selectedBlock = ((IEnumerable)blocksByResolution)
+            .Cast<IEnumerable>()
+            .ElementAt(5)
+            .Cast<object>()
+            .Single(item => Property<int>(item, "Orientation") == 3
+                && Property<int>(item, "X") == 2
+                && Property<int>(item, "Y") == 3);
+        var layerRates = new double[] { 1280, 640, 320, 160, 80, 40, 20, 0 };
+        var mainHeaderBytesBeforeSot = (int)InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardFrameEncoder",
+            "EstimateMainHeaderBytesBeforeSot",
+            1,
+            false);
+        var targets = (int[])InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardFrameEncoder",
+            "CreateLayerByteTargets",
+            layerRates,
+            layerRates.Length,
+            (int)InvokeStatic(
+                "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardFrameEncoder",
+                "CalculateRateControlSourceByteLength",
+                pixelData.GetFrame(0).Data.Length,
+                pixelData.BitsStored,
+                pixelData.BitsAllocated),
+            mainHeaderBytesBeforeSot);
+        var selections = ((IEnumerable)InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardFrameEncoder",
+            "AllocateLayerSelections",
+            blocksByResolution,
+            targets,
+            true)).Cast<object>().ToArray();
+        var targetSelections = selections
+            .Select(selection => (int)selection.GetType().GetMethod("get_Item")!.Invoke(selection, new[] { selectedBlock })!)
+            .ToArray();
+        var referenceFirstContribution = ExtractDecodedBlockData(referenceFrame, resolution: 5, orientation: 3, x: 2, y: 3);
+        var actualFirstContribution = ExtractDecodedBlockData(actualFrame, resolution: 5, orientation: 3, x: 2, y: 3);
+        return "managed target block: resolution=" + Property<int>(selectedBlock, "Resolution")
+            + " orientation=" + Property<int>(selectedBlock, "Orientation")
+            + " x=" + Property<int>(selectedBlock, "X")
+            + " y=" + Property<int>(selectedBlock, "Y")
+            + " zero=" + Property<int>(selectedBlock, "ZeroBitPlanes")
+            + " lengths=" + string.Join(",", lengths)
+            + " distortions=" + string.Join(",", distortions.Select(value => value.ToString("R")))
+            + " targets=" + string.Join(",", targets)
+            + " selections=" + string.Join(",", targetSelections)
+            + " nativeFirst=" + string.Join("", referenceFirstContribution.Select(value => value.ToString("X2")))
+            + " pureFirst=" + string.Join("", actualFirstContribution.Select(value => value.ToString("X2")))
+            + " pureTier1=" + string.Join("", Property<byte[]>(selectedBlock, "Data").Select(value => value.ToString("X2")));
+    }
+
+    private static string DescribeNativePassBoundaryDifferences(DicomPixelData pixelData, byte[] referenceFrame)
+    {
+        var isSigned = pixelData.PixelRepresentation == PixelRepresentation.Signed;
+        var samples = (int[])InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardFrameEncoder",
+            "ReadSamples",
+            pixelData.GetFrame(0).Data,
+            pixelData.BitsAllocated,
+            pixelData.BitsStored,
+            isSigned,
+            false);
+        InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardFrameEncoder",
+            "ApplyForwardLevelShift",
+            new[] { samples },
+            pixelData.BitsStored,
+            isSigned);
+        var coefficients = (int[])InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
+            "Forward53",
+            samples,
+            pixelData.Width,
+            pixelData.Height,
+            5,
+            0,
+            0);
+        var blocksByResolution = (IEnumerable)InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardFrameEncoder",
+            "BuildCodeBlocksByResolution",
+            coefficients,
+            pixelData.Width,
+            pixelData.Height,
+            pixelData.BitsStored,
+            true,
+            null!,
+            0,
+            null!);
+        var blocks = blocksByResolution.Cast<IEnumerable>()
+            .SelectMany(items => items.Cast<object>())
+            .ToDictionary(BlockKey, item => item);
+        var size = ReadSize(referenceFrame);
+        var coding = ReadCoding(referenceFrame);
+        var decoder = Create(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardPacketDecoder",
+            ExtractTileData(referenceFrame),
+            size.Components.Count,
+            coding.LayerCount,
+            coding.DecompositionLevels + 1,
+            coding.ProgressionOrder,
+            CreateComponents(size, coding),
+            64,
+            64,
+            coding.CodeBlockStyle);
+        var totals = new System.Collections.Generic.Dictionary<string, (int Passes, int Bytes)>();
+        var differences = new System.Collections.Generic.List<string>();
+        foreach (var packet in ((IEnumerable)Invoke(decoder, "Decode")).Cast<object>())
+        {
+            foreach (var contribution in ((IEnumerable)Property<object>(packet, "Contributions")).Cast<object>())
+            {
+                if (!Property<bool>(contribution, "Included"))
+                {
+                    continue;
+                }
+
+                var decodedBlock = Property<object>(contribution, "Block");
+                var key = DecodedBlockKey(Property<int>(packet, "Resolution"), decodedBlock);
+                var previous = totals.TryGetValue(key, out var value) ? value : (Passes: 0, Bytes: 0);
+                var current = (Passes: previous.Passes + Property<int>(contribution, "PassCount"), Bytes: previous.Bytes + Property<int>(contribution, "ByteLength"));
+                totals[key] = current;
+                if (!blocks.TryGetValue(key, out var encodedBlock))
+                {
+                    differences.Add("missing managed block " + key);
+                    continue;
+                }
+
+                var lengths = Property<int[]>(encodedBlock, "PassLengths");
+                var managedBytes = current.Passes > 0 && current.Passes <= lengths.Length ? lengths[current.Passes - 1] : -1;
+                if (managedBytes != current.Bytes)
+                {
+                    differences.Add("boundary " + key + " passes=" + current.Passes + " native=" + current.Bytes + " managed=" + managedBytes);
+                }
+            }
+        }
+
+        return differences.Count == 0
+            ? "all Native pass boundaries match managed pass lengths"
+            : string.Join(Environment.NewLine, differences.Take(50));
+    }
+
+    private static string BlockKey(object block)
+    {
+        return BlockKey(Property<int>(block, "Resolution"), block);
+    }
+
+    private static string BlockKey(int resolution, object block)
+    {
+        return resolution + ":" + Property<int>(block, "Orientation") + ":" + Property<int>(block, "X") + ":" + Property<int>(block, "Y");
+    }
+
+    private static string DecodedBlockKey(int resolution, object block)
+    {
+        return resolution + ":" + Property<int>(block, "Orientation") + ":" + Property<int>(block, "LocalX") + ":" + Property<int>(block, "LocalY");
     }
 
     private static byte[] ExtractDecodedBlockData(byte[] codestream, int resolution, int orientation, int x, int y)

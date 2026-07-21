@@ -89,8 +89,7 @@ public sealed class DicomCompressionTool
         {
             return new PureHtJpeg2000Params
             {
-                Irreversible = true,
-                TargetRatio = 16
+                Irreversible = true
             };
         }
 

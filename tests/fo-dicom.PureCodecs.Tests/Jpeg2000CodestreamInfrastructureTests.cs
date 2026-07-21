@@ -9,6 +9,27 @@ namespace FellowOakDicom.PureCodecs.Tests;
 public sealed class Jpeg2000CodestreamInfrastructureTests
 {
     [Fact]
+    public void Ht_packet_tree_reads_initialized_padding_beyond_a_non_power_of_two_edge()
+    {
+        var treeType = typeof(FellowOakDicom.PureCodecs.Jpeg2000.DicomHtJpeg2000LosslessCodec).Assembly.GetType(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Jpeg2000HtTileEncoder+HtPacketTree");
+        Assert.NotNull(treeType);
+
+        var tree = Activator.CreateInstance(
+            treeType!,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic,
+            binder: null,
+            args: new object[] { 3, 1, 255 },
+            culture: null);
+        Assert.NotNull(tree);
+
+        treeType.GetMethod("Set")!.Invoke(tree, new object[] { 2, 0, 0, 0 });
+        var paddingValue = Assert.IsType<int>(treeType.GetMethod("Get")!.Invoke(tree, new object[] { 3, 0, 0 }));
+
+        Assert.Equal(255, paddingValue);
+    }
+
+    [Fact]
     public void Marker_constants_expose_common_jpeg2000_markers()
     {
         Assert.Equal(0x4F, Jpeg2000Marker.SOC);
@@ -465,6 +486,7 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
         var cap = reader.ReadNext();
         var cod = Jpeg2000CodingStyleDefault.Parse(reader.ReadNext());
         var qcd = Jpeg2000QuantizationDefault.Parse(reader.ReadNext());
+        var com = reader.ReadNext();
         var tlm = reader.ReadNext();
         var sot = Jpeg2000StartOfTilePart.Parse(reader.ReadNext(), tileCount: 1);
         Assert.Equal(Jpeg2000Marker.SOD, reader.ReadNext().Code);
@@ -482,6 +504,8 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
         Assert.Equal(16, qcd.StepSizes.Count);
         Assert.Equal(1, qcd.GuardBits);
         Assert.Equal(EncodeCcapMagnitudeBound(MaxMagnitudeBound(qcd)), ReadUInt16(cap.Payload, 4));
+        Assert.Equal(Jpeg2000Marker.COM, com.Code);
+        Assert.Equal(new byte[] { 0x00, 0x01, (byte)'O', (byte)'p', (byte)'e', (byte)'n', (byte)'J', (byte)'P', (byte)'H', (byte)' ', (byte)'V', (byte)'e', (byte)'r', (byte)' ', (byte)'0', (byte)'.', (byte)'2', (byte)'1', (byte)'.', (byte)'2', (byte)'.' }, com.Payload);
         Assert.Equal(Jpeg2000Marker.TLM, tlm.Code);
         Assert.Equal(38, tlm.Payload.Length);
         Assert.Equal(0x60, tlm.Payload[1]);

@@ -12,10 +12,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         public byte[] EncodeLossless(DicomPixelData pixelData, byte[] frame, Jpeg2000ProgressionOrder progressionOrder, int decompositionLevels)
         {
-            return Concat(EncodeLosslessTileParts(pixelData, frame, progressionOrder, decompositionLevels));
+            return Concat(EncodeLosslessTileParts(pixelData, frame, progressionOrder, decompositionLevels, pixelData.BitsStored));
         }
 
-        public byte[][] EncodeLosslessTileParts(DicomPixelData pixelData, byte[] frame, Jpeg2000ProgressionOrder progressionOrder, int decompositionLevels)
+        public byte[][] EncodeLosslessTileParts(DicomPixelData pixelData, byte[] frame, Jpeg2000ProgressionOrder progressionOrder, int decompositionLevels, int codingBitDepth)
         {
             if (pixelData.SamplesPerPixel != 1 && pixelData.SamplesPerPixel != 3)
             {
@@ -23,8 +23,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             }
 
             var isSigned = pixelData.PixelRepresentation == PixelRepresentation.Signed;
-            var components = ReadComponentSamples(frame, pixelData.SamplesPerPixel, pixelData.BitsAllocated, pixelData.BitsStored, isSigned);
-            ApplyForwardLevelShift(components, pixelData.BitsStored, isSigned);
+            var components = ReadComponentSamples(frame, pixelData.SamplesPerPixel, pixelData.BitsAllocated, codingBitDepth, isSigned);
+            ApplyForwardLevelShift(components, codingBitDepth, isSigned);
             if (components.Length == 3)
             {
                 ApplyForwardRct(components);
@@ -34,7 +34,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             foreach (var component in components)
             {
                 var coefficients = Jpeg2000StandardWavelet.Forward53(component, pixelData.Width, pixelData.Height, decompositionLevels, 0, 0);
-                encodedComponents.Add(BuildHtCodeBlocksByResolution(coefficients, pixelData.Width, pixelData.Height, pixelData.BitsStored, components.Length == 3, decompositionLevels));
+                encodedComponents.Add(BuildHtCodeBlocksByResolution(coefficients, pixelData.Width, pixelData.Height, codingBitDepth, components.Length == 3, decompositionLevels));
             }
 
             return EncodePacketsByResolution(encodedComponents, progressionOrder, decompositionLevels);
@@ -42,10 +42,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         public byte[] EncodeLossy(DicomPixelData pixelData, byte[] frame, Jpeg2000ProgressionOrder progressionOrder, int decompositionLevels, ushort[] encodedSteps)
         {
-            return Concat(EncodeLossyTileParts(pixelData, frame, progressionOrder, decompositionLevels, encodedSteps));
+            return Concat(EncodeLossyTileParts(pixelData, frame, progressionOrder, decompositionLevels, encodedSteps, pixelData.BitsStored));
         }
 
-        public byte[][] EncodeLossyTileParts(DicomPixelData pixelData, byte[] frame, Jpeg2000ProgressionOrder progressionOrder, int decompositionLevels, ushort[] encodedSteps)
+        public byte[][] EncodeLossyTileParts(DicomPixelData pixelData, byte[] frame, Jpeg2000ProgressionOrder progressionOrder, int decompositionLevels, ushort[] encodedSteps, int codingBitDepth)
         {
             if (pixelData.SamplesPerPixel != 1 && pixelData.SamplesPerPixel != 3)
             {
@@ -53,21 +53,21 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             }
 
             var isSigned = pixelData.PixelRepresentation == PixelRepresentation.Signed;
-            var components = ReadComponentSamples(frame, pixelData.SamplesPerPixel, pixelData.BitsAllocated, pixelData.BitsStored, isSigned);
-            ApplyForwardLevelShift(components, pixelData.BitsStored, isSigned);
+            var components = ReadComponentSamples(frame, pixelData.SamplesPerPixel, pixelData.BitsAllocated, codingBitDepth, isSigned);
+            ApplyForwardLevelShift(components, codingBitDepth, isSigned);
             var values = CreateDoubleComponents(components);
             if (values.Length == 3)
             {
                 ApplyForwardIct(values);
             }
 
-            ScaleComponents(values, 1.0 / (1 << pixelData.BitsStored));
+            ScaleComponents(values, 1.0 / (1 << codingBitDepth));
 
             var encodedComponents = new List<List<List<Jpeg2000EncodedBlock>>>(values.Length);
             foreach (var component in values)
             {
                 Jpeg2000StandardIrreversibleWavelet.Forward97(component, pixelData.Width, pixelData.Height, decompositionLevels);
-                encodedComponents.Add(BuildHtIrreversibleCodeBlocksByResolution(component, pixelData.Width, pixelData.Height, pixelData.BitsStored, decompositionLevels, encodedSteps));
+                encodedComponents.Add(BuildHtIrreversibleCodeBlocksByResolution(component, pixelData.Width, pixelData.Height, codingBitDepth, decompositionLevels, encodedSteps));
             }
 
             return EncodePacketsByResolution(encodedComponents, progressionOrder, decompositionLevels);
@@ -181,20 +181,14 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                         for (var levelPlusOne = inclusion.Levels; levelPlusOne > 0; levelPlusOne--)
                         {
                             var level = levelPlusOne - 1;
-                            emptyBlock = inclusion.Get(x >> level, y >> level, level) == 1;
-                            if (emptyBlock)
-                            {
-                                break;
-                            }
-
                             if (inclusionFlags.Get(x >> level, y >> level, level) == 0)
                             {
                                 var skipped = inclusion.Get(x >> level, y >> level, level) - inclusion.Get(x >> levelPlusOne, y >> levelPlusOne, levelPlusOne);
                                 header.WriteBit(1 - skipped);
                                 inclusionFlags.Set(x >> level, y >> level, level, 1);
-                                emptyBlock = skipped != 0;
                             }
 
+                            emptyBlock = inclusion.Get(x >> level, y >> level, level) != 0;
                             if (emptyBlock)
                             {
                                 break;
@@ -428,7 +422,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                             block.LocalY,
                             band.CodeBlockCountX,
                             band.CodeBlockCountY,
-                            data.Length == 0 ? kMax : missingMostSignificantBits,
+                            data.Length == 0 ? 0 : missingMostSignificantBits,
                             data.Length == 0 ? 0 : 1,
                             data,
                             data.Length == 0 ? Array.Empty<int>() : new[] { data.Length },
@@ -487,7 +481,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                             block.LocalY,
                             band.CodeBlockCountX,
                             band.CodeBlockCountY,
-                            data.Length == 0 ? kMax : missingMostSignificantBits,
+                            data.Length == 0 ? 0 : missingMostSignificantBits,
                             data.Length == 0 ? 0 : 1,
                             data,
                             data.Length == 0 ? Array.Empty<int>() : new[] { data.Length },
@@ -708,12 +702,17 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 {
                     _widths[level] = Math.Max(1, (width + (1 << level) - 1) >> level);
                     _heights[level] = Math.Max(1, (height + (1 << level) - 1) >> level);
-                    _values[level] = new int[_widths[level] * _heights[level]];
+                    var capacity = level == Levels
+                        ? 1
+                        : 1 << ((Levels - level - 1) << 1);
+                    _values[level] = new int[capacity];
                     for (var i = 0; i < _values[level].Length; i++)
                     {
                         _values[level][i] = initialValue;
                     }
                 }
+
+                _values[Levels][0] = 0;
             }
 
             public int Levels { get; }
@@ -727,8 +726,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                     return 0;
                 }
 
-                x = Math.Min(Math.Max(0, x), _widths[level] - 1);
-                y = Math.Min(Math.Max(0, y), _heights[level] - 1);
                 return _values[level][x + (y * _widths[level])];
             }
 
@@ -739,8 +736,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                     return;
                 }
 
-                x = Math.Min(Math.Max(0, x), _widths[level] - 1);
-                y = Math.Min(Math.Max(0, y), _heights[level] - 1);
                 _values[level][x + (y * _widths[level])] = value;
             }
 

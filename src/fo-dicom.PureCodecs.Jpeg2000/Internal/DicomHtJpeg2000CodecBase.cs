@@ -82,7 +82,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 return Math.Max(1, (int)Math.Ceiling(parameters.TargetRatio - 1));
             }
 
-            return 1;
+            return 0;
         }
 
     }

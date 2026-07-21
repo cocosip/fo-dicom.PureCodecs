@@ -4,6 +4,8 @@ internal static class RegressionFixturePaths
 {
     public static string LocalReal1 => Resolve("Regression", "LocalReal", "1.dcm");
 
+    public static string LocalReal2 => Resolve("Regression", "LocalReal", "2.dcm");
+
     public static string Transcoded(string fileName)
     {
         return Resolve("Regression", "Transcoded", fileName);

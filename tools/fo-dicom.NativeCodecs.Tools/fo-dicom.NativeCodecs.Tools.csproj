@@ -9,5 +9,6 @@
 
   <ItemGroup>
     <PackageReference Include="fo-dicom.Codecs" />
+    <PackageReference Include="fo-dicom" />
   </ItemGroup>
 </Project>
