@@ -53,6 +53,26 @@ public sealed class Jpeg2000StandardInternalTests
     }
 
     [Fact]
+    public void Rate_control_target_rounds_up_like_openjpeg()
+    {
+        var target = (int)InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardFrameEncoder",
+            "EstimateTargetTileBytes",
+            1280d,
+            1281281);
+
+        Assert.Equal(1002, target);
+    }
+
+    [Fact]
+    public void Mq_encoder_initial_byte_count_preserves_openjpeg_pre_start_offset()
+    {
+        var encoder = Create("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardMqEncoder", 1);
+
+        Assert.Equal(-1, Property<int>(encoder, "CurrentLength"));
+    }
+
+    [Fact]
     public void Packet_bit_writer_flushes_stuffing_byte_after_ff_header_byte()
     {
         var writer = Create("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000PacketBitWriter");

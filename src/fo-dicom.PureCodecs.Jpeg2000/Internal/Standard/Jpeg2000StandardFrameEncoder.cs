@@ -576,7 +576,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 return 0;
             }
 
-            return Math.Max(256, (int)Math.Floor(sourceByteLength / rate));
+            return Math.Max(256, (int)Math.Ceiling(sourceByteLength / rate));
         }
 
         private static int EstimateMainHeaderBytesBeforeSot(int componentCount, bool irreversible)

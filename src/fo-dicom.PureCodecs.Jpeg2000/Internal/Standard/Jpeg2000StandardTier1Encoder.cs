@@ -890,7 +890,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         public int CurrentLength
         {
-            get { return Math.Max(0, _bp - 1); }
+            get { return _bp - 1; }
         }
 
         public byte[] FlushEstimate()
