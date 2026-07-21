@@ -38,14 +38,15 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             var precision = pixelData.BitsStored;
             var isSigned = pixelData.PixelRepresentation == PixelRepresentation.Signed && !encodeSignedPixelValuesAsUnsigned;
             var components = ReadComponentSamples(frame, pixelData.SamplesPerPixel, pixelData.BitsAllocated, precision, isSigned, encodeSignedPixelValuesAsUnsigned);
+            var rateControlSourceByteLength = CalculateRateControlSourceByteLength(frame.Length, precision, pixelData.BitsAllocated);
             ApplyForwardLevelShift(components, precision, isSigned);
 
             var irreversibleSteps = irreversible ? Jpeg2000QuantizationTable.CreateIrreversibleSteps(DefaultLevels, DefaultIrreversibleQuality) : Array.Empty<double>();
             var irreversibleEncodedSteps = irreversible ? EncodeIrreversibleSteps(irreversibleSteps, precision) : Array.Empty<ushort>();
             var mainHeaderBytesBeforeSot = EstimateMainHeaderBytesBeforeSot(pixelData.SamplesPerPixel, irreversible);
             var tileData = irreversible
-                ? EncodeIrreversibleComponents(components, width, height, precision, irreversibleEncodedSteps, usesMultipleComponentTransform, frame.Length, layerCount, layerRates, mainHeaderBytesBeforeSot)
-                : EncodeReversibleComponents(components, width, height, precision, usesMultipleComponentTransform, layerCount, frame.Length, layerRates, mainHeaderBytesBeforeSot);
+                ? EncodeIrreversibleComponents(components, width, height, precision, irreversibleEncodedSteps, usesMultipleComponentTransform, rateControlSourceByteLength, layerCount, layerRates, mainHeaderBytesBeforeSot)
+                : EncodeReversibleComponents(components, width, height, precision, usesMultipleComponentTransform, layerCount, rateControlSourceByteLength, layerRates, mainHeaderBytesBeforeSot);
             var writer = new Jpeg2000CodestreamWriter();
             writer.WriteStandalone(Jpeg2000Marker.SOC);
             writer.WriteSegment(Jpeg2000Marker.SIZ, Jpeg2000MarkerPayloadBuilder.CreateSize(width, height, precision, isSigned, pixelData.SamplesPerPixel));
@@ -137,6 +138,16 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             }
 
             return EncodePackets(encodedComponents, layerCount, sourceByteLength, layerRates, mainHeaderBytesBeforeSot, reversible: false);
+        }
+
+        private static int CalculateRateControlSourceByteLength(int frameByteLength, int bitsStored, int bitsAllocated)
+        {
+            if (frameByteLength <= 0 || bitsStored <= 0 || bitsAllocated <= 0 || bitsStored >= bitsAllocated)
+            {
+                return frameByteLength;
+            }
+
+            return (int)Math.Min(int.MaxValue, ((long)frameByteLength * bitsStored + bitsAllocated - 1) / bitsAllocated);
         }
 
         private static int[] QuantizeIrreversible(double[] coefficients, int width, int height, double[] steps)

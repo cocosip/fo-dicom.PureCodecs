@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
+using FellowOakDicom.IO.Buffer;
 using FellowOakDicom.PureCodecs.Jpeg2000;
 using FellowOakDicom.PureCodecs.Jpeg2000.Internal;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
@@ -123,6 +124,42 @@ public sealed class Jpeg2000StandardInternalTests
         var rates = (double[])Invoke(lossy, "ResolveLayerRates", parameters, 12, 16);
 
         Assert.Equal(new[] { 1280d, 640d, 320d, 160d, 80d, 40d, 15d }, rates);
+    }
+
+    [Fact]
+    public void Classic_lossy_rate_allocation_uses_stored_precision_for_twelve_bit_pixels()
+    {
+        const ushort rows = 512;
+        const ushort columns = 512;
+        var frame = new byte[rows * columns * 2];
+        uint state = 0x9e3779b9;
+        for (var sample = 0; sample < rows * columns; sample++)
+        {
+            state = (state * 1664525) + 1013904223;
+            var value = (ushort)(state & 0x0fff);
+            frame[sample * 2] = (byte)value;
+            frame[(sample * 2) + 1] = (byte)(value >> 8);
+        }
+
+        var dataset = DicomPixelDataFixtures.CreateBaseDataset(
+            rows,
+            columns,
+            samplesPerPixel: 1,
+            photometricInterpretation: PhotometricInterpretation.Monochrome2,
+            bitsAllocated: 16,
+            bitsStored: 12,
+            highBit: 11,
+            planarConfiguration: null,
+            numberOfFrames: 1,
+            transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian);
+        DicomPixelData.Create(dataset, true).AddFrame(new MemoryByteBuffer(frame));
+
+        var source = DicomPixelData.Create(dataset);
+        var compressed = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.JPEG2000Lossy), true);
+
+        new DicomJpeg2000LossyCodec().Encode(source, compressed, new DicomJpeg2000Params { Irreversible = true, Rate = 16 });
+
+        Assert.InRange(compressed.GetFrame(0).Size, 1, 33_500);
     }
 
     [Fact]
