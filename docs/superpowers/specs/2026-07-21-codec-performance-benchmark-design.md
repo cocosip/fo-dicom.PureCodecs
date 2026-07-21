@@ -18,9 +18,10 @@ fixtures:
 
 The initial fixture matrix covers RLE Lossless, JPEG Baseline Process 1, JPEG
 Lossless Process 14 SV1, JPEG-LS Lossless, JPEG 2000 Lossless, and JPEG 2000
-Lossy. Each benchmark uses the existing 960x540 acceptance fixtures where one
-exists. Encode uses the bundled uncompressed RGB acceptance fixture; decode
-uses the bundled compressed fixture for the matching transfer syntax.
+Lossy. Each benchmark uses the existing 960x540 acceptance fixture for the
+matching transfer syntax. Decode uses that compressed fixture directly. Encode
+uses the raw pixels obtained by decoding that same fixture once during setup,
+so every codec receives a data shape that its own decoder proves it can handle.
 
 HTJ2K is intentionally deferred from the initial matrix because its current
 fixtures and independent Native validation are process-isolated. It will be
@@ -45,9 +46,9 @@ remain normal xUnit tests and run before comparing benchmark results.
 Before collecting or accepting a baseline:
 
 1. The full `fo-dicom.PureCodecs.Tests` suite must pass.
-2. A benchmark fixture validation test must verify that every configured file
-   exists, has the expected transfer syntax, and can be decoded by the managed
-   codec.
+2. The benchmark executable's `--verify` mode must verify that every configured
+   file exists, has the expected transfer syntax, and can be decoded by the
+   managed codec.
 3. Lossless outputs must preserve pixels exactly; JPEG Baseline and JPEG 2000
    Lossy outputs must use the existing measured tolerance assertions.
 4. Benchmark setup validates the input once but excludes validation from the
@@ -55,7 +56,10 @@ Before collecting or accepting a baseline:
 
 ## Comparison Rules
 
-The C# benchmark measures managed PureCodecs only. Go comparisons are made by
+The C# benchmark executable is separate from the xUnit project. It does not
+reference test assemblies or bring BenchmarkDotNet into the unit-test graph;
+both projects only reuse the versioned DICOM fixture files. Go comparisons are
+made by
 running an equivalent `go test -bench` suite in `go-dicom-codec`, using the
 same source pixels or compressed DICOM frames, transfer syntax, codec settings,
 and operation boundary. Results must identify runtime, CPU, operating system,

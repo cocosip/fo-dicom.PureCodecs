@@ -117,6 +117,25 @@ Run one format directly while diagnosing a codec:
 dotnet run --project tools/fo-dicom.PureCodecs.InteropValidation -- --worker jpeg-ls-lossless
 ```
 
+## Performance Benchmarks
+
+The managed-codec performance suite measures codec-boundary and
+`DicomTranscoder` encode/decode costs for the bundled RLE, JPEG, JPEG-LS, and
+JPEG 2000 acceptance samples. Fixture validation remains part of the normal
+test suite; the benchmark process excludes setup, file I/O, and validation
+from timed operations.
+
+```powershell
+dotnet run -c Release --project benchmarks/fo-dicom.PureCodecs.Benchmarks -- --verify
+dotnet run -c Release --project benchmarks/fo-dicom.PureCodecs.Benchmarks -- --job short
+```
+
+BenchmarkDotNet writes machine-specific Markdown and JSON reports to
+`BenchmarkDotNet.Artifacts/`, which is intentionally ignored. Compare Go and
+C# only when the source pixels or compressed DICOM frame, transfer syntax,
+codec settings, and operation boundary match; record the runtime, CPU, and
+operating system alongside the result.
+
 ## Package Consumer Smoke Validation
 
 The repository includes smoke scripts that pack `FoDicom.PureCodecs`, install the generated NuGet package into sample consumer apps, and verify that the package contains only the expected managed `netstandard2.0` assemblies.

@@ -14,4 +14,7 @@
     <Project Path="tools/fo-dicom.PureCodecs.Tools/fo-dicom.PureCodecs.Tools.csproj" />
     <Project Path="tools/fo-dicom.NativeCodecs.Tools/fo-dicom.NativeCodecs.Tools.csproj" />
   </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/fo-dicom.PureCodecs.Benchmarks/fo-dicom.PureCodecs.Benchmarks.csproj" />
+  </Folder>
 </Solution>

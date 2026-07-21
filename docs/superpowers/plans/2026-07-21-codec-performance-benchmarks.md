@@ -4,7 +4,7 @@
 
 **Goal:** Add reproducible managed-codec benchmarks with fixture validation so optimization starts from a correct baseline.
 
-**Architecture:** A standalone `net10.0` BenchmarkDotNet executable receives bundled fixture metadata from a small catalog. The catalog is tested from the normal xUnit project. Benchmarks construct fresh target datasets inside each timed call, while setup validates fixture compatibility and supplies reusable source pixel data outside the measurement.
+**Architecture:** A standalone `net10.0` BenchmarkDotNet executable owns its fixture catalog and `--verify` correctness mode. The xUnit project does not reference the benchmark project or BenchmarkDotNet. Benchmarks construct fresh target datasets inside each timed call, while setup validates fixture compatibility and supplies reusable source pixel data outside the measurement.
 
 **Tech Stack:** .NET 10, BenchmarkDotNet, fo-dicom 5.2.6, xUnit v3.
 
@@ -25,14 +25,13 @@
 ### Task 2: Validate benchmark fixtures before measurement
 
 **Files:**
-- Create: `tests/fo-dicom.PureCodecs.Tests/BenchmarkFixtureCatalogTests.cs`
-- Modify: `tests/fo-dicom.PureCodecs.Tests/fo-dicom.PureCodecs.Tests.csproj`
+- Create: `benchmarks/fo-dicom.PureCodecs.Benchmarks/BenchmarkFixtureVerifier.cs`
+- Modify: `benchmarks/fo-dicom.PureCodecs.Benchmarks/Program.cs`
 - Modify: `benchmarks/fo-dicom.PureCodecs.Benchmarks/BenchmarkFixtureCatalog.cs`
 
-- [ ] Write a test that loads every configured bundled compressed fixture, verifies its expected transfer syntax, decodes it through `PureTranscoderManager`, and checks lossless or existing lossy tolerances.
-- [ ] Run the new test and confirm the catalog is incomplete before implementing it.
-- [ ] Share the fixture catalog source with the test project and complete the metadata implementation.
-- [ ] Re-run the new test until it passes.
+- [ ] Add a `--verify` command that loads every configured bundled compressed fixture, verifies its expected transfer syntax, and decodes it through `PureTranscoderManager`.
+- [ ] Keep the benchmark project out of the xUnit project-reference graph.
+- [ ] Run `dotnet run --project benchmarks/fo-dicom.PureCodecs.Benchmarks -- --verify` before collecting results.
 
 ### Task 3: Add codec and transcoder benchmarks
 
@@ -50,7 +49,7 @@
 **Files:**
 - Modify: `docs/development/development-checklist.md`
 
-- [ ] Run the fixture validation test.
+- [ ] Run the benchmark fixture verifier.
 - [ ] Run the full test suite.
 - [ ] Run the benchmark executable in Release mode, exporting Markdown and JSON artifacts.
 - [ ] Record the command and fixture matrix in the development checklist without committing generated machine-specific result files.

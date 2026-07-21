@@ -575,6 +575,24 @@ threshold allocation, Tier-2 packet writing, and only then final codestream size
 or binary comparison. Final size differences are compatibility signals, not the
 root-cause model.
 
+## Performance Benchmark Baseline
+
+- [x] Add a standalone `benchmarks/fo-dicom.PureCodecs.Benchmarks` project.
+- [x] Keep BenchmarkDotNet and benchmark validation out of the xUnit project-reference graph.
+- [x] Add `--verify` to validate the six bundled benchmark fixtures with PureCodecs before timing.
+- [x] Measure codec-boundary and `DicomTranscoder` encode/decode operations with allocation diagnostics.
+- [x] Capture a complete short-run baseline for RLE, JPEG Baseline, JPEG Lossless SV1, JPEG-LS, JPEG 2000 Lossless, and JPEG 2000 Lossy.
+- [ ] Compare the matched C# baseline with an equivalent Go benchmark before selecting the first optimization hotspot.
+
+Run a bounded local baseline with:
+
+```powershell
+dotnet run -c Release --project benchmarks/fo-dicom.PureCodecs.Benchmarks -- --verify
+dotnet run -c Release --project benchmarks/fo-dicom.PureCodecs.Benchmarks -- --job short
+```
+
+Generated `BenchmarkDotNet.Artifacts` remain machine-specific and are not committed.
+
 ## Completion Definition
 
 The first replacement phase is complete only when:
