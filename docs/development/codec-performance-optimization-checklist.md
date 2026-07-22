@@ -39,7 +39,7 @@ sufficient evidence of compatibility.
   JPEG Lossless SV1, JPEG-LS Lossless, JPEG 2000 Lossless, and JPEG 2000 Lossy.
 - [x] Add representative benchmarks for JPEG Extended Process 2/4.
 - [x] Add a representative JPEG Lossless Process 14 benchmark fixture, generated separately from the SV1 acceptance fixture and verified against Native on five bundled real DICOM fixtures.
-- [ ] Add representative benchmarks for JPEG-LS Near-Lossless.
+- [x] Add representative benchmarks for JPEG-LS Near-Lossless.
 - [ ] Add representative benchmarks for HTJ2K Lossless, Lossless RPCL, and Lossy.
 - [ ] Run a longer benchmark job for completed candidates before assigning a durable performance threshold.
 
@@ -102,11 +102,11 @@ sufficient evidence of compatibility.
 
 ### 6. JPEG-LS Near-Lossless (`1.2.840.10008.1.2.4.81`)
 
-- [ ] Add a Near-Lossless benchmark fixture with an explicit `AllowedError`/NEAR value.
-- [ ] Measure encode and decode separately for the same NEAR value.
-- [ ] Lock the measured Native/external tolerance and marker/interleave behavior.
-- [ ] Optimize one measured hotspot without changing NEAR parameter mapping.
-- [ ] Verify bounded pixel error, fixture decode, full tests, and matched benchmarks.
+- [x] Add a Near-Lossless benchmark fixture with an explicit `AllowedError`/NEAR value. The representative acceptance fixture uses `NEAR=2` and line interleave (`ILV=1`); the benchmark re-encodes its RGB pixels as the codec's sample-interleaved path.
+- [x] Measure encode and decode separately for the same NEAR value. The matched pre-change ShortRun codec means were `14.297 ms / 15.27 MB` for encode and `13.897 ms / 10.99 MB` for decode.
+- [x] Lock the measured Native/external tolerance and marker/interleave behavior. The external fixture's error bound is 2, and the standalone `jpeg-ls-near-lossless` worker now applies `NEAR=2` to both Pure and Native encoders; it checks all five bundled fixtures in both directions, except the documented Native-corrupting Pure-to-Native `sample-05` multi-frame case.
+- [x] Optimize one measured hotspot without changing NEAR parameter mapping. Repeated EventPipe CPU traces attributed 64.6% of sample-interleaved scan encoding to regular mode and 33.7% to run mode; regular encoding now reuses the first component's neighbors already calculated during shared sample-run detection.
+- [x] Verify bounded pixel error, fixture decode, full tests, and matched benchmarks. Focused JPEG-LS coverage passed `48/48`, the complete unit suite passed `710/710`, and benchmark fixture verification passed `10/10`. The matched post-change ShortRun codec encode mean was `11.572 ms / 15.27 MB`; allocation was unchanged. Decode was not intentionally optimized.
 
 ### 7. JPEG 2000 Lossless (`1.2.840.10008.1.2.4.90`)
 

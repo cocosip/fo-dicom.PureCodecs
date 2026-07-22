@@ -1,5 +1,7 @@
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
+using FellowOakDicom.Imaging.Codec;
+using PureJpegLsParams = FellowOakDicom.PureCodecs.JpegLs.DicomJpegLsParams;
 
 namespace FellowOakDicom.PureCodecs.Benchmarks;
 
@@ -32,7 +34,7 @@ internal static class BenchmarkFixtureVerifier
             }
 
             var encoded = DicomPixelData.Create(CloneWithoutPixelData(rawDataset, fixture.TransferSyntax), true);
-            codec.Encode(decoded, encoded, codec.GetDefaultParameters());
+            codec.Encode(decoded, encoded, CreateEncodeParameters(fixture, codec));
             if (encoded.NumberOfFrames != decoded.NumberOfFrames || encoded.GetFrame(0).Size == 0)
             {
                 throw new InvalidDataException($"{fixture.Name} did not re-encode decoded pixel data.");
@@ -82,6 +84,17 @@ internal static class BenchmarkFixtureVerifier
         }
 
         return dataset;
+    }
+
+    private static DicomCodecParams CreateEncodeParameters(BenchmarkFixture fixture, IDicomCodec codec)
+    {
+        var parameters = codec.GetDefaultParameters();
+        if (parameters is PureJpegLsParams jpegLsParameters && fixture.JpegLsAllowedError.HasValue)
+        {
+            jpegLsParameters.AllowedError = fixture.JpegLsAllowedError.Value;
+        }
+
+        return parameters;
     }
 
     private static void ConfigureDicomServices()

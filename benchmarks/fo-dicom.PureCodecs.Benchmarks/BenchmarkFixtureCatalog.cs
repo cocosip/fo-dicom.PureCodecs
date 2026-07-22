@@ -5,7 +5,7 @@ using FellowOakDicom.PureCodecs.Jpeg;
 
 namespace FellowOakDicom.PureCodecs.Benchmarks;
 
-public sealed record BenchmarkFixture(string Name, string Path, DicomTransferSyntax TransferSyntax)
+public sealed record BenchmarkFixture(string Name, string Path, DicomTransferSyntax TransferSyntax, int? JpegLsAllowedError = null)
 {
     public override string ToString()
     {
@@ -33,13 +33,14 @@ public static class BenchmarkFixtureCatalog
             CreateFixture("JPEG lossless Process 14", "JPEG-Lossless-Process14_RGB.dcm", DicomTransferSyntax.JPEGProcess14),
             CreateFixture("JPEG lossless SV1", "PM5644-960x540_JPEG-Lossless_RGB.dcm", DicomTransferSyntax.JPEGProcess14SV1),
             CreateFixture("JPEG-LS lossless", "PM5644-960x540_JPEG-LS_Lossless.dcm", DicomTransferSyntax.JPEGLSLossless),
+            CreateFixture("JPEG-LS near-lossless (NEAR=2)", "PM5644-960x540_JPEG-LS_NearLossless.dcm", DicomTransferSyntax.JPEGLSNearLossless, jpegLsAllowedError: 2),
             CreateFixture("JPEG 2000 lossless", "PM5644-960x540_JPEG2000-Lossless.dcm", DicomTransferSyntax.JPEG2000Lossless),
             CreateFixture("JPEG 2000 lossy", "PM5644-960x540_JPEG2000-Lossy.dcm", DicomTransferSyntax.JPEG2000Lossy),
         };
 
-        BenchmarkFixture CreateFixture(string name, string fileName, DicomTransferSyntax transferSyntax)
+        BenchmarkFixture CreateFixture(string name, string fileName, DicomTransferSyntax transferSyntax, int? jpegLsAllowedError = null)
         {
-            return new BenchmarkFixture(name, Path.Combine(acceptanceRoot, fileName), transferSyntax);
+            return new BenchmarkFixture(name, Path.Combine(acceptanceRoot, fileName), transferSyntax, jpegLsAllowedError);
         }
     }
 }

@@ -189,15 +189,19 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             {
                 for (var x = 0; x < _width; x++)
                 {
-                    if (IsSampleRunMode(reconstructed, states, x, y))
+                    var firstState = states[0];
+                    GetNeighbors(reconstructed, firstState, x, y, out var left, out var above, out var aboveLeft, out var aboveRight);
+                    if (IsRunMode(left, above, aboveLeft, aboveRight, firstState.Model.Traits)
+                        && IsSampleRunMode(reconstructed, states, x, y, startStateIndex: 1))
                     {
                         x += EncodeSampleRunMode(writer, original, reconstructed, states, x, y) - 1;
                         continue;
                     }
 
-                    foreach (var state in states)
+                    EncodeRegularSample(writer, original, reconstructed, firstState, x, y, left, above, aboveLeft, aboveRight);
+                    for (var stateIndex = 1; stateIndex < states.Length; stateIndex++)
                     {
-                        EncodeRegularSample(writer, original, reconstructed, state, x, y);
+                        EncodeRegularSample(writer, original, reconstructed, states[stateIndex], x, y);
                     }
                 }
 
@@ -217,7 +221,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             {
                 for (var x = 0; x < _width; x++)
                 {
-                    if (IsSampleRunMode(samples, states, x, y))
+                    if (IsSampleRunMode(samples, states, x, y, startStateIndex: 0))
                     {
                         x += DecodeSampleRunMode(reader, samples, states, x, y) - 1;
                         continue;
@@ -236,10 +240,11 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             }
         }
 
-        private bool IsSampleRunMode(int[] samples, ProcessingState[] states, int x, int y)
+        private bool IsSampleRunMode(int[] samples, ProcessingState[] states, int x, int y, int startStateIndex)
         {
-            foreach (var state in states)
+            for (var stateIndex = startStateIndex; stateIndex < states.Length; stateIndex++)
             {
+                var state = states[stateIndex];
                 GetNeighbors(samples, state, x, y, out var left, out var above, out var aboveLeft, out var aboveRight);
                 if (!IsRunMode(left, above, aboveLeft, aboveRight, state.Model.Traits))
                 {
@@ -358,6 +363,21 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             int y)
         {
             GetNeighbors(reconstructed, state, x, y, out var left, out var above, out var aboveLeft, out var aboveRight);
+            EncodeRegularSample(writer, original, reconstructed, state, x, y, left, above, aboveLeft, aboveRight);
+        }
+
+        private void EncodeRegularSample(
+            JpegLsGolombCodeWriter writer,
+            int[] original,
+            int[] reconstructed,
+            ProcessingState state,
+            int x,
+            int y,
+            int left,
+            int above,
+            int aboveLeft,
+            int aboveRight)
+        {
             var context = state.Model.GetContext(left, above, aboveLeft, aboveRight, out var sign, out var predicted);
             var index = GetSampleIndex(x, y, state.Component);
             var parameter = context.GetGolombParameter();

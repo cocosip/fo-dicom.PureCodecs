@@ -53,6 +53,32 @@ public sealed class JpegLsScanCodecTests
     }
 
     [Fact]
+    public void Near_lossless_sample_interleaved_regular_mode_round_trip_stays_within_allowed_error()
+    {
+        var samples = new[]
+        {
+            10, 30, 50, 18, 41, 62, 29, 54, 77, 43, 70, 96,
+            24, 47, 68, 37, 63, 89, 53, 82, 113, 72, 105, 140,
+            40, 66, 92, 58, 86, 119, 79, 111, 151, 103, 140, 188,
+        };
+        var codec = new JpegLsScanCodec(
+            width: 4,
+            height: 3,
+            componentCount: 3,
+            bitsPerSample: 8,
+            nearLossless: 2,
+            interleaveMode: JpegLsInterleaveMode.Sample);
+
+        var encoded = codec.Encode(samples);
+        var decoded = codec.Decode(encoded);
+
+        for (var index = 0; index < samples.Length; index++)
+        {
+            Assert.True(JpegLsNearLossless.IsWithinTolerance(samples[index], decoded[index], allowedError: 2));
+        }
+    }
+
+    [Fact]
     public void Near_lossless_scan_round_trip_reconstructs_within_allowed_error()
     {
         var samples = new[] { 10, 12, 18, 21, 30, 31, 32, 40, 41, 55, 60, 63 };

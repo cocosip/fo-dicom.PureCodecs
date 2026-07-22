@@ -4,6 +4,7 @@ using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 using PureJpeg2000Params = FellowOakDicom.PureCodecs.Jpeg2000.DicomJpeg2000Params;
+using PureJpegLsParams = FellowOakDicom.PureCodecs.JpegLs.DicomJpegLsParams;
 
 namespace FellowOakDicom.PureCodecs.Benchmarks;
 
@@ -33,7 +34,7 @@ public class CodecBenchmarks
 
         _compressedDataset = DicomFile.Open(Fixture.Path, FileReadOption.ReadAll).Dataset;
         _codec = new PureTranscoderManager().GetCodec(Fixture.TransferSyntax);
-        _codecParameters = CreateOutputCodecParams(Fixture.TransferSyntax) ?? _codec.GetDefaultParameters();
+        _codecParameters = CreateOutputCodecParams(Fixture) ?? _codec.GetDefaultParameters();
         var compressed = DicomPixelData.Create(_compressedDataset);
         _rawDataset = CreateRawDataset(compressed);
         _codec.Decode(compressed, DicomPixelData.Create(_rawDataset, true), _codec.GetDefaultParameters());
@@ -126,9 +127,14 @@ public class CodecBenchmarks
         return dataset;
     }
 
-    private static DicomCodecParams? CreateOutputCodecParams(DicomTransferSyntax transferSyntax)
+    private static DicomCodecParams? CreateOutputCodecParams(BenchmarkFixture fixture)
     {
-        if (transferSyntax == DicomTransferSyntax.JPEG2000Lossy)
+        if (fixture.TransferSyntax == DicomTransferSyntax.JPEGLSNearLossless)
+        {
+            return new PureJpegLsParams { AllowedError = fixture.JpegLsAllowedError ?? 0 };
+        }
+
+        if (fixture.TransferSyntax == DicomTransferSyntax.JPEG2000Lossy)
         {
             return new PureJpeg2000Params
             {

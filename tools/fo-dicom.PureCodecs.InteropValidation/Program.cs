@@ -36,7 +36,7 @@ internal static class InteropValidationProgram
         new("jpeg-lossless-14", DicomTransferSyntax.JPEGProcess14, () => new DicomJpegLossless14Codec(), () => new NativeJpegLossless14Codec(), null, SupportsAny),
         new("jpeg-lossless-14-sv1", DicomTransferSyntax.JPEGProcess14SV1, () => new DicomJpegLossless14SV1Codec(), () => new NativeJpegLossless14Sv1Codec(), null, SupportsAny),
         new("jpeg-ls-lossless", DicomTransferSyntax.JPEGLSLossless, () => new DicomJpegLsLosslessCodec(), () => new NativeJpegLsLosslessCodec(), null, SupportsAny, SupportsNativeJpegLsDecoder),
-        new("jpeg-ls-near-lossless", DicomTransferSyntax.JPEGLSNearLossless, () => new DicomJpegLsNearLosslessCodec(), () => new NativeJpegLsNearLosslessCodec(), 3, SupportsAny, SupportsNativeJpegLsDecoder),
+        new("jpeg-ls-near-lossless", DicomTransferSyntax.JPEGLSNearLossless, () => new DicomJpegLsNearLosslessCodec(), () => new NativeJpegLsNearLosslessCodec(), 2, SupportsAny, SupportsNativeJpegLsDecoder),
         new("jpeg2000-lossless", DicomTransferSyntax.JPEG2000Lossless, () => new DicomJpeg2000LosslessCodec(), () => new NativeJpeg2000LosslessCodec(), null, SupportsJpeg2000),
         new("jpeg2000-lossy", DicomTransferSyntax.JPEG2000Lossy, () => new DicomJpeg2000LossyCodec(), () => new NativeJpeg2000LossyCodec(), 6, SupportsJpeg2000),
     };
@@ -291,6 +291,11 @@ internal static class InteropValidationProgram
     private static DicomCodecParams CreatePureEncodeParameters(CodecDefinition definition, IDicomCodec pureCodec)
     {
         var parameters = pureCodec.GetDefaultParameters();
+        if (parameters is DicomJpegLsParams jpegLsParameters && definition.Syntax == DicomTransferSyntax.JPEGLSNearLossless)
+        {
+            jpegLsParameters.AllowedError = definition.Tolerance!.Value;
+        }
+
         if (parameters is PureJpeg2000Params jpeg2000Parameters && definition.Syntax == DicomTransferSyntax.JPEG2000Lossy)
         {
             jpeg2000Parameters.Irreversible = true;
@@ -315,7 +320,7 @@ internal static class InteropValidationProgram
 
         if (parameters is NativeJpegLsParams jpegLsParameters && definition.Syntax == DicomTransferSyntax.JPEGLSNearLossless)
         {
-            jpegLsParameters.AllowedError = 3;
+            jpegLsParameters.AllowedError = definition.Tolerance!.Value;
         }
 
         return parameters;
