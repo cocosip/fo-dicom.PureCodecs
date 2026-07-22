@@ -111,10 +111,10 @@ sufficient evidence of compatibility.
 ### 7. JPEG 2000 Lossless (`1.2.840.10008.1.2.4.90`)
 
 - [x] Capture an initial isolated benchmark fixture.
-- [ ] Profile DWT, Tier-1 coding, Tier-2 packet work, and buffer allocation before selecting a change.
-- [ ] Lock exact samples plus Native/OpenJPEG fixture decoding and required DICOM tags.
-- [ ] Optimize one measured stage while preserving reversible transform and progression behavior.
-- [ ] Verify exact round trips, invalid codestream handling, full tests, and matched benchmarks.
+- [x] Profile DWT, Tier-1 coding, Tier-2 packet work, and buffer allocation before selecting a change. A bounded EventPipe sampled-thread-time trace of 40 in-process codec-encode operations attributed 49.4% of observed codec time to Tier-1, 19.5% to frame/buffer orchestration, 18.4% to Tier-2/rate allocation, and 9.4% to DWT. The largest Tier-1 leaves were significance propagation and cleanup.
+- [x] Lock exact samples plus Native/OpenJPEG fixture decoding and required DICOM tags. The pre-change and post-change `jpeg2000-lossless` Native interop worker passed all five applicable bundled real DICOM fixtures in both directions; the focused suite constrains exact samples, compression tags, frame counts, and managed invalid-codestream failures.
+- [x] Optimize one measured stage while preserving reversible transform and progression behavior. Tier-1's zero-coding, sign-coding, and sign-prediction lookup tables are immutable and now shared as static readonly tables instead of being regenerated for every code block encoder.
+- [x] Verify exact round trips, invalid codestream handling, full tests, and matched benchmarks. The focused JPEG 2000 suite passed `204/204`, the full unit suite passed `711/711`, and benchmark fixture verification passed `10/10`. Matched in-process ShortRun codec encode allocation fell from `156.70 MB/op` to `155.77 MB/op`; the mean changed from `181.361 ms` to `178.191 ms`, but the three-iteration host variability is too high to claim a stable time improvement.
 
 ### 8. JPEG 2000 Lossy (`1.2.840.10008.1.2.4.91`)
 

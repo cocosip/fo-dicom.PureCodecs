@@ -114,6 +114,22 @@ public sealed class Jpeg2000StandardInternalTests
     }
 
     [Fact]
+    public void Tier1_encoders_share_immutable_context_lookup_tables()
+    {
+        var first = Create("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardTier1Encoder", 4, 4, 0, (byte)0);
+        var second = Create("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardTier1Encoder", 4, 4, 0, (byte)0);
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic;
+
+        foreach (var fieldName in new[] { "_zeroCodingContexts", "_signCodingContexts", "_signPredictions" })
+        {
+            var field = first.GetType().GetField(fieldName, flags);
+
+            Assert.NotNull(field);
+            Assert.Same(field!.GetValue(first), field.GetValue(second));
+        }
+    }
+
+    [Fact]
     public void Tier1_pass_lengths_truncate_final_code_block_prefix()
     {
         var coefficients = new[]

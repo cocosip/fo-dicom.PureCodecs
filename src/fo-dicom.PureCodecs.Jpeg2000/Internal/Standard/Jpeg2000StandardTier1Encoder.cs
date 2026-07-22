@@ -25,6 +25,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         private const uint SignS = 0x4000;
         private const uint SignW = 0x8000;
         private const uint SignE = 0x10000;
+        private static readonly byte[] _zeroCodingContexts = BuildZeroCodingContexts();
+        private static readonly byte[] _signCodingContexts = BuildSignCodingContexts();
+        private static readonly byte[] _signPredictions = BuildSignPredictions();
 
         private readonly int _width;
         private readonly int _height;
@@ -37,9 +40,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         private readonly int _qmfbid;
         private readonly double _stepSize;
         private readonly double _mctNorm;
-        private readonly byte[] _zeroCodingContexts = BuildZeroCodingContexts();
-        private readonly byte[] _signCodingContexts = BuildSignCodingContexts();
-        private readonly byte[] _signPredictions = BuildSignPredictions();
         private Jpeg2000StandardMqEncoder? _mq;
         private int _bitPlane;
         private int _normalizedMseDecrease;
