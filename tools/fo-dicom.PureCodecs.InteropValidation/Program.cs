@@ -27,6 +27,8 @@ return await InteropValidationProgram.RunAsync(args);
 internal static class InteropValidationProgram
 {
     private const int DefaultParallelFormats = 4;
+    private const int Jpeg2000LossyRate = 16;
+    private const int Jpeg2000LossyMaximumDifference = 58;
 
     private static readonly CodecDefinition[] CodecDefinitions =
     {
@@ -38,7 +40,7 @@ internal static class InteropValidationProgram
         new("jpeg-ls-lossless", DicomTransferSyntax.JPEGLSLossless, () => new DicomJpegLsLosslessCodec(), () => new NativeJpegLsLosslessCodec(), null, SupportsAny, SupportsNativeJpegLsDecoder),
         new("jpeg-ls-near-lossless", DicomTransferSyntax.JPEGLSNearLossless, () => new DicomJpegLsNearLosslessCodec(), () => new NativeJpegLsNearLosslessCodec(), 2, SupportsAny, SupportsNativeJpegLsDecoder),
         new("jpeg2000-lossless", DicomTransferSyntax.JPEG2000Lossless, () => new DicomJpeg2000LosslessCodec(), () => new NativeJpeg2000LosslessCodec(), null, SupportsJpeg2000),
-        new("jpeg2000-lossy", DicomTransferSyntax.JPEG2000Lossy, () => new DicomJpeg2000LossyCodec(), () => new NativeJpeg2000LossyCodec(), 6, SupportsJpeg2000),
+        new("jpeg2000-lossy", DicomTransferSyntax.JPEG2000Lossy, () => new DicomJpeg2000LossyCodec(), () => new NativeJpeg2000LossyCodec(), Jpeg2000LossyMaximumDifference, SupportsJpeg2000),
     };
 
     public static async Task<int> RunAsync(string[] args)
@@ -299,7 +301,7 @@ internal static class InteropValidationProgram
         if (parameters is PureJpeg2000Params jpeg2000Parameters && definition.Syntax == DicomTransferSyntax.JPEG2000Lossy)
         {
             jpeg2000Parameters.Irreversible = true;
-            jpeg2000Parameters.Rate = 0;
+            jpeg2000Parameters.Rate = Jpeg2000LossyRate;
         }
 
         return parameters;
@@ -309,7 +311,7 @@ internal static class InteropValidationProgram
     {
         if (definition.Syntax == DicomTransferSyntax.JPEG2000Lossy)
         {
-            return new NativeJpeg2000Params { Irreversible = true, Rate = 0 };
+            return new NativeJpeg2000Params { Irreversible = true, Rate = Jpeg2000LossyRate };
         }
 
         var parameters = nativeCodec.GetDefaultParameters();

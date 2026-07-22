@@ -68,6 +68,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             if (height > 1)
             {
                 var column = new float[height];
+                var columnWorkspace = new float[height];
                 for (var x = 0; x < width; x++)
                 {
                     for (var y = 0; y < height; y++)
@@ -75,7 +76,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                         column[y] = data[(y * stride) + x];
                     }
 
-                    Forward97_1D(column);
+                    Forward97_1DWithWorkspace(column, columnWorkspace);
                     for (var y = 0; y < height; y++)
                     {
                         data[(y * stride) + x] = column[y];
@@ -86,16 +87,22 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             if (width > 1)
             {
                 var row = new float[width];
+                var rowWorkspace = new float[width];
                 for (var y = 0; y < height; y++)
                 {
                     Array.Copy(data, y * stride, row, 0, width);
-                    Forward97_1D(row);
+                    Forward97_1DWithWorkspace(row, rowWorkspace);
                     Array.Copy(row, 0, data, y * stride, width);
                 }
             }
         }
 
         private static void Forward97_1D(float[] data)
+        {
+            Forward97_1DWithWorkspace(data, new float[data.Length]);
+        }
+
+        private static void Forward97_1DWithWorkspace(float[] data, float[] workspace)
         {
             var width = data.Length;
             if (width <= 1)
@@ -121,18 +128,17 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 data[(lowCount - 1) * 2] *= InvK97;
             }
 
-            var temp = new float[width];
             for (var i = 0; i < lowCount; i++)
             {
-                temp[i] = data[2 * i];
+                workspace[i] = data[2 * i];
             }
 
             for (var i = 0; i < highCount; i++)
             {
-                temp[lowCount + i] = data[(2 * i) + 1];
+                workspace[lowCount + i] = data[(2 * i) + 1];
             }
 
-            Array.Copy(temp, data, width);
+            Array.Copy(workspace, data, width);
         }
 
         private static void Inverse97_2D(double[] data, int width, int height, int stride)

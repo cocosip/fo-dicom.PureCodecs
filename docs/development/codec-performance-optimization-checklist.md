@@ -119,10 +119,10 @@ sufficient evidence of compatibility.
 ### 8. JPEG 2000 Lossy (`1.2.840.10008.1.2.4.91`)
 
 - [x] Capture an initial isolated benchmark fixture.
-- [ ] Profile DWT, quantization, rate allocation, Tier-1, and Tier-2 work independently.
-- [ ] Lock the measured Native/OpenJPEG pixel tolerance and rate/quality parameter mapping.
-- [ ] Optimize one measured stage without changing irreversible transform or rate semantics.
-- [ ] Verify fixture decoding, bounded error, full tests, and matched benchmarks.
+- [x] Profile DWT, quantization, rate allocation, Tier-1, and Tier-2 work independently. A bounded EventPipe trace of 40 in-process `Rate=16` codec encodes attributed 44.1% of observed codec time to Tier-1, 24.8% to Tier-2/rate allocation, and 18.4% to quantization/irreversible DWT. The largest DWT leaf was `Forward97_2D`.
+- [x] Lock the measured Native/OpenJPEG pixel tolerance and rate/quality parameter mapping. The interop worker now applies the benchmark's `Irreversible=true, Rate=16` parameters to both implementations. Measured maximum errors across five bundled fixtures were 8, 15, 34, 58, and 3 in both directions, so its bounded-error threshold is 58 rather than the stale `Rate=0` threshold of 6.
+- [x] Optimize one measured stage without changing irreversible transform or rate semantics. The irreversible 9/7 DWT now reuses one row workspace and one column workspace per transform level instead of allocating a temporary array for every row and column; the lifting arithmetic order is unchanged.
+- [x] Verify fixture decoding, bounded error, full tests, and matched benchmarks. Focused JPEG 2000 coverage passed `205/205`, the `Rate=16` Native/OpenJPEG worker passed all five fixtures in both directions, the complete unit suite passed `712/712`, and benchmark fixture verification passed `10/10`. Matched 40-operation EventPipe traces were host-variable (`7.68 s` before, `8.38 s` after), so no throughput improvement is claimed.
 
 ### 9. HTJ2K Lossless (`1.2.840.10008.1.2.4.201`)
 

@@ -130,6 +130,25 @@ public sealed class Jpeg2000StandardInternalTests
     }
 
     [Fact]
+    public void Irreversible_wavelet_workspace_path_matches_original_forward_transform()
+    {
+        var expected = new[] { 1.25f, -2.5f, 3.75f, -4.0f, 5.5f };
+        var actual = (float[])expected.Clone();
+
+        InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardIrreversibleWavelet",
+            "Forward97_1D",
+            expected);
+        InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardIrreversibleWavelet",
+            "Forward97_1DWithWorkspace",
+            actual,
+            new float[actual.Length]);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
     public void Tier1_pass_lengths_truncate_final_code_block_prefix()
     {
         var coefficients = new[]
