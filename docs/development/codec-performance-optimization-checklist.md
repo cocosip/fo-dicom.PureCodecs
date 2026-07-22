@@ -95,10 +95,10 @@ sufficient evidence of compatibility.
 ### 5. JPEG-LS Lossless (`1.2.840.10008.1.2.4.80`)
 
 - [x] Capture an initial isolated benchmark fixture.
-- [ ] Profile regular mode, run mode, Golomb coding, and frame-buffer work separately.
-- [ ] Lock exact samples, interleave behavior, EOI framing, and Native/external fixture decode before changing code.
-- [ ] Optimize one measured hotspot without changing JPEG-LS context or threshold semantics.
-- [ ] Verify exact round trips, multi-frame fixtures, full tests, and matched benchmarks.
+- [x] Profile regular mode, run mode, Golomb coding, and frame-buffer work separately. A repeated representative-fixture EventPipe CPU trace attributed 64.7% of scan-encode CPU time to sample-interleaved run mode, 34.3% to regular mode, 0.4% to visible Golomb helpers, and 0.6% to frame-buffer work.
+- [x] Lock exact samples, interleave behavior, EOI framing, and Native/external fixture decode before changing code. The `jpeg-ls-lossless` interop worker passed all five bundled fixtures in both directions before and after the change; the Pure-to-Native `sample-05` multi-frame direction remains explicitly skipped because the Native baseline corrupts it.
+- [x] Optimize one measured hotspot without changing JPEG-LS context or threshold semantics. Sample-interleaved run detection now reads only the left neighbor it consumes instead of calculating all four neighbors for every component and candidate run sample.
+- [x] Verify exact round trips, multi-frame fixtures, full tests, and matched benchmarks. Focused JPEG-LS coverage passed `47/47`, the complete unit suite passed `709/709`, and benchmark fixture verification passed `9/9`. Matched .NET 10.0.8 ShortRun codec encode fell from `16.005 ms / 15.35 MB` to `9.549 ms / 15.35 MB`; decode and allocation behavior were not changed intentionally.
 
 ### 6. JPEG-LS Near-Lossless (`1.2.840.10008.1.2.4.81`)
 

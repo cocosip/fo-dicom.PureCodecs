@@ -260,13 +260,18 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
         {
             var scanner = states[0].Scanner;
             var runLength = 0;
+            var rowOffset = (y * _width + x) * _componentCount;
             while (x + runLength < _width)
             {
                 var isRunPixel = true;
-                foreach (var state in states)
+                var sampleOffset = rowOffset + runLength * _componentCount;
+                for (var stateIndex = 0; stateIndex < states.Length; stateIndex++)
                 {
-                    GetNeighbors(reconstructed, state, x + runLength, y, out var left, out _, out _, out _);
-                    var index = GetSampleIndex(x + runLength, y, state.Component);
+                    var state = states[stateIndex];
+                    var index = sampleOffset + state.Component;
+                    var left = x + runLength == 0
+                        ? state.PreviousLineFirstSample
+                        : reconstructed[index - _componentCount];
                     if (Math.Abs(original[index] - left) > _nearLossless)
                     {
                         isRunPixel = false;
