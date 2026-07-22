@@ -114,6 +114,39 @@ public sealed class Jpeg2000StandardInternalTests
     }
 
     [Fact]
+    public void Tier1_input_shift_matches_pre_scaled_coefficients()
+    {
+        var coefficients = new[]
+        {
+            24, -12, 0, 5,
+            -7, 31, 2, 0,
+            0, -3, 18, -22,
+            9, 0, -1, 14
+        };
+        var scaled = coefficients.Select(value => value << Tier1FractionalBits).ToArray();
+        var bitCount = CalculateBitCount(scaled) - Tier1FractionalBits;
+        var passCount = (bitCount * 3) - 2;
+
+        var preScaledEncoder = Create("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardTier1Encoder", 4, 4, 0, (byte)0);
+        var expected = (byte[])Invoke(preScaledEncoder, "Encode", scaled, passCount);
+        var inputShiftEncoder = Create(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardTier1Encoder",
+            4,
+            4,
+            0,
+            (byte)0,
+            0,
+            1,
+            1.0,
+            1.0,
+            Tier1FractionalBits);
+
+        var actual = (byte[])Invoke(inputShiftEncoder, "Encode", coefficients, passCount);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
     public void Tier1_encoders_share_immutable_context_lookup_tables()
     {
         var first = Create("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardTier1Encoder", 4, 4, 0, (byte)0);
@@ -330,6 +363,37 @@ public sealed class Jpeg2000StandardInternalTests
         Assert.Equal(2, Property<int>(block, "ZeroBitPlanes"));
         Assert.Equal(4, Property<int>(block, "TotalPasses"));
         Assert.Equal(data, Property<byte[]>(block, "Data"));
+    }
+
+    [Fact]
+    public void Packet_encoder_uses_truncated_block_data_prefix_without_copying()
+    {
+        var data = new byte[] { 0x12, 0x34, 0x56, 0x78 };
+        var blockType = Jpeg2000Assembly.GetType("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000EncodedBlock", throwOnError: true)!;
+        var fullBlock = Create(
+            blockType,
+            0,
+            0,
+            1,
+            1,
+            2,
+            4,
+            data,
+            new[] { 1, 2, 3, 4 },
+            Array.Empty<byte[]>(),
+            Array.Empty<double>(),
+            0,
+            0,
+            0);
+        var truncated = Invoke(fullBlock, "TruncateToPasses", 2);
+        var copiedPrefix = Create(blockType, 0, 0, 1, 1, 2, 2, new byte[] { 0x12, 0x34 });
+        var packetEncoder = Jpeg2000Assembly.GetType("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardPacketEncoder", throwOnError: true)!;
+
+        var truncatedPacket = (byte[])packetEncoder.GetMethod("EncodeSingleLayerPacket")!.Invoke(null, new object[] { ToArray(blockType, truncated) })!;
+        var copiedPrefixPacket = (byte[])packetEncoder.GetMethod("EncodeSingleLayerPacket")!.Invoke(null, new object[] { ToArray(blockType, copiedPrefix) })!;
+
+        Assert.Same(data, Property<byte[]>(truncated, "Data"));
+        Assert.Equal(copiedPrefixPacket, truncatedPacket);
     }
 
     [Fact]
@@ -1456,6 +1520,11 @@ public sealed class Jpeg2000StandardInternalTests
     private static Array ToArray(string elementTypeName, object value)
     {
         var elementType = Jpeg2000Assembly.GetType(elementTypeName, throwOnError: true)!;
+        return ToArray(elementType, value);
+    }
+
+    private static Array ToArray(Type elementType, object value)
+    {
         var array = Array.CreateInstance(elementType, 1);
         array.SetValue(value, 0);
         return array;

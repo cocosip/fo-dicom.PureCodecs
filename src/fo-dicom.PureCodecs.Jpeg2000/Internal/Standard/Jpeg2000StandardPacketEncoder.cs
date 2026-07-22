@@ -84,6 +84,25 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             int resolution,
             int orientation,
             int precinct)
+            : this(x, y, gridWidth, gridHeight, zeroBitPlanes, passCount, data, passLengths, passSnapshots, passDistortions, resolution, orientation, precinct, data?.Length ?? 0)
+        {
+        }
+
+        private Jpeg2000EncodedBlock(
+            int x,
+            int y,
+            int gridWidth,
+            int gridHeight,
+            int zeroBitPlanes,
+            int passCount,
+            byte[] data,
+            int[]? passLengths,
+            byte[][]? passSnapshots,
+            double[]? passDistortions,
+            int resolution,
+            int orientation,
+            int precinct,
+            int dataLength)
         {
             X = x;
             Y = y;
@@ -92,6 +111,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             ZeroBitPlanes = zeroBitPlanes;
             PassCount = passCount;
             Data = data ?? new byte[0];
+            DataLength = Math.Min(Math.Max(0, dataLength), Data.Length);
             PassLengths = passLengths ?? new int[0];
             PassSnapshots = passSnapshots ?? new byte[0][];
             PassDistortions = passDistortions ?? new double[0];
@@ -113,6 +133,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         public int PassCount { get; }
 
         public byte[] Data { get; }
+
+        public int DataLength { get; }
 
         public int[] PassLengths { get; }
 
@@ -155,9 +177,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 length = Data.Length;
             }
 
-            var data = new byte[length];
-            Buffer.BlockCopy(Data, 0, data, 0, data.Length);
-            return new Jpeg2000EncodedBlock(X, Y, GridWidth, GridHeight, ZeroBitPlanes, passCount, data, PassLengths, PassSnapshots, PassDistortions, Resolution, Orientation, Precinct);
+            return new Jpeg2000EncodedBlock(X, Y, GridWidth, GridHeight, ZeroBitPlanes, passCount, Data, PassLengths, PassSnapshots, PassDistortions, Resolution, Orientation, Precinct, length);
         }
     }
 
@@ -263,7 +283,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     var block = blocks[band.Offset + i];
                     var state = band.States[i];
                     var passDelta = Math.Max(0, block.PassCount - state.PassCount);
-                    var byteDelta = Math.Max(0, block.Data.Length - state.ByteLength);
+                    var byteDelta = Math.Max(0, block.DataLength - state.ByteLength);
                     if (!state.Included && passDelta > 0)
                     {
                         band.Inclusion.SetValue(block.X, block.Y, layerIndex);
@@ -275,7 +295,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     var block = blocks[band.Offset + i];
                     var state = band.States[i];
                     var passDelta = Math.Max(0, block.PassCount - state.PassCount);
-                    var byteDelta = Math.Max(0, block.Data.Length - state.ByteLength);
+                    var byteDelta = Math.Max(0, block.DataLength - state.ByteLength);
                     var contributes = passDelta > 0;
 
                     if (!state.Included)
@@ -309,13 +329,13 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
                     header.WriteBit(0);
                     header.WriteBits(byteDelta, state.NumLenBits + FloorLog2(passDelta));
-                    for (var index = state.ByteLength; index < block.Data.Length; index++)
+                    for (var index = state.ByteLength; index < block.DataLength; index++)
                     {
                         body.Add(block.Data[index]);
                     }
 
                     state.PassCount = block.PassCount;
-                    state.ByteLength = block.Data.Length;
+                    state.ByteLength = block.DataLength;
                 }
             }
         }
@@ -401,13 +421,13 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             var zeroBitPlanes = new Jpeg2000PacketTagTree(gridWidth, gridHeight);
             foreach (var block in blocks)
             {
-                inclusion.SetValue(block.X, block.Y, block.PassCount > 0 && block.Data.Length > 0 ? 0 : 999);
+                inclusion.SetValue(block.X, block.Y, block.PassCount > 0 && block.DataLength > 0 ? 0 : 999);
                 zeroBitPlanes.SetValue(block.X, block.Y, block.ZeroBitPlanes);
             }
 
             foreach (var block in blocks)
             {
-                if (block.PassCount <= 0 || block.Data.Length == 0)
+                if (block.PassCount <= 0 || block.DataLength == 0)
                 {
                     inclusion.Encode(header, block.X, block.Y, 1);
                     continue;
@@ -417,7 +437,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 zeroBitPlanes.Encode(header, block.X, block.Y, 32);
                 EncodePassCount(header, block.PassCount);
                 var numLenBits = 3;
-                var required = RequiredLengthBits(block.Data.Length, block.PassCount);
+                var required = RequiredLengthBits(block.DataLength, block.PassCount);
                 while (numLenBits < required)
                 {
                     header.WriteBit(1);
@@ -425,8 +445,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 }
 
                 header.WriteBit(0);
-                header.WriteBits(block.Data.Length, numLenBits + FloorLog2(block.PassCount));
-                body.AddRange(block.Data);
+                header.WriteBits(block.DataLength, numLenBits + FloorLog2(block.PassCount));
+                for (var index = 0; index < block.DataLength; index++)
+                {
+                    body.Add(block.Data[index]);
+                }
             }
         }
 

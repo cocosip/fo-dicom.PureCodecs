@@ -40,21 +40,22 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         private readonly int _qmfbid;
         private readonly double _stepSize;
         private readonly double _mctNorm;
+        private readonly int _inputShift;
         private Jpeg2000StandardMqEncoder? _mq;
         private int _bitPlane;
         private int _normalizedMseDecrease;
 
         public Jpeg2000StandardTier1Encoder(int width, int height, int orientation, byte codeBlockStyle)
-            : this(width, height, orientation, codeBlockStyle, level: 0, qmfbid: 1, stepSize: 1.0, mctNorm: 1.0)
+            : this(width, height, orientation, codeBlockStyle, level: 0, qmfbid: 1, stepSize: 1.0, mctNorm: 1.0, inputShift: 0)
         {
         }
 
         public Jpeg2000StandardTier1Encoder(int width, int height, int orientation, byte codeBlockStyle, int level, int qmfbid, double stepSize)
-            : this(width, height, orientation, codeBlockStyle, level, qmfbid, stepSize, mctNorm: 1.0)
+            : this(width, height, orientation, codeBlockStyle, level, qmfbid, stepSize, mctNorm: 1.0, inputShift: 0)
         {
         }
 
-        public Jpeg2000StandardTier1Encoder(int width, int height, int orientation, byte codeBlockStyle, int level, int qmfbid, double stepSize, double mctNorm)
+        public Jpeg2000StandardTier1Encoder(int width, int height, int orientation, byte codeBlockStyle, int level, int qmfbid, double stepSize, double mctNorm, int inputShift = 0)
         {
             _width = width;
             _height = height;
@@ -65,6 +66,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             _qmfbid = qmfbid;
             _stepSize = stepSize <= 0 ? 1.0 : stepSize;
             _mctNorm = mctNorm <= 0 ? 1.0 : mctNorm;
+            _inputShift = inputShift;
             _data = new int[(width + 2) * (height + 2)];
             _flags = new uint[(width + 2) * (height + 2)];
         }
@@ -93,7 +95,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             {
                 for (var x = 0; x < _width; x++)
                 {
-                    _data[ToIndex(x, y)] = data[(y * _width) + x];
+                    var value = data[(y * _width) + x];
+                    _data[ToIndex(x, y)] = _inputShift == 0 ? value : value << _inputShift;
                 }
             }
 

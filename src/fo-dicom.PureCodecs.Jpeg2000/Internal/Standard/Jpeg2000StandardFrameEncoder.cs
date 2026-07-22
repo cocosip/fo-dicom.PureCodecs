@@ -444,9 +444,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                         }
 
                         var subbandBits = BandBitPlaneDepth(precision, resolution, block.Orientation, encodedSteps);
-                        var scaled = reversible ? ScaleForTier1(blockCoefficients) : blockCoefficients;
-
-                        var bitCount = Math.Max(0, CalculateBitCount(scaled) - Tier1FractionalBits);
+                        var bitCount = Math.Max(0, CalculateBitCountAfterShift(blockCoefficients, reversible ? Tier1FractionalBits : 0) - Tier1FractionalBits);
                         var zeroBitPlanes = Math.Max(0, subbandBits - bitCount);
                         var passCount = bitCount <= 0 ? 0 : (bitCount * 3) - 2;
                         var passLengths = Array.Empty<int>();
@@ -466,8 +464,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                                 subbandLevel,
                                 reversible ? 1 : 0,
                                 stepSize,
-                                ResolveMctNorm(componentIndex, mctNorms))
-                                .Encode(scaled, passCount, out passLengths, out passSnapshots, out passDistortions);
+                                ResolveMctNorm(componentIndex, mctNorms),
+                                reversible ? Tier1FractionalBits : 0)
+                                .Encode(blockCoefficients, passCount, out passLengths, out passSnapshots, out passDistortions);
                         blocks.Add(new Jpeg2000EncodedBlock(
                             block.LocalX,
                             block.LocalY,
@@ -520,15 +519,27 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             return bitPlane;
         }
 
-        private static int[] ScaleForTier1(int[] coefficients)
+        private static int CalculateBitCountAfterShift(int[] data, int shift)
         {
-            var scaled = new int[coefficients.Length];
-            for (var i = 0; i < coefficients.Length; i++)
+            var max = 0;
+            foreach (var value in data)
             {
-                scaled[i] = coefficients[i] << Tier1FractionalBits;
+                var shifted = value << shift;
+                var abs = shifted < 0 ? -shifted : shifted;
+                if (abs > max)
+                {
+                    max = abs;
+                }
             }
 
-            return scaled;
+            var bitPlane = 0;
+            while (max > 0)
+            {
+                max >>= 1;
+                bitPlane++;
+            }
+
+            return bitPlane;
         }
 
         private static double ResolveEncodedStepSize(ushort[] encodedSteps, int precision, int resolution, int orientation)
