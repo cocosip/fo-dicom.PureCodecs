@@ -30,6 +30,7 @@ public static class BenchmarkFixtureCatalog
             CreateFixture("JPEG baseline", "PM5644-960x540_JPEG-Baseline_YBR422.dcm", DicomTransferSyntax.JPEGProcess1),
             CreateFixture("JPEG Extended 8-bit", "JPEG-Extended-8bit.dcm", DicomTransferSyntax.JPEGProcess2_4),
             CreateFixture("JPEG Extended 12-bit", "JPEG-Extended-12bit.dcm", DicomTransferSyntax.JPEGProcess2_4),
+            CreateFixture("JPEG lossless Process 14", "JPEG-Lossless-Process14_RGB.dcm", DicomTransferSyntax.JPEGProcess14),
             CreateFixture("JPEG lossless SV1", "PM5644-960x540_JPEG-Lossless_RGB.dcm", DicomTransferSyntax.JPEGProcess14SV1),
             CreateFixture("JPEG-LS lossless", "PM5644-960x540_JPEG-LS_Lossless.dcm", DicomTransferSyntax.JPEGLSLossless),
             CreateFixture("JPEG 2000 lossless", "PM5644-960x540_JPEG2000-Lossless.dcm", DicomTransferSyntax.JPEG2000Lossless),
@@ -48,12 +49,15 @@ internal static class GeneratedBenchmarkFixtures
     private const string BaselineFixtureFileName = "PM5644-960x540_JPEG-Baseline_YBR422.dcm";
     private const string Extended8BitFixtureFileName = "JPEG-Extended-8bit.dcm";
     private const string Extended12BitFixtureFileName = "JPEG-Extended-12bit.dcm";
+    private const string JpegLosslessSv1FixtureFileName = "PM5644-960x540_JPEG-Lossless_RGB.dcm";
+    private const string JpegLosslessProcess14FixtureFileName = "JPEG-Lossless-Process14_RGB.dcm";
 
     public static void Ensure(string fixtureRoot)
     {
         Directory.CreateDirectory(fixtureRoot);
         EnsureExtended8BitFixture(fixtureRoot);
         EnsureExtended12BitFixture(fixtureRoot);
+        EnsureJpegLosslessProcess14Fixture(fixtureRoot);
     }
 
     private static void EnsureExtended8BitFixture(string fixtureRoot)
@@ -110,6 +114,29 @@ internal static class GeneratedBenchmarkFixtures
 
         raw.AddFrame(new MemoryByteBuffer(frame));
         SaveExtendedFixture(raw, targetPath);
+    }
+
+    private static void EnsureJpegLosslessProcess14Fixture(string fixtureRoot)
+    {
+        var targetPath = Path.Combine(fixtureRoot, JpegLosslessProcess14FixtureFileName);
+        if (File.Exists(targetPath))
+        {
+            return;
+        }
+
+        var sourcePath = Path.Combine(fixtureRoot, JpegLosslessSv1FixtureFileName);
+        var source = DicomPixelData.Create(DicomFile.Open(sourcePath, FileReadOption.ReadAll).Dataset);
+        var rawDataset = CreateRawDataset(source);
+        var raw = DicomPixelData.Create(rawDataset, true);
+        var sv1Codec = new DicomJpegLossless14SV1Codec();
+        sv1Codec.Decode(source, raw, sv1Codec.GetDefaultParameters());
+
+        var dataset = CloneWithoutPixelData(raw.Dataset, DicomTransferSyntax.JPEGProcess14);
+        EnsureFileMetaIdentifiers(dataset);
+        var target = DicomPixelData.Create(dataset, true);
+        var process14Codec = new DicomJpegLossless14Codec();
+        process14Codec.Encode(raw, target, process14Codec.GetDefaultParameters());
+        new DicomFile(dataset).Save(targetPath);
     }
 
     private static void SaveExtendedFixture(DicomPixelData raw, string targetPath)

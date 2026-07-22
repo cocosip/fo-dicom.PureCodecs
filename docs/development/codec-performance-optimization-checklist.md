@@ -38,7 +38,7 @@ sufficient evidence of compatibility.
 - [x] Isolated encode/decode benchmarks exist for RLE Lossless, JPEG Baseline,
   JPEG Lossless SV1, JPEG-LS Lossless, JPEG 2000 Lossless, and JPEG 2000 Lossy.
 - [x] Add representative benchmarks for JPEG Extended Process 2/4.
-- [ ] Add representative benchmarks for JPEG Lossless Process 14.
+- [x] Add a representative JPEG Lossless Process 14 benchmark fixture, generated separately from the SV1 acceptance fixture and verified against Native on five bundled real DICOM fixtures.
 - [ ] Add representative benchmarks for JPEG-LS Near-Lossless.
 - [ ] Add representative benchmarks for HTJ2K Lossless, Lossless RPCL, and Lossy.
 - [ ] Run a longer benchmark job for completed candidates before assigning a durable performance threshold.
@@ -76,11 +76,12 @@ sufficient evidence of compatibility.
 
 ### 3. JPEG Lossless Process 14 (`1.2.840.10008.1.2.4.57`)
 
-- [ ] Add a Process 14 benchmark fixture distinct from SV1.
-- [ ] Measure predictor, entropy, and DICOM-frame work for encode and decode.
-- [ ] Lock exact decoded sample bytes and Native/external codestream behavior before changing the path.
-- [ ] Optimize one measured hotspot without changing predictor selection or point-transform semantics.
-- [ ] Verify exact round trips, invalid-stream behavior, full tests, and matched benchmarks.
+- [x] Add a Process 14 benchmark fixture distinct from SV1.
+- [x] Measure predictor, entropy, and DICOM-frame work for encode and decode. The matched in-process ShortRun isolated decode allocation to the scan result and its validation workspace; predictor selection and entropy arithmetic were not changed.
+- [x] Lock exact decoded sample bytes and Native/external codestream behavior before changing the path. The baseline and post-change `jpeg-lossless-14` interop worker passed all five bundled real DICOM fixtures in both directions.
+- [x] Optimize one measured hotspot without changing predictor selection or point-transform semantics. Decode now rents its scan-sample workspace and no longer allocates a validation-only sample array.
+- [x] Verify exact round trips, invalid-stream behavior, full tests, and matched benchmarks. Focused workspace coverage passed `5/5`, benchmark fixture verification passed `9/9`, and the complete unit suite passed `707/707`.
+- [x] Matched in-process ShortRun on .NET 10.0.8: codec decode allocation fell from `10.01 MB/op` to `2.10 MB/op`; decode mean changed from `21.900 ms` to `20.710 ms`. Transcoder decode allocation also fell from `10.01 MB/op` to `2.10 MB/op`, with the ShortRun mean changing from `27.580 ms` to `17.233 ms`. Encode allocation remained about `12.34 MB/op`; its short-run time variation is not claimed as an encode improvement.
 
 ### 4. JPEG Lossless Process 14 SV1 (`1.2.840.10008.1.2.4.70`)
 

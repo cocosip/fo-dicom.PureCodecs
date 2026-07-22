@@ -118,15 +118,45 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             int samplePrecision,
             int selectionValue)
         {
+            ValidateDimensions(width, height, samplePrecision);
+            ValidateComponentCount(componentCount);
+            return DecodeInterleaved(
+                encoded,
+                width,
+                height,
+                componentCount,
+                samplePrecision,
+                selectionValue,
+                new int[width * height * componentCount]);
+        }
+
+        public int[] DecodeInterleaved(
+            byte[] encoded,
+            int width,
+            int height,
+            int componentCount,
+            int samplePrecision,
+            int selectionValue,
+            int[] samples)
+        {
             if (encoded == null)
             {
                 throw new ArgumentNullException(nameof(encoded));
             }
 
-            ValidateShape(new int[width * height], width, height, samplePrecision, width * height);
-            ValidateComponentCount(componentCount);
+            if (samples == null)
+            {
+                throw new ArgumentNullException(nameof(samples));
+            }
 
-            var samples = new int[width * height * componentCount];
+            ValidateDimensions(width, height, samplePrecision);
+            ValidateComponentCount(componentCount);
+            var sampleCount = width * height * componentCount;
+            if (samples.Length < sampleCount)
+            {
+                throw CreateException($"JPEG lossless scan sample workspace {samples.Length} is smaller than expected length {sampleCount}.");
+            }
+
             var reader = new JpegEntropyBitReader(encoded);
             for (var y = 0; y < height; y++)
             {
@@ -269,6 +299,15 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 throw new ArgumentNullException(nameof(samples));
             }
 
+            ValidateDimensions(width, height, samplePrecision);
+            if (samples.Length != expectedLength)
+            {
+                throw CreateException($"JPEG lossless scan sample count {samples.Length} does not match expected length {expectedLength}.");
+            }
+        }
+
+        private static void ValidateDimensions(int width, int height, int samplePrecision)
+        {
             if (width <= 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(width));
@@ -282,11 +321,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             if (samplePrecision < 2 || samplePrecision > 16)
             {
                 throw CreateException($"JPEG lossless scan sample precision {samplePrecision} is not supported.");
-            }
-
-            if (samples.Length != expectedLength)
-            {
-                throw CreateException($"JPEG lossless scan sample count {samples.Length} does not match expected length {expectedLength}.");
             }
         }
 

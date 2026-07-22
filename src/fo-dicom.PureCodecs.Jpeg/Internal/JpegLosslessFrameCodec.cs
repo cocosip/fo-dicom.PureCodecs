@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 
@@ -94,19 +95,30 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             var scanCodec = JpegLosslessScanCodec.Create(parsed.HuffmanTable);
-            var samples = scanCodec.DecodeInterleaved(
-                parsed.ScanData,
-                parsed.Width,
-                parsed.Height,
-                parsed.Components,
-                parsed.SamplePrecision,
-                parsed.SelectionValue);
-            samples = FromInterleavedComponentSamples(
-                samples,
-                parsed.Width * parsed.Height,
-                parsed.Components,
-                targetPixelData.PlanarConfiguration);
-            return SamplesToBytes(samples, targetPixelData.BitsAllocated);
+            var pixelCount = parsed.Width * parsed.Height;
+            var sampleCount = pixelCount * parsed.Components;
+            var samples = ArrayPool<int>.Shared.Rent(sampleCount);
+            try
+            {
+                scanCodec.DecodeInterleaved(
+                    parsed.ScanData,
+                    parsed.Width,
+                    parsed.Height,
+                    parsed.Components,
+                    parsed.SamplePrecision,
+                    parsed.SelectionValue,
+                    samples);
+                var orderedSamples = FromInterleavedComponentSamples(
+                    samples,
+                    pixelCount,
+                    parsed.Components,
+                    targetPixelData.PlanarConfiguration);
+                return SamplesToBytes(orderedSamples, targetPixelData.BitsAllocated, sampleCount);
+            }
+            finally
+            {
+                ArrayPool<int>.Shared.Return(samples);
+            }
         }
 
         public static int GetDefaultSelectionValue(bool firstOrderPrediction)
@@ -427,12 +439,12 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return values;
         }
 
-        private static byte[] SamplesToBytes(int[] samples, int bitsAllocated)
+        private static byte[] SamplesToBytes(int[] samples, int bitsAllocated, int sampleCount)
         {
             if (bitsAllocated == 8)
             {
-                var bytes = new byte[samples.Length];
-                for (var index = 0; index < samples.Length; index++)
+                var bytes = new byte[sampleCount];
+                for (var index = 0; index < sampleCount; index++)
                 {
                     bytes[index] = (byte)samples[index];
                 }
@@ -440,8 +452,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 return bytes;
             }
 
-            var output = new byte[samples.Length * 2];
-            for (var index = 0; index < samples.Length; index++)
+            var output = new byte[sampleCount * 2];
+            for (var index = 0; index < sampleCount; index++)
             {
                 output[index * 2] = (byte)samples[index];
                 output[index * 2 + 1] = (byte)(samples[index] >> 8);
