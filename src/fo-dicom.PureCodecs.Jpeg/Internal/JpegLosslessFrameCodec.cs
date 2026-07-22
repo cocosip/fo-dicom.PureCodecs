@@ -22,51 +22,60 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             ValidateSupportedPixelData(pixelData);
-            var samples = BytesToSamples(rawFrame, pixelData.BitsAllocated);
             var pixelCount = pixelData.Width * pixelData.Height;
-            if (samples.Length != pixelCount * pixelData.SamplesPerPixel)
+            var sampleCount = GetSampleCount(rawFrame, pixelData.BitsAllocated);
+            if (sampleCount != pixelCount * pixelData.SamplesPerPixel)
             {
-                throw CreateException($"JPEG Lossless raw frame sample count {samples.Length} does not match dimensions {pixelData.Width}x{pixelData.Height}.");
+                throw CreateException($"JPEG Lossless raw frame sample count {sampleCount} does not match dimensions {pixelData.Width}x{pixelData.Height}.");
             }
 
-            var interleavedSamples = ToInterleavedComponentSamples(
-                samples,
-                pixelCount,
-                pixelData.SamplesPerPixel,
-                pixelData.PlanarConfiguration);
-            var huffmanTable = JpegLosslessScanCodec.CreateOptimalHuffmanTableForFrame(
-                interleavedSamples,
-                pixelData.Width,
-                pixelData.Height,
-                pixelData.SamplesPerPixel,
-                pixelData.BitsStored,
-                selectionValue);
-            var scanCodec = JpegLosslessScanCodec.Create(huffmanTable);
-            var scan = scanCodec.EncodeInterleaved(
-                interleavedSamples,
-                pixelData.Width,
-                pixelData.Height,
-                pixelData.SamplesPerPixel,
-                pixelData.BitsStored,
-                selectionValue);
-
-            var writer = new JpegMarkerWriter();
-            writer.WriteStandalone(JpegMarker.SOI);
-            WriteColorSpaceMarker(writer, pixelData);
-            writer.WriteSegment(JpegMarker.SOF3, CreateStartOfFramePayload(pixelData));
-            writer.WriteSegment(JpegMarker.DHT, huffmanTable.CreateDhtPayload(tableClass: 0, tableId: 0));
-            writer.WriteSegment(JpegMarker.SOS, CreateStartOfScanPayload(pixelData, selectionValue));
-            writer.WriteRaw(scan);
-            writer.WriteStandalone(JpegMarker.EOI);
-            var frame = writer.ToArray();
-            if ((frame.Length & 1) == 0)
+            var samples = ArrayPool<int>.Shared.Rent(sampleCount);
+            try
             {
-                return frame;
-            }
+                BytesToSamples(rawFrame, pixelData.BitsAllocated, samples, sampleCount);
+                var interleavedSamples = ToInterleavedComponentSamples(
+                    samples,
+                    pixelCount,
+                    pixelData.SamplesPerPixel,
+                    pixelData.PlanarConfiguration);
+                var huffmanTable = JpegLosslessScanCodec.CreateOptimalHuffmanTableForFrame(
+                    interleavedSamples,
+                    pixelData.Width,
+                    pixelData.Height,
+                    pixelData.SamplesPerPixel,
+                    pixelData.BitsStored,
+                    selectionValue);
+                var scanCodec = JpegLosslessScanCodec.Create(huffmanTable);
+                var scan = scanCodec.EncodeInterleaved(
+                    interleavedSamples,
+                    pixelData.Width,
+                    pixelData.Height,
+                    pixelData.SamplesPerPixel,
+                    pixelData.BitsStored,
+                    selectionValue);
 
-            var paddedFrame = new byte[frame.Length + 1];
-            Buffer.BlockCopy(frame, 0, paddedFrame, 0, frame.Length);
-            return paddedFrame;
+                var writer = new JpegMarkerWriter();
+                writer.WriteStandalone(JpegMarker.SOI);
+                WriteColorSpaceMarker(writer, pixelData);
+                writer.WriteSegment(JpegMarker.SOF3, CreateStartOfFramePayload(pixelData));
+                writer.WriteSegment(JpegMarker.DHT, huffmanTable.CreateDhtPayload(tableClass: 0, tableId: 0));
+                writer.WriteSegment(JpegMarker.SOS, CreateStartOfScanPayload(pixelData, selectionValue));
+                writer.WriteRaw(scan);
+                writer.WriteStandalone(JpegMarker.EOI);
+                var frame = writer.ToArray();
+                if ((frame.Length & 1) == 0)
+                {
+                    return frame;
+                }
+
+                var paddedFrame = new byte[frame.Length + 1];
+                Buffer.BlockCopy(frame, 0, paddedFrame, 0, frame.Length);
+                return paddedFrame;
+            }
+            finally
+            {
+                ArrayPool<int>.Shared.Return(samples);
+            }
         }
 
         public byte[] DecodeFrame(DicomPixelData targetPixelData, byte[] jpegFrame, int selectionValue)
@@ -377,7 +386,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 return samples;
             }
 
-            var interleaved = new int[samples.Length];
+            var interleaved = new int[pixelCount * samplesPerPixel];
             for (var pixel = 0; pixel < pixelCount; pixel++)
             {
                 for (var component = 0; component < samplesPerPixel; component++)
@@ -412,17 +421,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return planar;
         }
 
-        private static int[] BytesToSamples(byte[] frame, int bitsAllocated)
+        private static int GetSampleCount(byte[] frame, int bitsAllocated)
         {
             if (bitsAllocated == 8)
             {
-                var samples = new int[frame.Length];
-                for (var index = 0; index < samples.Length; index++)
-                {
-                    samples[index] = frame[index];
-                }
-
-                return samples;
+                return frame.Length;
             }
 
             if (frame.Length % 2 != 0)
@@ -430,13 +433,25 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 throw CreateException("JPEG Lossless 16-bit frame has odd byte length.");
             }
 
-            var values = new int[frame.Length / 2];
-            for (var index = 0; index < values.Length; index++)
+            return frame.Length / 2;
+        }
+
+        private static void BytesToSamples(byte[] frame, int bitsAllocated, int[] samples, int sampleCount)
+        {
+            if (bitsAllocated == 8)
             {
-                values[index] = frame[index * 2] | (frame[index * 2 + 1] << 8);
+                for (var index = 0; index < sampleCount; index++)
+                {
+                    samples[index] = frame[index];
+                }
+
+                return;
             }
 
-            return values;
+            for (var index = 0; index < sampleCount; index++)
+            {
+                samples[index] = frame[index * 2] | (frame[index * 2 + 1] << 8);
+            }
         }
 
         private static byte[] SamplesToBytes(int[] samples, int bitsAllocated, int sampleCount)

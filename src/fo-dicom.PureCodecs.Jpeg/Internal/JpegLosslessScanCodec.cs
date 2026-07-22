@@ -74,10 +74,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         {
             ValidateShape(samples, width, height, samplePrecision, width * height * componentCount);
             ValidateComponentCount(componentCount);
-            if (samples.Length != width * height * componentCount)
-            {
-                throw CreateException($"JPEG lossless scan sample count {samples.Length} does not match dimensions {width}x{height}x{componentCount}.");
-            }
 
             var writer = new JpegEntropyBitWriter();
             for (var y = 0; y < height; y++)
@@ -300,9 +296,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             ValidateDimensions(width, height, samplePrecision);
-            if (samples.Length != expectedLength)
+            if (samples.Length < expectedLength)
             {
-                throw CreateException($"JPEG lossless scan sample count {samples.Length} does not match expected length {expectedLength}.");
+                throw CreateException($"JPEG lossless scan sample count {samples.Length} is smaller than expected length {expectedLength}.");
             }
         }
 

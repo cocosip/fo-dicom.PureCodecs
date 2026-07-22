@@ -86,10 +86,11 @@ sufficient evidence of compatibility.
 ### 4. JPEG Lossless Process 14 SV1 (`1.2.840.10008.1.2.4.70`)
 
 - [x] Capture an initial isolated benchmark fixture.
-- [ ] Profile encode and decode independently; do not infer Process 14 results from SV1.
-- [ ] Add exact predictor-1 fixture guards and Native/external decode checks.
-- [ ] Optimize one measured scan or buffer hotspot.
-- [ ] Verify exact round trips, multi-frame behavior, full tests, and matched benchmarks.
+- [x] Profile encode and decode independently; do not infer Process 14 results from SV1. The isolated SV1 ShortRun identified encode sample conversion as the remaining allocation hotspot at `12.34 MB/op`; decode was independently measured at `2.10 MB/op` after its prior shared workspace improvement.
+- [x] Add exact predictor-1 fixture guards and Native/external decode checks. The predictor-1 RGB codestream remains byte-identical to Native, and the baseline and post-change `jpeg-lossless-14-sv1` interop worker passed all five bundled real DICOM fixtures in both directions.
+- [x] Optimize one measured scan or buffer hotspot. Encode now rents and returns the raw sample workspace while the scan processes only the frame's actual sample count.
+- [x] Verify exact round trips, multi-frame behavior, full tests, and matched benchmarks. Focused workspace coverage passed `6/6`, benchmark fixture verification passed `9/9`, and the complete unit suite passed `708/708`, including the three-frame SV1 matrix case.
+- [x] Matched in-process ShortRun on .NET 10.0.8: codec encode allocation fell from `12.34 MB/op` to `6.41 MB/op`, with the directional mean changing from `36.746 ms` to `22.837 ms`. Transcoder encode allocation also fell from `12.34 MB/op` to `6.41 MB/op`; its mean remained host-variable (`23.807 ms` to `23.862 ms`) and is not claimed as a time improvement.
 
 ### 5. JPEG-LS Lossless (`1.2.840.10008.1.2.4.80`)
 

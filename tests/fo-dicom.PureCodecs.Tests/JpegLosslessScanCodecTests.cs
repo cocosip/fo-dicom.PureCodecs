@@ -51,6 +51,24 @@ public sealed class JpegLosslessScanCodecTests
     }
 
     [Fact]
+    public void Lossless_scan_encode_uses_samples_before_workspace_capacity()
+    {
+        var samples = new[] { 10, 12, 18, 21, 30, 31, 32, 40, 41, 55, 60, 63, 0, 0, 0, 0 };
+        var codec = JpegLosslessScanCodec.CreateDefault();
+
+        var encoded = codec.EncodeInterleaved(
+            samples,
+            width: 4,
+            height: 3,
+            componentCount: 1,
+            samplePrecision: 8,
+            selectionValue: 1);
+        var decoded = codec.Decode(encoded, width: 4, height: 3, samplePrecision: 8, selectionValue: 1);
+
+        Assert.Equal(samples.Take(12), decoded);
+    }
+
+    [Fact]
     public void Lossless_scan_rejects_sample_outside_precision_range()
     {
         var codec = JpegLosslessScanCodec.CreateDefault();
