@@ -73,4 +73,39 @@ public sealed class RleSegmentCodecTests
 
         Assert.Equal(new byte[] { 1, 1, 2, 253, 9, 0, 3 }, encoded);
     }
+
+    [Fact]
+    public void Encode_writes_exact_packetization_into_preallocated_buffer()
+    {
+        var source = new byte[133];
+        for (var index = 0; index < 128; index++)
+        {
+            source[index] = (byte)index;
+        }
+
+        source[128] = 200;
+        source[129] = 200;
+        source[130] = 200;
+        source[131] = 5;
+        source[132] = 6;
+
+        var expected = new byte[134];
+        expected[0] = 127;
+        for (var index = 0; index < 128; index++)
+        {
+            expected[index + 1] = (byte)index;
+        }
+
+        expected[129] = 254;
+        expected[130] = 200;
+        expected[131] = 1;
+        expected[132] = 5;
+        expected[133] = 6;
+        var destination = new byte[source.Length + ((source.Length + 127) / 128)];
+
+        var written = RleSegmentCodec.Encode(source, destination);
+
+        Assert.Equal(expected.Length, written);
+        Assert.Equal(expected, destination.Take(written));
+    }
 }

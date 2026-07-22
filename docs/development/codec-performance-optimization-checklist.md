@@ -151,14 +151,15 @@ sufficient evidence of compatibility.
 ### 12. RLE Lossless (`1.2.840.10008.1.2.5`)
 
 - [x] Capture an initial isolated benchmark fixture.
-- [ ] Profile PackBits scan, segment assembly, and DICOM frame-buffer copies.
-- [ ] Lock exact samples, segment offsets, multi-frame behavior, and Native fixture decode.
-- [ ] Optimize one measured path only if it remains material after higher-cost codecs are addressed.
-- [ ] Verify exact round trips, malformed-input exceptions, full tests, and matched benchmarks.
+- [x] Profile PackBits scan, segment assembly, and DICOM frame-buffer copies. A bounded EventPipe sampled-thread-time trace attributed 56.0% of active `CodecEncode` samples to `RleSegmentCodec.Encode`, 30.1% to segment extraction, and 7.7% to `Buffer.BlockCopy`; PackBits output construction was the selected hotspot.
+- [x] Lock exact samples, segment offsets, multi-frame behavior, and Native fixture decode. The pre-change and post-change `rle` Native interop worker passed all five bundled real DICOM fixtures in both directions; focused coverage constrains exact frames, packetization, offsets, malformed input, and multi-frame behavior.
+- [x] Optimize one measured path only if it remains material after higher-cost codecs are addressed. PackBits encoding now writes directly to a pooled maximum-size buffer and returns only the exact encoded segment array, preserving its existing run decisions and byte packetization.
+- [x] Verify exact round trips, malformed-input exceptions, full tests, and matched benchmarks. Focused RLE coverage passed `35/35`, the complete unit suite passed `713/713`, and benchmark fixture verification passed `10/10`. Matched .NET 10.0.8 ShortRun codec encode changed from `7.298 ms / 6.30 MB` to `4.520 ms / 4.82 MB` per operation; the three-iteration timing remains host-variable, while allocation fell by `1.48 MB/op`.
 
 ## Completed Optimization Summary
 
 - [x] JPEG Baseline decode: inverse-DCT cosine cache, committed as `136a718`.
 - [x] JPEG Baseline decode: Native 4:2:2 fancy upsampling and allocation-only block pipeline.
 - [x] JPEG Baseline encode: integer-DCT and block-workspace allocation removal.
+- [x] RLE Lossless encode: direct PackBits writer with a pooled maximum-size workspace.
 - [ ] All remaining Phase 1 syntax-specific optimization passes.
