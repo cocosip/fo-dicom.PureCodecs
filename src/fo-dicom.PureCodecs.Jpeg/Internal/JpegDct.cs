@@ -5,6 +5,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
     public static class JpegDct
     {
         private static readonly double[] Cosines = CreateCosines();
+        private static readonly double[] InverseScales = CreateInverseScales();
 
         public static JpegBlock8x8 Forward(JpegBlock8x8 samples)
         {
@@ -53,8 +54,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                     {
                         for (var u = 0; u < JpegBlock8x8.Size; u++)
                         {
-                            sum += Scale(u)
-                                * Scale(v)
+                            sum += InverseScales[u]
+                                * InverseScales[v]
                                 * coefficients[v, u]
                                 * Cosines[x * JpegBlock8x8.Size + u]
                                 * Cosines[y * JpegBlock8x8.Size + v];
@@ -71,6 +72,17 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         private static double Scale(int index)
         {
             return index == 0 ? 1.0 / Math.Sqrt(2.0) : 1.0;
+        }
+
+        private static double[] CreateInverseScales()
+        {
+            var scales = new double[JpegBlock8x8.Size];
+            for (var index = 0; index < scales.Length; index++)
+            {
+                scales[index] = Scale(index);
+            }
+
+            return scales;
         }
 
         private static double[] CreateCosines()

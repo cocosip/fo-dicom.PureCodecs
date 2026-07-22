@@ -24,20 +24,20 @@ sufficient evidence of compatibility.
 - [x] Keep the benchmark project outside the xUnit project-reference graph.
 - [x] Use only pure C# codec execution and keep production targets on `netstandard2.0`.
 - [x] Treat `fo-dicom.Native`/`fo-dicom.Codecs` fixture behavior as the compatibility baseline when available.
-- [ ] Compare the affected encode and decode direction with `fo-dicom.Native` before implementation.
-- [ ] Repeat the same Native comparison after implementation and reject the change on any unexplained difference.
-- [ ] Capture the relevant encode and decode baseline before selecting a hotspot.
-- [ ] Identify one measured hotspot; do not optimize from inspection alone.
-- [ ] Add a focused regression that constrains pixels, tags, frame count, and managed failures affected by the change.
-- [ ] Make one isolated implementation change.
-- [ ] Run the focused regression, Native/external fixture checks, the full unit suite, `--verify`, and the same benchmark.
-- [ ] Record before/after time and allocations before marking a step complete.
+- [x] Compare the affected encode and decode direction with `fo-dicom.Native` before implementation.
+- [x] Repeat the same Native comparison after implementation and reject the change on any unexplained difference.
+- [x] Capture the relevant encode and decode baseline before selecting a hotspot.
+- [x] Identify one measured hotspot; do not optimize from inspection alone.
+- [x] Add a focused regression that constrains pixels, tags, frame count, and managed failures affected by the change.
+- [x] Make one isolated implementation change.
+- [x] Run the focused regression, Native/external fixture checks, the full unit suite, `--verify`, and the same benchmark.
+- [x] Record before/after time and allocations before marking a step complete.
 
 ## Benchmark Coverage
 
 - [x] Isolated encode/decode benchmarks exist for RLE Lossless, JPEG Baseline,
   JPEG Lossless SV1, JPEG-LS Lossless, JPEG 2000 Lossless, and JPEG 2000 Lossy.
-- [ ] Add representative benchmarks for JPEG Extended Process 2/4.
+- [x] Add representative benchmarks for JPEG Extended Process 2/4.
 - [ ] Add representative benchmarks for JPEG Lossless Process 14.
 - [ ] Add representative benchmarks for JPEG-LS Near-Lossless.
 - [ ] Add representative benchmarks for HTJ2K Lossless, Lossless RPCL, and Lossy.
@@ -63,12 +63,16 @@ sufficient evidence of compatibility.
 
 ### 2. JPEG Extended Process 2/4 (`1.2.840.10008.1.2.4.51`)
 
-- [ ] Add an 8-bit and a 12-bit representative benchmark fixture.
-- [ ] Measure encode and decode separately, including the 12-bit-in-16-bit DICOM container conversion.
-- [ ] Profile the selected path without sharing an unverified Baseline optimization.
-- [ ] Add Native fixture and 12-bit sample-preservation regressions before implementation.
-- [ ] Optimize one measured path and rerun exact 12-bit/container/tag checks.
-- [ ] Record verified time and allocation deltas.
+- [x] Add an 8-bit and a 12-bit representative benchmark fixture.
+- [x] Measure encode and decode separately, including the 12-bit-in-16-bit DICOM container conversion.
+- [x] Profile the selected path without sharing an unverified Baseline optimization.
+- [x] Add Native fixture and 12-bit sample-preservation regressions before implementation.
+- [x] Optimize one measured path and rerun exact 12-bit/container/tag checks.
+- [x] Record verified time and allocation deltas.
+- [x] Native `.51` frame-alignment and DCT round-trip checks passed `19/19` before and after the change. The 12-bit regression constrains Native decoding, SOF1 precision, frame count, `BitsAllocated=16`, `BitsStored=12`, `HighBit=11`, and required compression tags.
+- [x] EventPipe identified `JpegDct.Inverse` as the 8-bit decode hotspot; the isolated change caches its eight constant inverse-DCT scale values while preserving multiplication order.
+- [x] Verification completed: focused DCT codec regression `6/6`, full unit suite `706/706`, and benchmark fixture verification `8/8`.
+- [x] Matched ShortRun direct codec measurements: 8-bit encode `37.382 ms / 11.33 MB` to `39.110 ms / 11.33 MB`; decode `176.564 ms / 41.19 MB` to `169.171 ms / 41.19 MB`. 12-bit encode `6.042 ms / 1.41 MB` to `6.829 ms / 1.41 MB`; decode `11.386 ms / 2.47 MB` to `10.030 ms / 2.47 MB`. This is a decode-only optimization; the short-run encode variation is recorded without claiming an encode improvement.
 
 ### 3. JPEG Lossless Process 14 (`1.2.840.10008.1.2.4.57`)
 

@@ -62,6 +62,11 @@ public sealed class JpegDctCodecRoundTripTests
 
         PixelDataAssertions.FramesMatchWithinTolerance(rawPixelData, decodedPixelData, tolerance: 320);
         PixelDataAssertions.FramesMatchWithinTolerance(rawPixelData, nativeDecodedPixelData, tolerance: 320);
+        PixelDataAssertions.AssertFrameCount(rawPixelData, compressedPixelData);
+        Assert.Equal((ushort)16, decodedPixelData.BitsAllocated);
+        Assert.Equal((ushort)12, decodedPixelData.BitsStored);
+        Assert.Equal((ushort)11, decodedPixelData.HighBit);
+        PixelDataAssertions.AssertRequiredCompressionTags(compressedPixelData.Dataset, DicomTransferSyntax.JPEGProcess2_4);
         Assert.Equal((byte)12, GetSof1Precision(ToArray(compressedPixelData.GetFrame(0))));
     }
 
