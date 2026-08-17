@@ -6,6 +6,7 @@ using FellowOakDicom.PureCodecs.Jpeg;
 using FellowOakDicom.PureCodecs.Jpeg.Internal;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
+using CoreJpegCodecParams = FellowOakDicom.Imaging.Codec.DicomJpegParams;
 using NativeJpegCodecParams = FellowOakDicom.Imaging.NativeCodec.DicomJpegParams;
 using NativeJpegLossless14Codec = FellowOakDicom.Imaging.NativeCodec.DicomJpegLossless14Codec;
 using NativeJpegLossless14Sv1Codec = FellowOakDicom.Imaging.NativeCodec.DicomJpegLossless14SV1Codec;
@@ -89,6 +90,48 @@ public sealed class JpegLosslessCodecRoundTripTests
         var nativeCodec = new NativeJpegLossless14Codec();
         nativeCodec.Decode(compressed, nativeDecoded, nativeCodec.GetDefaultParameters());
         PixelDataAssertions.FramesMatchExactly(source, nativeDecoded);
+    }
+
+    [Fact]
+    public void Process14_honors_fo_dicom_core_predictor_and_point_transform_parameters()
+    {
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8(
+            rows: 2,
+            columns: 4,
+            frame: new byte[] { 4, 20, 44, 80, 100, 120, 200, 240 }));
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess14);
+        var nativeDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var pureCodec = new DicomJpegLossless14Codec();
+
+        pureCodec.Encode(source, compressed, new CoreJpegCodecParams { Predictor = 4, PointTransform = 2 });
+
+        var scan = ReadStartOfScan(compressed.GetFrame(0).Data);
+        Assert.Equal(4, scan.SpectralSelectionStart);
+        Assert.Equal(2, scan.SuccessiveApproximationLow);
+        var nativeCodec = new NativeJpegLossless14Codec();
+        nativeCodec.Decode(compressed, nativeDecoded, nativeCodec.GetDefaultParameters());
+        PixelDataAssertions.FramesMatchExactly(source, nativeDecoded);
+    }
+
+    [Fact]
+    public void Process14_sv1_honors_fo_dicom_core_point_transform_and_native_truncation_semantics()
+    {
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8(
+            rows: 2,
+            columns: 4,
+            frame: new byte[] { 5, 21, 45, 81, 101, 121, 201, 241 }));
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess14SV1);
+        var nativeDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var pureCodec = new DicomJpegLossless14SV1Codec();
+
+        pureCodec.Encode(source, compressed, new CoreJpegCodecParams { Predictor = 7, PointTransform = 2 });
+
+        var scan = ReadStartOfScan(compressed.GetFrame(0).Data);
+        Assert.Equal(1, scan.SpectralSelectionStart);
+        Assert.Equal(2, scan.SuccessiveApproximationLow);
+        var nativeCodec = new NativeJpegLossless14Sv1Codec();
+        nativeCodec.Decode(compressed, nativeDecoded, nativeCodec.GetDefaultParameters());
+        Assert.Equal(new byte[] { 4, 20, 44, 80, 100, 120, 200, 240 }, nativeDecoded.GetFrame(0).Data);
     }
 
     [Fact]

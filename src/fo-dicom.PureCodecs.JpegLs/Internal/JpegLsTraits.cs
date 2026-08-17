@@ -61,6 +61,48 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                 resetThreshold = 64;
             }
 
+            ComputeThresholds(maximumSampleValue, nearLossless, out var threshold1, out var threshold2, out var threshold3);
+
+            return CreateCustom(
+                maximumSampleValue,
+                nearLossless,
+                resetThreshold,
+                threshold1,
+                threshold2,
+                threshold3);
+        }
+
+        public static JpegLsTraits CreateCustom(
+            int maximumSampleValue,
+            int nearLossless,
+            int resetThreshold,
+            int threshold1,
+            int threshold2,
+            int threshold3)
+        {
+            if (maximumSampleValue <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maximumSampleValue), "JPEG-LS maximum sample value must be positive.");
+            }
+
+            if (nearLossless < 0 || nearLossless > maximumSampleValue)
+            {
+                throw new ArgumentOutOfRangeException(nameof(nearLossless), "JPEG-LS NEAR is outside the sample range.");
+            }
+
+            if (resetThreshold <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(resetThreshold), "JPEG-LS RESET must be positive.");
+            }
+
+            if (threshold1 < nearLossless + 1
+                || threshold1 > threshold2
+                || threshold2 > threshold3
+                || threshold3 > maximumSampleValue)
+            {
+                throw new ArgumentOutOfRangeException(nameof(threshold1), "JPEG-LS preset thresholds are invalid.");
+            }
+
             var range = maximumSampleValue + 1;
             if (nearLossless > 0)
             {
@@ -70,7 +112,6 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             var quantizedBitsPerPixel = BitsLength(range);
             var bitsPerPixel = BitsLength(maximumSampleValue);
             var limit = 2 * (bitsPerPixel + Math.Max(8, bitsPerPixel));
-            ComputeThresholds(maximumSampleValue, nearLossless, out var threshold1, out var threshold2, out var threshold3);
 
             return new JpegLsTraits(
                 maximumSampleValue,

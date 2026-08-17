@@ -41,10 +41,15 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
         public void Update(int errorValue, int nearLossless)
         {
+            Update(errorValue, nearLossless, resetThreshold: 64);
+        }
+
+        public void Update(int errorValue, int nearLossless, int resetThreshold)
+        {
             A += Math.Abs(errorValue);
             B += errorValue * (2 * nearLossless + 1);
 
-            if (N == 64)
+            if (N == resetThreshold)
             {
                 A >>= 1;
                 B >>= 1;

@@ -37,25 +37,72 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         public byte[] DecodeFrame(DicomPixelData targetPixelData, byte[] codestream)
         {
-            var parsed = Jpeg2000CodestreamParser.ParseSingleTilePart(
+            var parsed = Jpeg2000CodestreamParser.ParseTiles(
                 codestream,
                 sodFamilyName: "JPEG 2000",
                 codestreamName: "JPEG 2000 classic");
             ValidateComponentSampling(parsed.Size);
 
-            if (IsManagedPayload(parsed.TileData))
+            if (parsed.Tiles.Count == 1 && IsManagedPayload(parsed.Tiles[0].TileData))
             {
-                var decoded = DecodePayload(UnescapeManagedPayload(parsed.TileData));
+                var decoded = DecodePayload(UnescapeManagedPayload(parsed.Tiles[0].TileData));
                 ValidateDecodedMetadata(targetPixelData, parsed.Size, decoded);
                 return decoded.Frame;
             }
 
-            return new Jpeg2000StandardFrameDecoder().Decode(
-                targetPixelData,
-                parsed.Size,
-                parsed.CodingStyle,
-                parsed.Quantization,
-                parsed.TileData);
+            var image = Jpeg2000ImageModel.FromSizeSegment(parsed.Size);
+            var bytesPerPixel = targetPixelData.SamplesPerPixel * targetPixelData.BytesAllocated;
+            var frame = new byte[targetPixelData.Width * targetPixelData.Height * bytesPerPixel];
+            var decoder = new Jpeg2000StandardFrameDecoder();
+            for (var tileIndex = 0; tileIndex < parsed.Tiles.Count; tileIndex++)
+            {
+                var parsedTile = parsed.Tiles[tileIndex];
+                if (IsManagedPayload(parsedTile.TileData))
+                {
+                    throw Jpeg2000Binary.CreateException("JPEG 2000 managed payloads cannot be combined as multiple tiles.");
+                }
+
+                var tile = image.Tiles[tileIndex];
+                var tileFrame = decoder.DecodeTile(
+                    targetPixelData,
+                    parsed.Size,
+                    parsedTile.CodingStyle,
+                    parsedTile.Quantization,
+                    parsedTile.TileData,
+                    tile);
+                CopyTileToFrame(frame, tileFrame, targetPixelData.Width, bytesPerPixel, parsed.Size, tile);
+            }
+
+            return frame;
+        }
+
+        private static void CopyTileToFrame(
+            byte[] frame,
+            byte[] tileFrame,
+            int frameWidth,
+            int bytesPerPixel,
+            Jpeg2000SizeSegment siz,
+            Jpeg2000TileModel tile)
+        {
+            var tileWidth = checked((int)tile.Width);
+            var tileHeight = checked((int)tile.Height);
+            var destinationX = checked((int)(tile.X0 - siz.ImageOffsetX));
+            var destinationY = checked((int)(tile.Y0 - siz.ImageOffsetY));
+            var rowBytes = checked(tileWidth * bytesPerPixel);
+            if (tileFrame.Length != checked(rowBytes * tileHeight))
+            {
+                throw Jpeg2000Binary.CreateException("JPEG 2000 decoded tile length does not match its SIZ geometry.");
+            }
+
+            for (var row = 0; row < tileHeight; row++)
+            {
+                Buffer.BlockCopy(
+                    tileFrame,
+                    row * rowBytes,
+                    frame,
+                    ((destinationY + row) * frameWidth + destinationX) * bytesPerPixel,
+                    rowBytes);
+            }
         }
 
         private static Jpeg2000DecodedFramePayload DecodePayload(byte[] payload)

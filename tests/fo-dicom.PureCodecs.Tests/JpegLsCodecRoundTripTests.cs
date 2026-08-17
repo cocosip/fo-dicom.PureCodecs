@@ -3,6 +3,7 @@ using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 using FellowOakDicom.IO.Buffer;
 using FellowOakDicom.PureCodecs.JpegLs;
+using FellowOakDicom.PureCodecs.JpegLs.Internal;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
 using NativeJpegLsLosslessCodec = FellowOakDicom.Imaging.NativeCodec.DicomJpegLsLosslessCodec;
@@ -106,6 +107,46 @@ public sealed class JpegLsCodecRoundTripTests
     }
 
     [Fact]
+    public void Lossless_planar_ybr_full_output_decodes_as_interleaved_rgb_with_fo_dicom_codecs()
+    {
+        var source = CreateYbrPixelData(
+            PhotometricInterpretation.YbrFull,
+            columns: 2,
+            new byte[] { 100, 76, 128, 84, 128, 255 },
+            PlanarConfiguration.Planar);
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGLSLossless);
+        var decoded = CreateRgbInterleavedTarget(source);
+
+        var pureCodec = new DicomJpegLsLosslessCodec();
+        pureCodec.Encode(source, compressed, pureCodec.GetDefaultParameters());
+
+        var nativeCodec = new NativeJpegLsLosslessCodec();
+        nativeCodec.Decode(compressed, decoded, nativeCodec.GetDefaultParameters());
+
+        Assert.Equal(PlanarConfiguration.Interleaved, compressed.PlanarConfiguration);
+        Assert.Equal(PhotometricInterpretation.Rgb, compressed.PhotometricInterpretation);
+        Assert.Equal(new byte[] { 100, 100, 100, 254, 0, 0 }, decoded.GetFrame(0).Data);
+    }
+
+    [Fact]
+    public void Lossless_rejects_planar_ybr_full_422()
+    {
+        var source = CreateYbrPixelData(
+            PhotometricInterpretation.YbrFull422,
+            columns: 2,
+            new byte[] { 10, 20, 128, 128 },
+            PlanarConfiguration.Planar);
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGLSLossless);
+        var codec = new DicomJpegLsLosslessCodec();
+
+        void Encode() => codec.Encode(source, compressed, codec.GetDefaultParameters());
+
+        var exception = Assert.Throws<DicomCodecException>((Action)Encode);
+
+        Assert.Contains("planar YBR_FULL_422", exception.Message);
+    }
+
+    [Fact]
     public void Lossless_ybr_full_422_output_decodes_as_rgb_with_fo_dicom_codecs()
     {
         var source = CreateYbrPixelData(
@@ -148,6 +189,36 @@ public sealed class JpegLsCodecRoundTripTests
     public void Lossless_round_trip_preserves_multi_frame_data()
     {
         AssertLosslessRoundTrip(DicomPixelDataFixtures.CreateMultiFrameMonochrome8());
+    }
+
+    [Fact]
+    public void Lossless_decodes_multi_scan_non_interleaved_color_accepted_by_fo_dicom_codecs()
+    {
+        const ushort rows = 8;
+        const ushort columns = 16;
+        var pixelCount = rows * columns;
+        var planarFrame = new byte[pixelCount * 3];
+        for (var component = 0; component < 3; component++)
+        {
+            for (var pixel = 0; pixel < pixelCount; pixel++)
+            {
+                planarFrame[component * pixelCount + pixel] = (byte)((pixel * (component * 7 + 11) + component * 53) % 251);
+            }
+        }
+        var dataset = DicomPixelDataFixtures.CreateRgbPlanar(rows, columns, planarFrame);
+        var source = DicomPixelData.Create(dataset);
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGLSLossless);
+        compressed.AddFrame(new MemoryByteBuffer(CreateNonInterleavedMultiScanFrame(rows, columns, planarFrame)));
+        var nativeDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var pureDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+
+        var nativeCodec = new NativeJpegLsLosslessCodec();
+        nativeCodec.Decode(compressed, nativeDecoded, nativeCodec.GetDefaultParameters());
+        PixelDataAssertions.FramesMatchExactly(source, nativeDecoded);
+
+        var pureCodec = new DicomJpegLsLosslessCodec();
+        pureCodec.Decode(compressed, pureDecoded, pureCodec.GetDefaultParameters());
+        PixelDataAssertions.FramesMatchExactly(source, pureDecoded);
     }
 
     [Fact]
@@ -298,7 +369,8 @@ public sealed class JpegLsCodecRoundTripTests
     private static DicomPixelData CreateYbrPixelData(
         PhotometricInterpretation photometricInterpretation,
         ushort columns,
-        byte[] frame)
+        byte[] frame,
+        PlanarConfiguration planarConfiguration = PlanarConfiguration.Interleaved)
     {
         var dataset = DicomPixelDataFixtures.CreateBaseDataset(
             rows: 1,
@@ -308,7 +380,7 @@ public sealed class JpegLsCodecRoundTripTests
             bitsAllocated: 8,
             bitsStored: 8,
             highBit: 7,
-            planarConfiguration: PlanarConfiguration.Interleaved,
+            planarConfiguration,
             numberOfFrames: 1,
             transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
             frame);
@@ -325,5 +397,79 @@ public sealed class JpegLsCodecRoundTripTests
         }
 
         return bytes;
+    }
+
+    private static byte[] CreateNonInterleavedMultiScanFrame(ushort rows, ushort columns, byte[] planarFrame)
+    {
+        var pixelCount = rows * columns;
+        var firstPresetPayload = new byte[]
+        {
+            1,
+            0, 255,
+            0, 2,
+            0, 5,
+            0, 9,
+            0, 16
+        };
+        var secondPresetPayload = new byte[]
+        {
+            1,
+            0, 255,
+            0, 4,
+            0, 8,
+            0, 22,
+            0, 32
+        };
+        var firstPreset = JpegLsPresetCodingParameters.Parse(new JpegLsMarkerSegment(JpegLsMarker.LSE, firstPresetPayload));
+        var secondPreset = JpegLsPresetCodingParameters.Parse(new JpegLsMarkerSegment(JpegLsMarker.LSE, secondPresetPayload));
+        var writer = new JpegLsMarkerWriter();
+        writer.WriteStandalone(JpegLsMarker.SOI);
+        writer.WriteSegment(JpegLsMarker.SOF55, new byte[]
+        {
+            8,
+            (byte)(rows >> 8), (byte)rows,
+            (byte)(columns >> 8), (byte)columns,
+            3,
+            1, 0x11, 0,
+            2, 0x11, 0,
+            3, 0x11, 0
+        });
+        writer.WriteSegment(JpegLsMarker.LSE, firstPresetPayload);
+
+        for (var component = 0; component < 3; component++)
+        {
+            var samples = new int[pixelCount];
+            for (var pixel = 0; pixel < pixelCount; pixel++)
+            {
+                samples[pixel] = planarFrame[component * pixelCount + pixel];
+            }
+
+            if (component == 1)
+            {
+                writer.WriteSegment(JpegLsMarker.LSE, secondPresetPayload);
+            }
+
+            writer.WriteSegment(JpegLsMarker.SOS, new byte[]
+            {
+                1,
+                (byte)(component + 1), 0,
+                0,
+                (byte)JpegLsInterleaveMode.None,
+                0
+            });
+            var preset = component == 0 ? firstPreset : secondPreset;
+            writer.WriteRaw(new JpegLsScanCodec(columns, rows, 1, 8, 0, JpegLsInterleaveMode.None, preset).Encode(samples));
+        }
+
+        writer.WriteStandalone(JpegLsMarker.EOI);
+        var frame = writer.ToArray();
+        if ((frame.Length & 1) == 0)
+        {
+            return frame;
+        }
+
+        var padded = new byte[frame.Length + 1];
+        Buffer.BlockCopy(frame, 0, padded, 0, frame.Length);
+        return padded;
     }
 }

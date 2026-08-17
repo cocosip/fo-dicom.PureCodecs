@@ -88,6 +88,11 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             IByteBuffer normalized = new MemoryByteBuffer(ToArray(frame));
             if (pixelData.PlanarConfiguration == PlanarConfiguration.Planar && pixelData.SamplesPerPixel > 1)
             {
+                if (pixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull422)
+                {
+                    throw new DicomCodecException("JPEG-LS planar YBR_FULL_422 encoding is not supported.");
+                }
+
                 if (pixelData.SamplesPerPixel != 3 || pixelData.BitsStored > 8)
                 {
                     throw new DicomCodecException("JPEG-LS planar conversion supports only three-component images with BitsStored <= 8.");
@@ -95,7 +100,8 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
                 normalized = PixelDataConverter.PlanarToInterleaved24(normalized);
             }
-            else if (pixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull)
+
+            if (pixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull)
             {
                 normalized = PixelDataConverter.YbrFullToRgb(normalized);
             }

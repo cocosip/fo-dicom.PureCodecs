@@ -8,8 +8,13 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
         private readonly JpegLsGradientQuantizer _quantizer;
 
         public JpegLsContextModel(int maximumSampleValue, int nearLossless, int resetThreshold)
+            : this(JpegLsTraits.CreateDefault(maximumSampleValue, nearLossless, resetThreshold))
         {
-            Traits = JpegLsTraits.CreateDefault(maximumSampleValue, nearLossless, resetThreshold);
+        }
+
+        public JpegLsContextModel(JpegLsTraits traits)
+        {
+            Traits = traits ?? throw new ArgumentNullException(nameof(traits));
             _quantizer = new JpegLsGradientQuantizer(Traits);
 
             var initialA = Math.Max(2, (Traits.Range + 32) / 64);

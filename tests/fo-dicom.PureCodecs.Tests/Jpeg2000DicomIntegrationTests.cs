@@ -164,6 +164,48 @@ public sealed class Jpeg2000DicomIntegrationTests
         Assert.Equal(2, ReadLayerCount(compressed.GetFrame(0).Data));
     }
 
+    [Theory]
+    [InlineData(-1d)]
+    [InlineData(double.NaN)]
+    public void Jpeg2000_rejects_invalid_nonzero_target_ratio(double targetRatio)
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 4, columns: 4);
+        var source = DicomPixelData.Create(dataset);
+        var compressed = DicomPixelData.Create(
+            CloneForTransferSyntax(dataset, DicomTransferSyntax.JPEG2000Lossy),
+            true);
+        var codec = new DicomJpeg2000LossyCodec();
+
+        var exception = Assert.Throws<DicomCodecException>(() => codec.Encode(source, compressed, new PureJpeg2000Params
+        {
+            Irreversible = true,
+            TargetRatio = targetRatio,
+            NumLayers = 1
+        }));
+
+        Assert.Contains("TargetRatio", exception.Message);
+    }
+
+    [Fact]
+    public void Jpeg2000_rejects_target_ratio_layer_count_that_exceeds_cod_limit()
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 4, columns: 4);
+        var source = DicomPixelData.Create(dataset);
+        var compressed = DicomPixelData.Create(
+            CloneForTransferSyntax(dataset, DicomTransferSyntax.JPEG2000Lossy),
+            true);
+        var codec = new DicomJpeg2000LossyCodec();
+
+        var exception = Assert.Throws<DicomCodecException>(() => codec.Encode(source, compressed, new PureJpeg2000Params
+        {
+            Irreversible = true,
+            TargetRatio = 2,
+            NumLayers = ushort.MaxValue + 1
+        }));
+
+        Assert.Contains("65535", exception.Message);
+    }
+
     [Fact]
     public void Jpeg2000_target_ratio_lossless_layers_include_final_lossless_layer()
     {
@@ -250,6 +292,30 @@ public sealed class Jpeg2000DicomIntegrationTests
         Assert.True(ReadUsesMultipleComponentTransform(compressed.GetFrame(0).Data));
         Assert.Equal(PhotometricInterpretation.YbrRct, compressed.PhotometricInterpretation);
         Assert.Equal(PlanarConfiguration.Interleaved, compressed.PlanarConfiguration);
+        Assert.Equal(expectedRgb, decoded.GetFrame(0).Data);
+    }
+
+    [Fact]
+    public void Jpeg2000_lossless_ybr_full_mct_updates_stale_photometric_even_when_disabled()
+    {
+        const ushort rows = 64;
+        const ushort columns = 64;
+        var (ybrFrame, expectedRgb) = CreateNeutralYbrFullFrame(rows, columns);
+        var source = CreateYbrPixelData(PhotometricInterpretation.YbrFull, rows, columns, ybrFrame);
+        var compressed = DicomPixelData.Create(
+            CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.JPEG2000Lossless),
+            true);
+        var decoded = CreateRgbInterleavedTarget(source);
+        var parameters = CreateSingleLayerLosslessParameters();
+        parameters.UpdatePhotometricInterpretation = false;
+        var pureCodec = new DicomJpeg2000LosslessCodec();
+
+        pureCodec.Encode(source, compressed, parameters);
+        var nativeCodec = new NativeJpeg2000LosslessCodec();
+        nativeCodec.Decode(compressed, decoded, nativeCodec.GetDefaultParameters());
+
+        Assert.True(ReadUsesMultipleComponentTransform(compressed.GetFrame(0).Data));
+        Assert.Equal(PhotometricInterpretation.YbrRct, compressed.PhotometricInterpretation);
         Assert.Equal(expectedRgb, decoded.GetFrame(0).Data);
     }
 

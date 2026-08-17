@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 
@@ -78,9 +79,12 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                 throw CreateException("JPEG-LS component count does not match DICOM SamplesPerPixel.");
             }
 
-            var scanCodec = new JpegLsScanCodec(parsed.FrameInfo.Width, parsed.FrameInfo.Height, parsed.FrameInfo.Components.Count, parsed.FrameInfo.BitsPerSample, parsed.Scan.NearLossless, parsed.Scan.InterleaveMode);
-            var samples = scanCodec.Decode(parsed.ScanData);
-            return SamplesToBytes(samples, targetPixelData.BitsAllocated);
+            var samples = DecodeScans(parsed);
+            return SamplesToBytes(
+                samples,
+                targetPixelData.BitsAllocated,
+                parsed.FrameInfo.Components.Count,
+                targetPixelData.SamplesPerPixel > 1 && targetPixelData.PlanarConfiguration == PlanarConfiguration.Planar);
         }
 
         private static ParsedJpegLsFrame ParseFrame(byte[] jpegLsFrame)
@@ -93,10 +97,11 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             }
 
             JpegLsFrameInfo? frameInfo = null;
-            JpegLsStartOfScan? scan = null;
-            byte[]? scanData = null;
+            JpegLsPresetCodingParameters? preset = null;
+            var scans = new List<ParsedJpegLsScan>();
+            var reachedEndOfImage = false;
 
-            while (!reader.EndOfData)
+            while (!reader.EndOfData && !reachedEndOfImage)
             {
                 var segment = reader.ReadNextSkippingMetadata();
                 switch (segment.Code)
@@ -105,22 +110,19 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                         frameInfo = JpegLsFrameInfo.Parse(segment);
                         break;
                     case JpegLsMarker.LSE:
-                        _ = JpegLsPresetCodingParameters.Parse(segment);
+                        preset = JpegLsPresetCodingParameters.Parse(segment);
                         break;
                     case JpegLsMarker.SOS:
-                        scan = JpegLsStartOfScan.Parse(segment);
-                        scanData = reader.ReadEntropyDataUntilMarker(JpegLsMarker.EOI);
+                        var scan = JpegLsStartOfScan.Parse(segment);
+                        scans.Add(new ParsedJpegLsScan(scan, reader.ReadEntropyDataUntilNextMarker(), preset));
                         break;
                     case JpegLsMarker.EOI:
+                        reachedEndOfImage = true;
                         break;
                     default:
                         throw CreateException($"JPEG-LS marker 0x{segment.Code:X2} is not supported.");
                 }
 
-                if (scanData != null)
-                {
-                    break;
-                }
             }
 
             if (frameInfo == null)
@@ -128,12 +130,107 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                 throw CreateException("JPEG-LS frame is missing SOF55.");
             }
 
-            if (scan == null || scanData == null)
+            if (scans.Count == 0)
             {
                 throw CreateException("JPEG-LS frame is missing SOS.");
             }
 
-            return new ParsedJpegLsFrame(frameInfo, scan, scanData);
+            if (!reachedEndOfImage)
+            {
+                throw CreateException("JPEG-LS frame is missing EOI.");
+            }
+
+            return new ParsedJpegLsFrame(frameInfo, scans);
+        }
+
+        private static int[] DecodeScans(ParsedJpegLsFrame parsed)
+        {
+            var frameInfo = parsed.FrameInfo;
+            if (parsed.Scans.Count == 1)
+            {
+                var onlyScan = parsed.Scans[0];
+                if (onlyScan.Scan.Components.Count == frameInfo.Components.Count)
+                {
+                    ValidateScanComponentOrder(frameInfo, onlyScan.Scan);
+                    var codec = new JpegLsScanCodec(
+                        frameInfo.Width,
+                        frameInfo.Height,
+                        frameInfo.Components.Count,
+                        frameInfo.BitsPerSample,
+                        onlyScan.Scan.NearLossless,
+                        onlyScan.Scan.InterleaveMode,
+                        onlyScan.Preset);
+                    return codec.Decode(onlyScan.Data);
+                }
+            }
+
+            var pixelCount = frameInfo.Width * frameInfo.Height;
+            var samples = new int[pixelCount * frameInfo.Components.Count];
+            var decodedComponents = new bool[frameInfo.Components.Count];
+            foreach (var parsedScan in parsed.Scans)
+            {
+                if (parsedScan.Scan.InterleaveMode != JpegLsInterleaveMode.None
+                    || parsedScan.Scan.Components.Count != 1)
+                {
+                    throw CreateException("JPEG-LS multi-scan decoding supports one non-interleaved component per scan.");
+                }
+
+                var componentIndex = FindComponentIndex(frameInfo, parsedScan.Scan.Components[0].Selector);
+                if (decodedComponents[componentIndex])
+                {
+                    throw CreateException("JPEG-LS multi-scan frame contains a duplicate component scan.");
+                }
+
+                var codec = new JpegLsScanCodec(
+                    frameInfo.Width,
+                    frameInfo.Height,
+                    1,
+                    frameInfo.BitsPerSample,
+                    parsedScan.Scan.NearLossless,
+                    JpegLsInterleaveMode.None,
+                    parsedScan.Preset);
+                var componentSamples = codec.Decode(parsedScan.Data);
+                for (var pixel = 0; pixel < pixelCount; pixel++)
+                {
+                    samples[pixel * frameInfo.Components.Count + componentIndex] = componentSamples[pixel];
+                }
+
+                decodedComponents[componentIndex] = true;
+            }
+
+            for (var component = 0; component < decodedComponents.Length; component++)
+            {
+                if (!decodedComponents[component])
+                {
+                    throw CreateException("JPEG-LS multi-scan frame is missing a component scan.");
+                }
+            }
+
+            return samples;
+        }
+
+        private static void ValidateScanComponentOrder(JpegLsFrameInfo frameInfo, JpegLsStartOfScan scan)
+        {
+            for (var component = 0; component < frameInfo.Components.Count; component++)
+            {
+                if (scan.Components[component].Selector != frameInfo.Components[component].Identifier)
+                {
+                    throw CreateException("JPEG-LS scan component order does not match the frame header.");
+                }
+            }
+        }
+
+        private static int FindComponentIndex(JpegLsFrameInfo frameInfo, int selector)
+        {
+            for (var component = 0; component < frameInfo.Components.Count; component++)
+            {
+                if (frameInfo.Components[component].Identifier == selector)
+                {
+                    return component;
+                }
+            }
+
+            throw CreateException("JPEG-LS scan references an unknown frame component.");
         }
 
         private static byte[] CreateStartOfFramePayload(DicomPixelData pixelData)
@@ -223,12 +320,17 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
         private static byte[] SamplesToBytes(int[] samples, int bitsAllocated)
         {
+            return SamplesToBytes(samples, bitsAllocated, componentCount: 1, planar: false);
+        }
+
+        private static byte[] SamplesToBytes(int[] samples, int bitsAllocated, int componentCount, bool planar)
+        {
             if (bitsAllocated == 8)
             {
                 var bytes = new byte[samples.Length];
                 for (var index = 0; index < samples.Length; index++)
                 {
-                    bytes[index] = (byte)samples[index];
+                    bytes[OutputSampleIndex(index, samples.Length, componentCount, planar)] = (byte)samples[index];
                 }
 
                 return bytes;
@@ -237,11 +339,25 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             var output = new byte[samples.Length * 2];
             for (var index = 0; index < samples.Length; index++)
             {
-                output[index * 2] = (byte)samples[index];
-                output[index * 2 + 1] = (byte)(samples[index] >> 8);
+                var outputIndex = OutputSampleIndex(index, samples.Length, componentCount, planar) * 2;
+                output[outputIndex] = (byte)samples[index];
+                output[outputIndex + 1] = (byte)(samples[index] >> 8);
             }
 
             return output;
+        }
+
+        private static int OutputSampleIndex(int interleavedIndex, int sampleCount, int componentCount, bool planar)
+        {
+            if (!planar || componentCount == 1)
+            {
+                return interleavedIndex;
+            }
+
+            var pixelCount = sampleCount / componentCount;
+            var pixel = interleavedIndex / componentCount;
+            var component = interleavedIndex % componentCount;
+            return component * pixelCount + pixel;
         }
 
         private static void ValidateSupportedPixelData(DicomPixelData pixelData, int nearLossless)
@@ -280,18 +396,34 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
         private sealed class ParsedJpegLsFrame
         {
-            public ParsedJpegLsFrame(JpegLsFrameInfo frameInfo, JpegLsStartOfScan scan, byte[] scanData)
+            public ParsedJpegLsFrame(JpegLsFrameInfo frameInfo, IReadOnlyList<ParsedJpegLsScan> scans)
             {
                 FrameInfo = frameInfo;
-                Scan = scan;
-                ScanData = scanData;
+                Scans = scans;
             }
 
             public JpegLsFrameInfo FrameInfo { get; }
 
+            public IReadOnlyList<ParsedJpegLsScan> Scans { get; }
+        }
+
+        private sealed class ParsedJpegLsScan
+        {
+            public ParsedJpegLsScan(
+                JpegLsStartOfScan scan,
+                byte[] data,
+                JpegLsPresetCodingParameters? preset)
+            {
+                Scan = scan;
+                Data = data;
+                Preset = preset;
+            }
+
             public JpegLsStartOfScan Scan { get; }
 
-            public byte[] ScanData { get; }
+            public byte[] Data { get; }
+
+            public JpegLsPresetCodingParameters? Preset { get; }
         }
     }
 }

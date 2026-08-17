@@ -258,6 +258,17 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 return jpegParameters;
             }
 
+            if (parameters is FellowOakDicom.Imaging.Codec.DicomJpegParams coreParameters)
+            {
+                return new JpegCodecParams
+                {
+                    Quality = coreParameters.Quality,
+                    ConvertColorspaceToRGB = coreParameters.ConvertColorspaceToRGB,
+                    Predictor = coreParameters.Predictor,
+                    PointTransform = coreParameters.PointTransform
+                };
+            }
+
             return new JpegCodecParams();
         }
     }

@@ -240,7 +240,7 @@ For each source frame:
 11. Write packets and marker segments with the requested progression order.
 12. Add one compressed frame to `newPixelData`.
 
-The first implementation may use a conservative single-tile strategy if it remains compatible with DICOM and acceptance requirements. Any limitation must be documented before release.
+Encoding uses a conservative single-tile strategy. Classic JPEG 2000 decoding accepts multi-tile codestreams, groups tile parts by SOT tile index, decodes each tile with its SIZ geometry, and copies it into the complete DICOM frame.
 
 ### Classic OpenJPEG Alignment Order
 
@@ -440,7 +440,13 @@ parameter contract for phase 1 integration:
   successively finer rate layers ending at the requested ratio. Lossless
   target-ratio encoding requires `IncludeFinalLosslessLayer` and appends a
   final rate-zero layer; without `TargetRatio`, the fo-dicom/OpenJPEG
-  `Rate`/`RateLevels` layer contract remains authoritative.
+  `Rate`/`RateLevels` layer contract remains authoritative. Only exact zero
+  means unset; other values must be finite and greater than one, and the total
+  layer count must fit the 16-bit COD field.
+- `YBR_FULL` and `YBR_FULL_422` input is normalized to RGB before classic MCT.
+  When that normalization occurs, compressed photometric metadata is always
+  updated to `YBR_RCT` or `YBR_ICT` so the tags cannot describe stale source
+  components, even if optional RGB photometric updates are disabled.
 - Classic JPEG 2000 encoding pads an odd-length EOC-terminated codestream with
   a trailing `00` byte for the DICOM encapsulated item. This padding is outside
   the logical JPEG 2000 codestream and must not be counted in SOT `Psot` or

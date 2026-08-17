@@ -13,6 +13,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         private readonly byte[] _data;
         private int _offset;
+        private int _lastMarkerOffset;
 
         public Jpeg2000CodestreamReader(byte[] data)
         {
@@ -24,6 +25,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             get { return _offset >= _data.Length; }
         }
 
+        public int LastMarkerOffset
+        {
+            get { return _lastMarkerOffset; }
+        }
+
         public Jpeg2000MarkerSegment ReadNext()
         {
             if (_offset >= _data.Length || _data[_offset] != 0xFF)
@@ -31,6 +37,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 throw Jpeg2000Binary.CreateException("JPEG 2000 marker prefix 0xFF was not found.");
             }
 
+            _lastMarkerOffset = _offset;
             _offset++;
             if (_offset >= _data.Length)
             {
@@ -114,6 +121,36 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var payload = new byte[tileDataLength];
             Buffer.BlockCopy(_data, _offset, payload, 0, payload.Length);
             _offset += tileDataLength;
+            return payload;
+        }
+
+        public byte[] ReadTileData(Jpeg2000StartOfTilePart sot, int tilePartStartOffset)
+        {
+            if (sot == null)
+            {
+                throw new ArgumentNullException(nameof(sot));
+            }
+
+            if (sot.TilePartLength == 0)
+            {
+                return ReadTileDataUntilEoc();
+            }
+
+            var tilePartEnd = checked(tilePartStartOffset + (int)sot.TilePartLength);
+            var tileDataLength = tilePartEnd - _offset;
+            if (tileDataLength < 0)
+            {
+                throw Jpeg2000Binary.CreateException("JPEG 2000 SOT tile-part length is shorter than its header.");
+            }
+
+            if (tilePartEnd > _data.Length)
+            {
+                throw Jpeg2000Binary.CreateException("JPEG 2000 SOT tile-part length exceeds the input buffer.");
+            }
+
+            var payload = new byte[tileDataLength];
+            Buffer.BlockCopy(_data, _offset, payload, 0, payload.Length);
+            _offset = tilePartEnd;
             return payload;
         }
 

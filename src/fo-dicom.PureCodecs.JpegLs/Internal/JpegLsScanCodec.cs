@@ -12,6 +12,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
         private readonly int _nearLossless;
         private readonly int _maximumSampleValue;
         private readonly JpegLsInterleaveMode _interleaveMode;
+        private readonly JpegLsTraits _traits;
 
         public JpegLsScanCodec(int width, int height, int componentCount, int bitsPerSample, int nearLossless)
             : this(width, height, componentCount, bitsPerSample, nearLossless, JpegLsInterleaveMode.None)
@@ -19,6 +20,18 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
         }
 
         public JpegLsScanCodec(int width, int height, int componentCount, int bitsPerSample, int nearLossless, JpegLsInterleaveMode interleaveMode)
+            : this(width, height, componentCount, bitsPerSample, nearLossless, interleaveMode, preset: null)
+        {
+        }
+
+        public JpegLsScanCodec(
+            int width,
+            int height,
+            int componentCount,
+            int bitsPerSample,
+            int nearLossless,
+            JpegLsInterleaveMode interleaveMode,
+            JpegLsPresetCodingParameters? preset)
         {
             if (width <= 0 || height <= 0)
             {
@@ -45,7 +58,22 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             _componentCount = componentCount;
             _bitsPerSample = bitsPerSample;
             _nearLossless = nearLossless;
-            _maximumSampleValue = (1 << bitsPerSample) - 1;
+            var precisionMaximum = (1 << bitsPerSample) - 1;
+            if (preset != null && preset.MaximumSampleValue > precisionMaximum)
+            {
+                throw new DicomCodecException("JPEG-LS preset MAXVAL exceeds the frame precision.");
+            }
+
+            _traits = preset == null
+                ? JpegLsTraits.CreateDefault(precisionMaximum, nearLossless, resetThreshold: 64)
+                : JpegLsTraits.CreateCustom(
+                    preset.MaximumSampleValue,
+                    nearLossless,
+                    preset.Reset,
+                    preset.Threshold1,
+                    preset.Threshold2,
+                    preset.Threshold3);
+            _maximumSampleValue = _traits.MaximumSampleValue;
             _interleaveMode = interleaveMode;
         }
 
@@ -127,7 +155,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                     var mappedError = MapErrorValue(context.GetErrorCorrection(parameter, _nearLossless) ^ errorValue);
 
                     writer.EncodeMappedValue(parameter, mappedError, state.Model.Traits.Limit, state.Model.Traits.QuantizedBitsPerPixel);
-                    context.Update(errorValue, _nearLossless);
+                    context.Update(errorValue, _nearLossless, state.Model.Traits.ResetThreshold);
                     reconstructed[index] = state.Model.Traits.ComputeReconstructedSample(correctedPrediction, ApplySign(errorValue, sign));
                     x++;
                 }
@@ -168,7 +196,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                         errorValue ^= context.GetErrorCorrection(parameter, _nearLossless);
                     }
 
-                    context.Update(errorValue, _nearLossless);
+                    context.Update(errorValue, _nearLossless, state.Model.Traits.ResetThreshold);
 
                     var sample = state.Model.Traits.ComputeReconstructedSample(correctedPrediction, ApplySign(errorValue, sign));
                     samples[GetSampleIndex(x, y, state.Component)] = sample;
@@ -386,7 +414,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             var mappedError = MapErrorValue(context.GetErrorCorrection(parameter, _nearLossless) ^ errorValue);
 
             writer.EncodeMappedValue(parameter, mappedError, state.Model.Traits.Limit, state.Model.Traits.QuantizedBitsPerPixel);
-            context.Update(errorValue, _nearLossless);
+            context.Update(errorValue, _nearLossless, state.Model.Traits.ResetThreshold);
             reconstructed[index] = state.Model.Traits.ComputeReconstructedSample(correctedPrediction, ApplySign(errorValue, sign));
         }
 
@@ -408,7 +436,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                 errorValue ^= context.GetErrorCorrection(parameter, _nearLossless);
             }
 
-            context.Update(errorValue, _nearLossless);
+            context.Update(errorValue, _nearLossless, state.Model.Traits.ResetThreshold);
             samples[GetSampleIndex(x, y, state.Component)] = state.Model.Traits.ComputeReconstructedSample(
                 correctedPrediction,
                 ApplySign(errorValue, sign));
@@ -452,10 +480,10 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                 : scanner.RunInterruptionContexts[0];
             var sign = context == scanner.RunInterruptionContexts[1] ? 1 : Sign(above - left);
             var reference = context == scanner.RunInterruptionContexts[1] ? left : above;
-            var errorValue = new JpegLsTraitsWrapper(_maximumSampleValue, _nearLossless).ComputeErrorValue((original[interruptionIndex] - reference) * sign);
+            var errorValue = _traits.ComputeErrorValue((original[interruptionIndex] - reference) * sign);
 
             scanner.EncodeRunInterruption(writer, context, errorValue);
-            reconstructed[interruptionIndex] = new JpegLsTraitsWrapper(_maximumSampleValue, _nearLossless).ComputeReconstructedSample(reference, errorValue * sign);
+            reconstructed[interruptionIndex] = _traits.ComputeReconstructedSample(reference, errorValue * sign);
             scanner.DecrementRunIndex();
             return runLength + 1;
         }
@@ -488,7 +516,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             var sign = context == scanner.RunInterruptionContexts[1] ? 1 : Sign(above - left);
             var reference = context == scanner.RunInterruptionContexts[1] ? left : above;
             var errorValue = scanner.DecodeRunInterruption(reader, context);
-            samples[GetSampleIndex(interruptionX, y, component)] = new JpegLsTraitsWrapper(_maximumSampleValue, _nearLossless).ComputeReconstructedSample(reference, errorValue * sign);
+                samples[GetSampleIndex(interruptionX, y, component)] = _traits.ComputeReconstructedSample(reference, errorValue * sign);
             scanner.DecrementRunIndex();
             return runLength + 1;
         }
@@ -531,7 +559,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
         {
             var states = new ProcessingState[_componentCount];
             var sharedModel = _interleaveMode == JpegLsInterleaveMode.Line || _interleaveMode == JpegLsInterleaveMode.Sample
-                ? new JpegLsContextModel(_maximumSampleValue, _nearLossless, resetThreshold: 64)
+                ? new JpegLsContextModel(_traits)
                 : null;
             var sharedRunContexts = sharedModel == null
                 ? null
@@ -545,7 +573,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                 : null;
             for (var component = 0; component < _componentCount; component++)
             {
-                var model = sharedModel ?? new JpegLsContextModel(_maximumSampleValue, _nearLossless, resetThreshold: 64);
+                var model = sharedModel ?? new JpegLsContextModel(_traits);
                 states[component] = new ProcessingState(
                     component,
                     0,
@@ -607,26 +635,6 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
         private static int Sign(int value)
         {
             return value < 0 ? -1 : 1;
-        }
-
-        private sealed class JpegLsTraitsWrapper
-        {
-            private readonly JpegLsTraits _traits;
-
-            public JpegLsTraitsWrapper(int maximumSampleValue, int nearLossless)
-            {
-                _traits = JpegLsTraits.CreateDefault(maximumSampleValue, nearLossless, resetThreshold: 64);
-            }
-
-            public int ComputeErrorValue(int errorValue)
-            {
-                return _traits.ComputeErrorValue(errorValue);
-            }
-
-            public int ComputeReconstructedSample(int prediction, int errorValue)
-            {
-                return _traits.ComputeReconstructedSample(prediction, errorValue);
-            }
         }
 
         private sealed class ProcessingState

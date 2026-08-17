@@ -184,7 +184,7 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Wire Process 14 encode.
 - [x] Wire Process 14 SV1 decode.
 - [x] Wire Process 14 SV1 encode.
-- [x] Map Process 14 predictors 1 through 7 and Process 14 SV1 predictor 1 from codec parameters.
+- [x] Map fo-dicom Core and Pure codec parameters to Process 14 predictors 1 through 7 and Process 14 SV1 predictor 1.
 - [x] Encode and decode JPEG Lossless point transform through SOS.
 
 ### 4.3 JPEG DCT Core
@@ -221,7 +221,7 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Test Process 14 SV1 exact round-trip for 8-bit data.
 - [x] Test Process 14 SV1 exact round-trip for 12-bit data.
 - [x] Test Process 14 SV1 exact round-trip for 16-bit data.
-- [x] Test non-zero point transform in Pure-to-Native and Native-to-Pure directions.
+- [x] Test non-zero point transform in Pure-to-Native and Native-to-Pure directions, including Native low-bit truncation semantics for non-aligned samples.
 - [x] Test available Efferent JPEG baseline YBRFull/YBR422 acceptance decode samples.
 - [x] Mark JPEG stubs complete and remove stub-only failure expectations.
 - [x] Update [JPEG design](../design/jpeg-codec-design.md) with implementation notes.
@@ -275,6 +275,7 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Test near-lossless 8-bit tolerance round-trip.
 - [x] Test near-lossless 16-bit tolerance round-trip.
 - [x] Test multi-frame JPEG-LS data.
+- [x] Decode non-interleaved color JPEG-LS codestreams containing one SOS scan per component, including effective LSE presets before and between scans, and validate with `fo-dicom.Codecs`/CharLS.
 - [x] Test Efferent JPEG-LS acceptance samples.
 - [x] Mark JPEG-LS stubs complete and remove stub-only failure expectations.
 - [x] Update [JPEG-LS design](../design/jpegls-codec-design.md) with implementation notes.
@@ -371,6 +372,7 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Add PCRD-style layer allocation matching `opj_tcd_makelayer` and
   `opj_tcd_rateallocate`.
 - [x] Test `Rate`, `RateLevels`, `TargetRatio`, and `NumLayers` parameter effects.
+- [x] Reject non-finite or non-positive nonzero `TargetRatio` values and layer counts that exceed the 16-bit COD limit.
 - [x] Ensure classic JPEG 2000 multi-layer encoding writes real packet contributions before the final layer, not only a COD layer count with empty early layers.
 - [x] Compare classic JPEG 2000 quality-layer packet distribution against `fo-dicom.Codecs`/OpenJPEG for `D:\1.dcm` and the RGB unit8 fixture.
 - [ ] Add a layer-truncated decode fixture proving early quality layers are independently decodable at lower quality.
@@ -434,6 +436,8 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Implement YBR-related output path where supported.
 - [x] Normalize classic JPEG 2000 `YBR_FULL` and `YBR_FULL_422` input to complete RGB frames before MCT.
 - [x] Validate classic JPEG 2000 YBR output with the native OpenJPEG decoder.
+- [x] Keep classic JPEG 2000 YBR metadata consistent after RGB normalization and MCT even when optional photometric updates are disabled.
+- [x] Decode classic JPEG 2000 multi-tile codestreams and validate exact output with `fo-dicom.Codecs`/OpenJPEG.
 - [x] Add explicit Phase 1 exclusion for JPEG 2000 Part 2 Multi-component transfer syntaxes `.92` and `.93`.
 - [x] Add explicit unsupported JPIP/JPT behavior.
 - [x] Add unsupported component subsampling failures.

@@ -110,7 +110,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         private double[] ResolveLayerRates(DicomJpeg2000Params parameters, int bitsStored, int bitsAllocated)
         {
-            if (parameters.TargetRatio > 0)
+            if (parameters.TargetRatio != 0)
             {
                 return ResolveTargetRatioLayerRates(parameters);
             }
@@ -170,7 +170,13 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 throw new DicomCodecException("JPEG 2000 Lossy encoding cannot include a final lossless layer.");
             }
 
-            var layerRates = new double[parameters.NumLayers + (parameters.IncludeFinalLosslessLayer ? 1 : 0)];
+            var totalLayerCount = (long)parameters.NumLayers + (parameters.IncludeFinalLosslessLayer ? 1 : 0);
+            if (totalLayerCount > ushort.MaxValue)
+            {
+                throw new DicomCodecException("JPEG 2000 total layer count cannot exceed 65535.");
+            }
+
+            var layerRates = new double[(int)totalLayerCount];
             for (var layer = 0; layer < parameters.NumLayers; layer++)
             {
                 layerRates[layer] = parameters.TargetRatio * Math.Pow(2, parameters.NumLayers - layer - 1);
@@ -239,7 +245,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 return;
             }
 
-            if (!parameters.UpdatePhotometricInterpretation)
+            var normalizedYbrInput = oldPixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull
+                || oldPixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull422;
+            if (!parameters.UpdatePhotometricInterpretation && !normalizedYbrInput)
             {
                 return;
             }

@@ -81,6 +81,18 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
         public byte[] ReadEntropyDataUntilMarker(byte marker)
         {
+            var payload = ReadEntropyDataUntilNextMarker();
+            var segment = ReadNext();
+            if (segment.Code != marker)
+            {
+                throw CreateException($"JPEG-LS expected marker 0x{marker:X2} after scan data but found 0x{segment.Code:X2}.");
+            }
+
+            return payload;
+        }
+
+        public byte[] ReadEntropyDataUntilNextMarker()
+        {
             var start = _offset;
             while (_offset < _data.Length)
             {
@@ -116,17 +128,11 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                 var length = _offset - start;
                 var payload = new byte[length];
                 Buffer.BlockCopy(_data, start, payload, 0, length);
-                _offset = markerOffset + 1;
-
-                if (code != marker)
-                {
-                    throw CreateException($"JPEG-LS expected marker 0x{marker:X2} after scan data but found 0x{code:X2}.");
-                }
-
+                _offset = markerOffset - 1;
                 return payload;
             }
 
-            throw CreateException($"JPEG-LS marker 0x{marker:X2} was not found after scan data.");
+            throw CreateException("JPEG-LS marker was not found after scan data.");
         }
 
         private void SkipFillBytes()

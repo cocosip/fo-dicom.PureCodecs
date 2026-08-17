@@ -8,9 +8,26 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
     {
         public byte[] Decode(DicomPixelData targetPixelData, Jpeg2000SizeSegment siz, Jpeg2000CodingStyleDefault cod, Jpeg2000QuantizationDefault qcd, byte[] tileData)
         {
+            var image = Jpeg2000ImageModel.FromSizeSegment(siz);
+            if (image.Tiles.Count != 1)
+            {
+                throw Jpeg2000Binary.CreateException("JPEG 2000 multi-tile codestream requires tile-indexed decoding.");
+            }
+
+            return DecodeTile(targetPixelData, siz, cod, qcd, tileData, image.Tiles[0]);
+        }
+
+        public byte[] DecodeTile(
+            DicomPixelData targetPixelData,
+            Jpeg2000SizeSegment siz,
+            Jpeg2000CodingStyleDefault cod,
+            Jpeg2000QuantizationDefault qcd,
+            byte[] tileData,
+            Jpeg2000TileModel tile)
+        {
             Validate(targetPixelData, siz, cod);
 
-            var components = CreateComponents(siz, cod);
+            var components = CreateTileComponents(siz, cod, tile);
             var packetDecoder = new Jpeg2000StandardPacketDecoder(
                 tileData,
                 components.Length,
@@ -409,13 +426,23 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             return orientation == 3 ? 2 : orientation == 0 ? 0 : 1;
         }
 
-        private static Jpeg2000StandardComponent[] CreateComponents(Jpeg2000SizeSegment siz, Jpeg2000CodingStyleDefault cod)
+        private static Jpeg2000StandardComponent[] CreateComponents(
+            Jpeg2000SizeSegment siz,
+            Jpeg2000CodingStyleDefault cod)
+        {
+            return CreateTileComponents(siz, cod, Jpeg2000ImageModel.FromSizeSegment(siz).Tiles[0]);
+        }
+
+        private static Jpeg2000StandardComponent[] CreateTileComponents(
+            Jpeg2000SizeSegment siz,
+            Jpeg2000CodingStyleDefault cod,
+            Jpeg2000TileModel tile)
         {
             var components = new Jpeg2000StandardComponent[siz.Components.Count];
-            var tileX0 = (int)Math.Max(siz.ImageOffsetX, siz.TileOffsetX);
-            var tileY0 = (int)Math.Max(siz.ImageOffsetY, siz.TileOffsetY);
-            var tileX1 = (int)Math.Min(siz.ReferenceGridWidth, siz.TileOffsetX + siz.TileWidth);
-            var tileY1 = (int)Math.Min(siz.ReferenceGridHeight, siz.TileOffsetY + siz.TileHeight);
+            var tileX0 = checked((int)tile.X0);
+            var tileY0 = checked((int)tile.Y0);
+            var tileX1 = checked((int)tile.X1);
+            var tileY1 = checked((int)tile.Y1);
 
             for (var i = 0; i < components.Length; i++)
             {
@@ -511,7 +538,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         private static byte[] Pack(DicomPixelData targetPixelData, Jpeg2000StandardComponent[] components)
         {
             var bytesPerSample = targetPixelData.BitsAllocated / 8;
-            var pixelCount = targetPixelData.Width * targetPixelData.Height;
+            var pixelCount = components[0].Width * components[0].Height;
             var result = new byte[pixelCount * components.Length * bytesPerSample];
             var precision = components[0].Precision;
             var max = (1 << precision) - 1;
@@ -565,11 +592,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         private static void Validate(DicomPixelData targetPixelData, Jpeg2000SizeSegment siz, Jpeg2000CodingStyleDefault cod)
         {
-            if (siz.TileWidth != siz.ReferenceGridWidth - siz.ImageOffsetX || siz.TileHeight != siz.ReferenceGridHeight - siz.ImageOffsetY)
-            {
-                throw Jpeg2000Binary.CreateException("JPEG 2000 standard decoder currently supports single-tile codestreams only.");
-            }
-
             if (targetPixelData.Width != (int)(siz.ReferenceGridWidth - siz.ImageOffsetX)
                 || targetPixelData.Height != (int)(siz.ReferenceGridHeight - siz.ImageOffsetY)
                 || targetPixelData.SamplesPerPixel != siz.Components.Count)
