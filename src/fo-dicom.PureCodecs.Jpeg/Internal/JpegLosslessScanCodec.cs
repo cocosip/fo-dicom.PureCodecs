@@ -314,7 +314,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 throw new ArgumentOutOfRangeException(nameof(height));
             }
 
-            if (samplePrecision < 2 || samplePrecision > 16)
+            if (samplePrecision < 1 || samplePrecision > 16)
             {
                 throw CreateException($"JPEG lossless scan sample precision {samplePrecision} is not supported.");
             }

@@ -28,7 +28,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         public DicomCodecParams GetDefaultParameters()
         {
-            return new DicomJpeg2000Params { Irreversible = _defaultIrreversible };
+            return new DicomJpeg2000Params
+            {
+                Irreversible = _defaultIrreversible,
+                IncludeFinalLosslessLayer = TransferSyntax == DicomTransferSyntax.JPEG2000Lossless
+            };
         }
 
         public void Encode(DicomPixelData oldPixelData, DicomPixelData newPixelData, DicomCodecParams parameters)
@@ -106,6 +110,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         private double[] ResolveLayerRates(DicomJpeg2000Params parameters, int bitsStored, int bitsAllocated)
         {
+            if (parameters.TargetRatio > 0)
+            {
+                return ResolveTargetRatioLayerRates(parameters);
+            }
+
             var layerRates = new List<double>();
             var rateLevels = parameters.RateLevels ?? new int[0];
             foreach (var rateLevel in rateLevels)
@@ -134,6 +143,45 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             }
 
             return layerRates.ToArray();
+        }
+
+        private double[] ResolveTargetRatioLayerRates(DicomJpeg2000Params parameters)
+        {
+            if (double.IsNaN(parameters.TargetRatio)
+                || double.IsInfinity(parameters.TargetRatio)
+                || parameters.TargetRatio <= 1)
+            {
+                throw new DicomCodecException("JPEG 2000 TargetRatio must be a finite value greater than 1.");
+            }
+
+            if (parameters.NumLayers < 1)
+            {
+                throw new DicomCodecException("JPEG 2000 NumLayers must be at least 1 when TargetRatio is specified.");
+            }
+
+            var lossless = TransferSyntax == DicomTransferSyntax.JPEG2000Lossless;
+            if (lossless && !parameters.IncludeFinalLosslessLayer)
+            {
+                throw new DicomCodecException("JPEG 2000 Lossless TargetRatio encoding requires IncludeFinalLosslessLayer.");
+            }
+
+            if (!lossless && parameters.IncludeFinalLosslessLayer)
+            {
+                throw new DicomCodecException("JPEG 2000 Lossy encoding cannot include a final lossless layer.");
+            }
+
+            var layerRates = new double[parameters.NumLayers + (parameters.IncludeFinalLosslessLayer ? 1 : 0)];
+            for (var layer = 0; layer < parameters.NumLayers; layer++)
+            {
+                layerRates[layer] = parameters.TargetRatio * Math.Pow(2, parameters.NumLayers - layer - 1);
+            }
+
+            if (parameters.IncludeFinalLosslessLayer)
+            {
+                layerRates[layerRates.Length - 1] = 0;
+            }
+
+            return layerRates;
         }
 
         private static void ValidateSupportedPixelData(DicomPixelData pixelData)
@@ -180,7 +228,18 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             }
 
             newPixelData.PlanarConfiguration = PlanarConfiguration.Interleaved;
-            if (!usesMct || !parameters.UpdatePhotometricInterpretation)
+            if (!usesMct)
+            {
+                if (oldPixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull
+                    || oldPixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull422)
+                {
+                    newPixelData.PhotometricInterpretation = PhotometricInterpretation.Rgb;
+                }
+
+                return;
+            }
+
+            if (!parameters.UpdatePhotometricInterpretation)
             {
                 return;
             }
@@ -192,12 +251,36 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         private static byte[] NormalizeFrameForEncode(DicomPixelData pixelData, byte[] frame)
         {
+            IByteBuffer normalized = new MemoryByteBuffer(frame);
             if (pixelData.SamplesPerPixel == 3 && pixelData.PlanarConfiguration == PlanarConfiguration.Planar)
             {
-                return PlanarRgbToInterleaved(frame, pixelData.Width * pixelData.Height);
+                normalized = new MemoryByteBuffer(PlanarRgbToInterleaved(frame, pixelData.Width * pixelData.Height));
             }
 
-            return frame;
+            if (pixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull)
+            {
+                normalized = PixelDataConverter.YbrFullToRgb(normalized);
+            }
+            else if (pixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull422)
+            {
+                normalized = PixelDataConverter.YbrFull422ToRgb(normalized, pixelData.Width);
+            }
+
+            var expectedLength = pixelData.Width * pixelData.Height * pixelData.SamplesPerPixel * (pixelData.BitsAllocated / 8);
+            var bytes = normalized.Data;
+            if (bytes.Length == expectedLength)
+            {
+                return bytes;
+            }
+
+            if (bytes.Length < expectedLength)
+            {
+                throw new DicomCodecException("JPEG 2000 color conversion produced an incomplete RGB frame.");
+            }
+
+            var trimmed = new byte[expectedLength];
+            Buffer.BlockCopy(bytes, 0, trimmed, 0, trimmed.Length);
+            return trimmed;
         }
 
         private static byte[] NormalizeFrameForDecode(DicomPixelData targetPixelData, byte[] frame)

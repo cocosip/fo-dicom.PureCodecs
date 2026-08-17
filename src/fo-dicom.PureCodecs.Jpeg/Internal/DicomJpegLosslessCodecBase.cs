@@ -31,12 +31,17 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
         public void Encode(DicomPixelData oldPixelData, DicomPixelData newPixelData, DicomCodecParams parameters)
         {
-            var selectionValue = JpegLosslessFrameCodec.GetDefaultSelectionValue(_firstOrderPrediction);
+            var jpegParameters = JpegCodecParams.From(parameters);
+            var selectionValue = _firstOrderPrediction ? 1 : jpegParameters.Predictor;
             for (var frame = 0; frame < oldPixelData.NumberOfFrames; frame++)
             {
                 try
                 {
-                    var encoded = _frameCodec.EncodeFrame(oldPixelData, ToArray(oldPixelData.GetFrame(frame)), selectionValue);
+                    var encoded = _frameCodec.EncodeFrame(
+                        oldPixelData,
+                        ToArray(oldPixelData.GetFrame(frame)),
+                        selectionValue,
+                        jpegParameters.PointTransform);
                     newPixelData.AddFrame(new MemoryByteBuffer(encoded));
                 }
                 catch (Exception exception)
@@ -48,12 +53,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
         public void Decode(DicomPixelData oldPixelData, DicomPixelData newPixelData, DicomCodecParams parameters)
         {
-            var selectionValue = JpegLosslessFrameCodec.GetDefaultSelectionValue(_firstOrderPrediction);
             for (var frame = 0; frame < oldPixelData.NumberOfFrames; frame++)
             {
                 try
                 {
-                    var decoded = _frameCodec.DecodeFrame(newPixelData, ToArray(oldPixelData.GetFrame(frame)), selectionValue);
+                    var decoded = _frameCodec.DecodeFrame(newPixelData, ToArray(oldPixelData.GetFrame(frame)));
                     newPixelData.AddFrame(new MemoryByteBuffer(decoded));
                 }
                 catch (Exception exception)
@@ -81,7 +85,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         }
     }
 
-    public sealed class JpegLosslessCodecParams : DicomCodecParams
+    public sealed class JpegLosslessCodecParams : JpegCodecParams
     {
     }
 }

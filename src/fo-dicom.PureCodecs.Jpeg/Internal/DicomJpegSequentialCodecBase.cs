@@ -241,7 +241,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         }
     }
 
-    public sealed class JpegCodecParams : DicomCodecParams
+    public class JpegCodecParams : DicomCodecParams
     {
         public int Quality { get; set; } = 90;
 

@@ -6,12 +6,24 @@ using FellowOakDicom.PureCodecs.Jpeg;
 using FellowOakDicom.PureCodecs.Jpeg.Internal;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
+using NativeJpegCodecParams = FellowOakDicom.Imaging.NativeCodec.DicomJpegParams;
+using NativeJpegLossless14Codec = FellowOakDicom.Imaging.NativeCodec.DicomJpegLossless14Codec;
 using NativeJpegLossless14Sv1Codec = FellowOakDicom.Imaging.NativeCodec.DicomJpegLossless14SV1Codec;
 
 namespace FellowOakDicom.PureCodecs.Tests;
 
 public sealed class JpegLosslessCodecRoundTripTests
 {
+    [Fact]
+    public void Default_parameters_preserve_lossless_parameter_type_and_native_predictor_defaults()
+    {
+        var parameters = new DicomJpegLossless14Codec().GetDefaultParameters();
+        var losslessParameters = Assert.IsType<JpegLosslessCodecParams>(parameters);
+
+        Assert.Equal(1, losslessParameters.Predictor);
+        Assert.Equal(0, losslessParameters.PointTransform);
+    }
+
     [Theory]
     [InlineData(8)]
     [InlineData(12)]
@@ -42,6 +54,59 @@ public sealed class JpegLosslessCodecRoundTripTests
         codec.Decode(compressedPixelData, decodedPixelData, codec.GetDefaultParameters());
 
         PixelDataAssertions.FramesMatchExactly(rawPixelData, decodedPixelData);
+    }
+
+    [Fact]
+    public void Process14_encode_writes_requested_predictor()
+    {
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8());
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess14);
+        var codec = new DicomJpegLossless14Codec();
+
+        codec.Encode(source, compressed, new JpegCodecParams { Predictor = 7 });
+
+        var scan = ReadStartOfScan(compressed.GetFrame(0).Data);
+        Assert.Equal(7, scan.SpectralSelectionStart);
+        Assert.Equal(0, scan.SuccessiveApproximationLow);
+    }
+
+    [Fact]
+    public void Process14_point_transform_output_decodes_with_fo_dicom_codecs()
+    {
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8(
+            rows: 2,
+            columns: 4,
+            frame: new byte[] { 4, 20, 44, 80, 100, 120, 200, 240 }));
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess14);
+        var nativeDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var pureCodec = new DicomJpegLossless14Codec();
+
+        pureCodec.Encode(source, compressed, new JpegCodecParams { Predictor = 4, PointTransform = 2 });
+
+        var scan = ReadStartOfScan(compressed.GetFrame(0).Data);
+        Assert.Equal(4, scan.SpectralSelectionStart);
+        Assert.Equal(2, scan.SuccessiveApproximationLow);
+        var nativeCodec = new NativeJpegLossless14Codec();
+        nativeCodec.Decode(compressed, nativeDecoded, nativeCodec.GetDefaultParameters());
+        PixelDataAssertions.FramesMatchExactly(source, nativeDecoded);
+    }
+
+    [Fact]
+    public void Process14_decodes_fo_dicom_codecs_point_transform_output()
+    {
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8(
+            rows: 2,
+            columns: 4,
+            frame: new byte[] { 4, 20, 44, 80, 100, 120, 200, 240 }));
+        var nativeCompressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess14);
+        var pureDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var nativeCodec = new NativeJpegLossless14Codec();
+
+        nativeCodec.Encode(source, nativeCompressed, new NativeJpegCodecParams { Predictor = 4, PointTransform = 2 });
+
+        var pureCodec = new DicomJpegLossless14Codec();
+        pureCodec.Decode(nativeCompressed, pureDecoded, pureCodec.GetDefaultParameters());
+        PixelDataAssertions.FramesMatchExactly(source, pureDecoded);
     }
 
     [Fact]
@@ -135,6 +200,21 @@ public sealed class JpegLosslessCodecRoundTripTests
         }
 
         throw new Xunit.Sdk.XunitException("JPEG frame does not contain a DHT marker.");
+    }
+
+    private static JpegStartOfScan ReadStartOfScan(byte[] jpeg)
+    {
+        var reader = new JpegMarkerReader(jpeg);
+        while (!reader.EndOfData)
+        {
+            var segment = reader.ReadNextSkippingMetadata();
+            if (segment.Code == JpegMarker.SOS)
+            {
+                return JpegStartOfScan.Parse(segment);
+            }
+        }
+
+        throw new Xunit.Sdk.XunitException("JPEG frame does not contain an SOS marker.");
     }
 
     private static byte[] CreateUInt16Frame(params int[] samples)

@@ -228,6 +228,7 @@ The current implementation is fully managed and lives in `fo-dicom.PureCodecs.Jp
 - `DicomJpegLsParams` exposes `AllowedError`, `InterleaveMode`, and `ColorTransform` with defaults matching `fo-dicom.Codecs` where applicable.
 - The encoder emits one JPEG-LS codestream per DICOM frame with SOI, SOF55, LSE preset coding parameters, SOS, scan data, and EOI.
 - The scan codec implements regular mode, run mode, Golomb coding, context modeling, default JPEG-LS thresholds, and near-lossless sample reconstruction.
-- The internal encoder currently emits non-interleaved scan data. The decoder supports non-interleaved and line-interleaved streams; Efferent JPEG-LS acceptance samples use line interleave.
+- The encoder emits non-interleaved monochrome scans, sample-interleaved RGB scans, or line-interleaved scans according to the DICOM component layout. The decoder supports the same modes; Efferent JPEG-LS acceptance samples use line interleave.
+- Before encoding, planar RGB is normalized through fo-dicom's planar-to-interleaved converter, and `YBR_FULL` or `YBR_FULL_422` is normalized to RGB. Compressed metadata is updated to interleaved RGB, including exact frame-length handling for odd-width `YBR_FULL_422` input. These paths are validated by decoding the Pure codestream with `fo-dicom.Codecs`/CharLS.
 - Line interleave follows the CharLS state model: regular contexts and run interruption contexts are shared for the scan, while run index and left-edge line state are maintained per component.
-- Unsupported sample interleave, unsupported photometric interpretations, unsupported bit depths, invalid NEAR values, and malformed marker streams fail with managed `DicomCodecException`.
+- Unsupported photometric interpretations, unsupported bit depths, invalid NEAR values, and malformed marker streams fail with managed `DicomCodecException`.

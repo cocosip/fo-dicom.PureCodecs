@@ -10,7 +10,6 @@ This document records compatibility edges that are intentionally outside the pha
 
 ## Explicit Managed Rejections
 
-- JPEG Process 2/4 12-bit sequential DCT codestream encode/decode is not implemented by the current managed JPEG path. The test suite records this as an explicit managed exception until fixture-backed support is added.
 - Progressive JPEG, arithmetic-coded JPEG, CMYK/YCCK JPEG color spaces, and broader restart interval MCU resynchronization are not implemented.
 - JPEG 2000 JP2 wrapper frames are detected and rejected unless a raw J2K codestream is supplied.
 - JPEG 2000 packed packet headers, unsupported ROI behavior, unsupported component subsampling, and unsupported progression order combinations fail with managed exceptions.

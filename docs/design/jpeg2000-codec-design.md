@@ -436,6 +436,11 @@ parameter contract for phase 1 integration:
   packet-layer contribution support: the encoder must distribute code-block
   passes across quality layers, not only write a larger COD layer count and
   leave early layers empty.
+- When `TargetRatio` is set for classic JPEG 2000, `NumLayers` creates
+  successively finer rate layers ending at the requested ratio. Lossless
+  target-ratio encoding requires `IncludeFinalLosslessLayer` and appends a
+  final rate-zero layer; without `TargetRatio`, the fo-dicom/OpenJPEG
+  `Rate`/`RateLevels` layer contract remains authoritative.
 - Classic JPEG 2000 encoding pads an odd-length EOC-terminated codestream with
   a trailing `00` byte for the DICOM encapsulated item. This padding is outside
   the logical JPEG 2000 codestream and must not be counted in SOT `Psot` or
@@ -455,7 +460,10 @@ parameter contract for phase 1 integration:
 - RGB input is normalized to interleaved component order for encoding and
   decoded frames are repacked to the target fo-dicom raw layout, including
   planar RGB targets. Monochrome, RGB, and supported YBR-related photometric
-  interpretations have explicit paths; unsupported photometric values fail
+  interpretations have explicit paths. Classic `YBR_FULL` and
+  `YBR_FULL_422` input is converted through fo-dicom's pixel converter to a
+  complete RGB frame before MCT and is covered by fo-dicom.Codecs/OpenJPEG
+  decode validation; unsupported photometric values fail
   with managed `DicomCodecException`.
 - Component subsampling and unsupported standard progression orders fail with
   explicit managed exceptions.

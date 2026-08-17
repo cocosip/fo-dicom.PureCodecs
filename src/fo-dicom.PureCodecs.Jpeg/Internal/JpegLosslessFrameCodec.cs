@@ -9,7 +9,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
     {
         private const int DefaultSelectionValue = 1;
 
-        public byte[] EncodeFrame(DicomPixelData pixelData, byte[] rawFrame, int selectionValue)
+        public byte[] EncodeFrame(DicomPixelData pixelData, byte[] rawFrame, int selectionValue, int pointTransform = 0)
         {
             if (pixelData == null)
             {
@@ -22,6 +22,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             ValidateSupportedPixelData(pixelData);
+            ValidateLosslessParameters(pixelData.BitsStored, selectionValue, pointTransform);
+            var effectivePrecision = pixelData.BitsStored - pointTransform;
             var pixelCount = pixelData.Width * pixelData.Height;
             var sampleCount = GetSampleCount(rawFrame, pixelData.BitsAllocated);
             if (sampleCount != pixelCount * pixelData.SamplesPerPixel)
@@ -38,12 +40,13 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                     pixelCount,
                     pixelData.SamplesPerPixel,
                     pixelData.PlanarConfiguration);
+                ApplyPointTransform(interleavedSamples, sampleCount, pointTransform);
                 var huffmanTable = JpegLosslessScanCodec.CreateOptimalHuffmanTableForFrame(
                     interleavedSamples,
                     pixelData.Width,
                     pixelData.Height,
                     pixelData.SamplesPerPixel,
-                    pixelData.BitsStored,
+                    effectivePrecision,
                     selectionValue);
                 var scanCodec = JpegLosslessScanCodec.Create(huffmanTable);
                 var scan = scanCodec.EncodeInterleaved(
@@ -51,7 +54,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                     pixelData.Width,
                     pixelData.Height,
                     pixelData.SamplesPerPixel,
-                    pixelData.BitsStored,
+                    effectivePrecision,
                     selectionValue);
 
                 var writer = new JpegMarkerWriter();
@@ -59,7 +62,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 WriteColorSpaceMarker(writer, pixelData);
                 writer.WriteSegment(JpegMarker.SOF3, CreateStartOfFramePayload(pixelData));
                 writer.WriteSegment(JpegMarker.DHT, huffmanTable.CreateDhtPayload(tableClass: 0, tableId: 0));
-                writer.WriteSegment(JpegMarker.SOS, CreateStartOfScanPayload(pixelData, selectionValue));
+                writer.WriteSegment(JpegMarker.SOS, CreateStartOfScanPayload(pixelData, selectionValue, pointTransform));
                 writer.WriteRaw(scan);
                 writer.WriteStandalone(JpegMarker.EOI);
                 var frame = writer.ToArray();
@@ -78,7 +81,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
         }
 
-        public byte[] DecodeFrame(DicomPixelData targetPixelData, byte[] jpegFrame, int selectionValue)
+        public byte[] DecodeFrame(DicomPixelData targetPixelData, byte[] jpegFrame)
         {
             if (targetPixelData == null)
             {
@@ -103,6 +106,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 throw CreateException("JPEG Lossless sample precision does not match DICOM BitsStored.");
             }
 
+            ValidateLosslessParameters(parsed.SamplePrecision, parsed.SelectionValue, parsed.PointTransform);
+            var effectivePrecision = parsed.SamplePrecision - parsed.PointTransform;
+
             var scanCodec = JpegLosslessScanCodec.Create(parsed.HuffmanTable);
             var pixelCount = parsed.Width * parsed.Height;
             var sampleCount = pixelCount * parsed.Components;
@@ -114,9 +120,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                     parsed.Width,
                     parsed.Height,
                     parsed.Components,
-                    parsed.SamplePrecision,
+                    effectivePrecision,
                     parsed.SelectionValue,
                     samples);
+                RestorePointTransform(samples, sampleCount, parsed.PointTransform);
                 var orderedSamples = FromInterleavedComponentSamples(
                     samples,
                     pixelCount,
@@ -128,6 +135,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             {
                 ArrayPool<int>.Shared.Return(samples);
             }
+        }
+
+        public byte[] DecodeFrame(DicomPixelData targetPixelData, byte[] jpegFrame, int selectionValue)
+        {
+            return DecodeFrame(targetPixelData, jpegFrame);
         }
 
         public static int GetDefaultSelectionValue(bool firstOrderPrediction)
@@ -202,6 +214,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 frame.SamplePrecision,
                 frame.Components.Length,
                 scan.SpectralSelectionStart,
+                scan.SuccessiveApproximationLow,
                 ResolveHuffmanTable(scan, huffmanTables),
                 scanData);
         }
@@ -227,7 +240,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return payload;
         }
 
-        private static byte[] CreateStartOfScanPayload(DicomPixelData pixelData, int selectionValue)
+        private static byte[] CreateStartOfScanPayload(DicomPixelData pixelData, int selectionValue, int pointTransform)
         {
             var payload = new byte[1 + pixelData.SamplesPerPixel * 2 + 3];
             payload[0] = (byte)pixelData.SamplesPerPixel;
@@ -240,8 +253,47 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
             payload[offset++] = (byte)selectionValue;
             payload[offset++] = 0;
-            payload[offset] = 0;
+            payload[offset] = (byte)pointTransform;
             return payload;
+        }
+
+        private static void ApplyPointTransform(int[] samples, int sampleCount, int pointTransform)
+        {
+            if (pointTransform == 0)
+            {
+                return;
+            }
+
+            for (var index = 0; index < sampleCount; index++)
+            {
+                samples[index] >>= pointTransform;
+            }
+        }
+
+        private static void RestorePointTransform(int[] samples, int sampleCount, int pointTransform)
+        {
+            if (pointTransform == 0)
+            {
+                return;
+            }
+
+            for (var index = 0; index < sampleCount; index++)
+            {
+                samples[index] <<= pointTransform;
+            }
+        }
+
+        private static void ValidateLosslessParameters(int samplePrecision, int selectionValue, int pointTransform)
+        {
+            if (selectionValue < 1 || selectionValue > 7)
+            {
+                throw CreateException($"JPEG Lossless predictor {selectionValue} is outside the supported range 1..7.");
+            }
+
+            if (pointTransform < 0 || pointTransform > 15 || pointTransform >= samplePrecision)
+            {
+                throw CreateException($"JPEG Lossless point transform {pointTransform} must be between 0 and {Math.Min(15, samplePrecision - 1)}.");
+            }
         }
 
         private static void WriteColorSpaceMarker(JpegMarkerWriter writer, DicomPixelData pixelData)
@@ -508,6 +560,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 int samplePrecision,
                 int components,
                 int selectionValue,
+                int pointTransform,
                 JpegHuffmanTable huffmanTable,
                 byte[] scanData)
             {
@@ -516,6 +569,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 SamplePrecision = samplePrecision;
                 Components = components;
                 SelectionValue = selectionValue;
+                PointTransform = pointTransform;
                 HuffmanTable = huffmanTable;
                 ScanData = scanData;
             }
@@ -529,6 +583,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             public int Components { get; }
 
             public int SelectionValue { get; }
+
+            public int PointTransform { get; }
 
             public JpegHuffmanTable HuffmanTable { get; }
 

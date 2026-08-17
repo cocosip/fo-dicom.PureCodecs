@@ -7,6 +7,7 @@ using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
 using CoreHtJpeg2000Params = FellowOakDicom.Imaging.Codec.DicomHtJpeg2000Params;
 using CoreJpeg2000Params = FellowOakDicom.Imaging.Codec.DicomJpeg2000Params;
+using NativeJpeg2000LosslessCodec = FellowOakDicom.Imaging.NativeCodec.DicomJpeg2000LosslessCodec;
 using PureHtJpeg2000Params = FellowOakDicom.PureCodecs.Jpeg2000.DicomHtJpeg2000Params;
 using PureJpeg2000Params = FellowOakDicom.PureCodecs.Jpeg2000.DicomJpeg2000Params;
 
@@ -144,6 +145,53 @@ public sealed class Jpeg2000DicomIntegrationTests
     }
 
     [Fact]
+    public void Jpeg2000_target_ratio_num_layers_control_lossy_cod_layer_count()
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 64, columns: 64);
+        var source = DicomPixelData.Create(dataset);
+        var compressed = DicomPixelData.Create(
+            CloneForTransferSyntax(dataset, DicomTransferSyntax.JPEG2000Lossy),
+            true);
+        var codec = new DicomJpeg2000LossyCodec();
+
+        codec.Encode(source, compressed, new PureJpeg2000Params
+        {
+            Irreversible = true,
+            TargetRatio = 3,
+            NumLayers = 2
+        });
+
+        Assert.Equal(2, ReadLayerCount(compressed.GetFrame(0).Data));
+    }
+
+    [Fact]
+    public void Jpeg2000_target_ratio_lossless_layers_include_final_lossless_layer()
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 64, columns: 64);
+        var source = DicomPixelData.Create(dataset);
+        var compressed = DicomPixelData.Create(
+            CloneForTransferSyntax(dataset, DicomTransferSyntax.JPEG2000Lossless),
+            true);
+        var nativeDecoded = DicomPixelData.Create(
+            CloneForTransferSyntax(dataset, DicomTransferSyntax.ExplicitVRLittleEndian),
+            true);
+        var codec = new DicomJpeg2000LosslessCodec();
+
+        codec.Encode(source, compressed, new PureJpeg2000Params
+        {
+            Irreversible = false,
+            TargetRatio = 3,
+            NumLayers = 2,
+            IncludeFinalLosslessLayer = true
+        });
+
+        Assert.Equal(3, ReadLayerCount(compressed.GetFrame(0).Data));
+        var nativeCodec = new NativeJpeg2000LosslessCodec();
+        nativeCodec.Decode(compressed, nativeDecoded, nativeCodec.GetDefaultParameters());
+        PixelDataAssertions.FramesMatchExactly(source, nativeDecoded);
+    }
+
+    [Fact]
     public void Jpeg2000_default_lossy_rate_levels_write_fo_dicom_codecs_layer_count()
     {
         var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 64, columns: 64);
@@ -176,6 +224,59 @@ public sealed class Jpeg2000DicomIntegrationTests
     {
         AssertRgbLosslessRoundTrip(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 2, columns: 2));
         AssertRgbLosslessRoundTrip(DicomPixelDataFixtures.CreateRgbPlanar(rows: 2, columns: 2));
+    }
+
+    [Fact]
+    public void Jpeg2000_lossless_ybr_full_output_decodes_as_rgb_with_fo_dicom_codecs()
+    {
+        const ushort rows = 64;
+        const ushort columns = 64;
+        var (ybrFrame, expectedRgb) = CreateNeutralYbrFullFrame(rows, columns);
+        var source = CreateYbrPixelData(
+            PhotometricInterpretation.YbrFull,
+            rows,
+            columns,
+            ybrFrame);
+        var compressed = DicomPixelData.Create(
+            CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.JPEG2000Lossless),
+            true);
+        var decoded = CreateRgbInterleavedTarget(source);
+        var pureCodec = new DicomJpeg2000LosslessCodec();
+
+        pureCodec.Encode(source, compressed, CreateSingleLayerLosslessParameters());
+        var nativeCodec = new NativeJpeg2000LosslessCodec();
+        nativeCodec.Decode(compressed, decoded, nativeCodec.GetDefaultParameters());
+
+        Assert.True(ReadUsesMultipleComponentTransform(compressed.GetFrame(0).Data));
+        Assert.Equal(PhotometricInterpretation.YbrRct, compressed.PhotometricInterpretation);
+        Assert.Equal(PlanarConfiguration.Interleaved, compressed.PlanarConfiguration);
+        Assert.Equal(expectedRgb, decoded.GetFrame(0).Data);
+    }
+
+    [Fact]
+    public void Jpeg2000_lossless_ybr_full_422_output_decodes_as_rgb_with_fo_dicom_codecs()
+    {
+        const ushort rows = 64;
+        const ushort columns = 64;
+        var (ybrFrame, expectedRgb) = CreateNeutralYbrFull422Frame(rows, columns);
+        var source = CreateYbrPixelData(
+            PhotometricInterpretation.YbrFull422,
+            rows,
+            columns,
+            ybrFrame);
+        var compressed = DicomPixelData.Create(
+            CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.JPEG2000Lossless),
+            true);
+        var decoded = CreateRgbInterleavedTarget(source);
+        var pureCodec = new DicomJpeg2000LosslessCodec();
+
+        pureCodec.Encode(source, compressed, CreateSingleLayerLosslessParameters());
+        var nativeCodec = new NativeJpeg2000LosslessCodec();
+        nativeCodec.Decode(compressed, decoded, nativeCodec.GetDefaultParameters());
+
+        Assert.True(ReadUsesMultipleComponentTransform(compressed.GetFrame(0).Data));
+        Assert.Equal(PhotometricInterpretation.YbrRct, compressed.PhotometricInterpretation);
+        Assert.Equal(expectedRgb, decoded.GetFrame(0).Data);
     }
 
     [Fact]
@@ -550,6 +651,91 @@ public sealed class Jpeg2000DicomIntegrationTests
         var pixelData = DicomPixelData.Create(dataset, true);
         pixelData.AddFrame(new FellowOakDicom.IO.Buffer.MemoryByteBuffer(new byte[] { 1, 2, 3 }));
         return pixelData;
+    }
+
+    private static DicomPixelData CreateRgbInterleavedTarget(DicomPixelData source)
+    {
+        var dataset = CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian);
+        dataset.AddOrUpdate(DicomTag.PhotometricInterpretation, PhotometricInterpretation.Rgb.Value);
+        dataset.AddOrUpdate(DicomTag.PlanarConfiguration, (ushort)PlanarConfiguration.Interleaved);
+        return DicomPixelData.Create(dataset, true);
+    }
+
+    private static PureJpeg2000Params CreateSingleLayerLosslessParameters()
+    {
+        return new PureJpeg2000Params
+        {
+            Irreversible = false,
+            Rate = 0,
+            RateLevels = Array.Empty<int>(),
+            AllowMCT = true,
+            UpdatePhotometricInterpretation = true
+        };
+    }
+
+    private static DicomPixelData CreateYbrPixelData(
+        PhotometricInterpretation photometricInterpretation,
+        ushort rows,
+        ushort columns,
+        byte[] frame)
+    {
+        var dataset = DicomPixelDataFixtures.CreateBaseDataset(
+            rows,
+            columns,
+            samplesPerPixel: 3,
+            photometricInterpretation,
+            bitsAllocated: 8,
+            bitsStored: 8,
+            highBit: 7,
+            planarConfiguration: PlanarConfiguration.Interleaved,
+            numberOfFrames: 1,
+            transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
+            frame);
+        return DicomPixelData.Create(dataset);
+    }
+
+    private static (byte[] Ybr, byte[] Rgb) CreateNeutralYbrFullFrame(ushort rows, ushort columns)
+    {
+        var pixelCount = rows * columns;
+        var ybr = new byte[pixelCount * 3];
+        var rgb = new byte[pixelCount * 3];
+        for (var pixel = 0; pixel < pixelCount; pixel++)
+        {
+            var value = (byte)((pixel * 17 + 11) % 251);
+            ybr[pixel * 3] = value;
+            ybr[pixel * 3 + 1] = 128;
+            ybr[pixel * 3 + 2] = 128;
+            rgb[pixel * 3] = value;
+            rgb[pixel * 3 + 1] = value;
+            rgb[pixel * 3 + 2] = value;
+        }
+
+        return (ybr, rgb);
+    }
+
+    private static (byte[] Ybr, byte[] Rgb) CreateNeutralYbrFull422Frame(ushort rows, ushort columns)
+    {
+        var pixelCount = rows * columns;
+        var ybr = new byte[pixelCount * 2];
+        var rgb = new byte[pixelCount * 3];
+        for (var pixel = 0; pixel < pixelCount; pixel += 2)
+        {
+            var first = (byte)((pixel * 17 + 11) % 251);
+            var second = (byte)(((pixel + 1) * 17 + 11) % 251);
+            var packed = pixel * 2;
+            ybr[packed] = first;
+            ybr[packed + 1] = second;
+            ybr[packed + 2] = 128;
+            ybr[packed + 3] = 128;
+            rgb[pixel * 3] = first;
+            rgb[pixel * 3 + 1] = first;
+            rgb[pixel * 3 + 2] = first;
+            rgb[(pixel + 1) * 3] = second;
+            rgb[(pixel + 1) * 3 + 1] = second;
+            rgb[(pixel + 1) * 3 + 2] = second;
+        }
+
+        return (ybr, rgb);
     }
 
     private static DicomDataset CreateSignedMonochrome16()

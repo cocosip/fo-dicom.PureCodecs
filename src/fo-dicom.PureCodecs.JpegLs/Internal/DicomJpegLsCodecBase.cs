@@ -31,13 +31,14 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
         {
             var jpegLsParameters = parameters as DicomJpegLsParams ?? new DicomJpegLsParams();
             var nearLossless = TransferSyntax == DicomTransferSyntax.JPEGLSNearLossless ? jpegLsParameters.AllowedError : 0;
+            UpdateCompressedPixelDataMetadata(oldPixelData, newPixelData);
             for (var frame = 0; frame < oldPixelData.NumberOfFrames; frame++)
             {
                 try
                 {
                     var encoded = _frameCodec.EncodeFrame(
                         oldPixelData,
-                        ToArray(oldPixelData.GetFrame(frame)),
+                        NormalizeFrameForEncode(oldPixelData, oldPixelData.GetFrame(frame)),
                         nearLossless,
                         GetInterleaveMode(oldPixelData));
                     newPixelData.AddFrame(new MemoryByteBuffer(PadToEvenLength(encoded)));
@@ -80,6 +81,59 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             var bytes = new byte[buffer.Size];
             Buffer.BlockCopy(buffer.Data, 0, bytes, 0, bytes.Length);
             return bytes;
+        }
+
+        private static byte[] NormalizeFrameForEncode(DicomPixelData pixelData, IByteBuffer frame)
+        {
+            IByteBuffer normalized = new MemoryByteBuffer(ToArray(frame));
+            if (pixelData.PlanarConfiguration == PlanarConfiguration.Planar && pixelData.SamplesPerPixel > 1)
+            {
+                if (pixelData.SamplesPerPixel != 3 || pixelData.BitsStored > 8)
+                {
+                    throw new DicomCodecException("JPEG-LS planar conversion supports only three-component images with BitsStored <= 8.");
+                }
+
+                normalized = PixelDataConverter.PlanarToInterleaved24(normalized);
+            }
+            else if (pixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull)
+            {
+                normalized = PixelDataConverter.YbrFullToRgb(normalized);
+            }
+            else if (pixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull422)
+            {
+                normalized = PixelDataConverter.YbrFull422ToRgb(normalized, pixelData.Width);
+            }
+
+            var expectedLength = pixelData.Width * pixelData.Height * pixelData.SamplesPerPixel * pixelData.BytesAllocated;
+            var bytes = ToArray(normalized);
+            if (bytes.Length == expectedLength)
+            {
+                return bytes;
+            }
+
+            if (bytes.Length < expectedLength)
+            {
+                throw new DicomCodecException("JPEG-LS color conversion produced an incomplete RGB frame.");
+            }
+
+            var trimmed = new byte[expectedLength];
+            Buffer.BlockCopy(bytes, 0, trimmed, 0, trimmed.Length);
+            return trimmed;
+        }
+
+        private static void UpdateCompressedPixelDataMetadata(DicomPixelData source, DicomPixelData target)
+        {
+            if (source.SamplesPerPixel <= 1)
+            {
+                return;
+            }
+
+            target.PlanarConfiguration = PlanarConfiguration.Interleaved;
+            if (source.PhotometricInterpretation == PhotometricInterpretation.YbrFull
+                || source.PhotometricInterpretation == PhotometricInterpretation.YbrFull422)
+            {
+                target.PhotometricInterpretation = PhotometricInterpretation.Rgb;
+            }
         }
 
         private static JpegLsInterleaveMode GetInterleaveMode(DicomPixelData pixelData)

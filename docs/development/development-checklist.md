@@ -184,6 +184,8 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Wire Process 14 encode.
 - [x] Wire Process 14 SV1 decode.
 - [x] Wire Process 14 SV1 encode.
+- [x] Map Process 14 predictors 1 through 7 and Process 14 SV1 predictor 1 from codec parameters.
+- [x] Encode and decode JPEG Lossless point transform through SOS.
 
 ### 4.3 JPEG DCT Core
 
@@ -219,6 +221,7 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Test Process 14 SV1 exact round-trip for 8-bit data.
 - [x] Test Process 14 SV1 exact round-trip for 12-bit data.
 - [x] Test Process 14 SV1 exact round-trip for 16-bit data.
+- [x] Test non-zero point transform in Pure-to-Native and Native-to-Pure directions.
 - [x] Test available Efferent JPEG baseline YBRFull/YBR422 acceptance decode samples.
 - [x] Mark JPEG stubs complete and remove stub-only failure expectations.
 - [x] Update [JPEG design](../design/jpeg-codec-design.md) with implementation notes.
@@ -267,6 +270,8 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Test lossless 8-bit exact round-trip.
 - [x] Test lossless 16-bit exact round-trip.
 - [x] Test lossless RGB exact round-trip where supported.
+- [x] Normalize planar RGB and YBR input before JPEG-LS encoding and validate with the native decoder.
+- [x] Test odd-width `YBR_FULL_422` frame-length handling.
 - [x] Test near-lossless 8-bit tolerance round-trip.
 - [x] Test near-lossless 16-bit tolerance round-trip.
 - [x] Test multi-frame JPEG-LS data.
@@ -427,6 +432,8 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Implement monochrome output path.
 - [x] Implement RGB output path.
 - [x] Implement YBR-related output path where supported.
+- [x] Normalize classic JPEG 2000 `YBR_FULL` and `YBR_FULL_422` input to complete RGB frames before MCT.
+- [x] Validate classic JPEG 2000 YBR output with the native OpenJPEG decoder.
 - [x] Add explicit Phase 1 exclusion for JPEG 2000 Part 2 Multi-component transfer syntaxes `.92` and `.93`.
 - [x] Add explicit unsupported JPIP/JPT behavior.
 - [x] Add unsupported component subsampling failures.

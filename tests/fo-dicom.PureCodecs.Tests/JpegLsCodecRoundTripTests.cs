@@ -65,6 +65,86 @@ public sealed class JpegLsCodecRoundTripTests
     }
 
     [Fact]
+    public void Lossless_planar_rgb_output_decodes_as_interleaved_rgb_with_fo_dicom_codecs()
+    {
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbPlanar(
+            rows: 1,
+            columns: 3,
+            frame: new byte[] { 10, 11, 12, 20, 21, 22, 30, 31, 32 }));
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGLSLossless);
+        var decoded = CreateRgbInterleavedTarget(source);
+
+        var pureCodec = new DicomJpegLsLosslessCodec();
+        pureCodec.Encode(source, compressed, pureCodec.GetDefaultParameters());
+
+        var nativeCodec = new NativeJpegLsLosslessCodec();
+        nativeCodec.Decode(compressed, decoded, nativeCodec.GetDefaultParameters());
+
+        Assert.Equal(PlanarConfiguration.Interleaved, compressed.PlanarConfiguration);
+        Assert.Equal(PhotometricInterpretation.Rgb, compressed.PhotometricInterpretation);
+        Assert.Equal(new byte[] { 10, 20, 30, 11, 21, 31, 12, 22, 32 }, decoded.GetFrame(0).Data);
+    }
+
+    [Fact]
+    public void Lossless_ybr_full_output_decodes_as_rgb_with_fo_dicom_codecs()
+    {
+        var source = CreateYbrPixelData(
+            PhotometricInterpretation.YbrFull,
+            columns: 2,
+            new byte[] { 10, 128, 128, 20, 128, 128 });
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGLSLossless);
+        var decoded = CreateRgbInterleavedTarget(source);
+
+        var pureCodec = new DicomJpegLsLosslessCodec();
+        pureCodec.Encode(source, compressed, pureCodec.GetDefaultParameters());
+
+        var nativeCodec = new NativeJpegLsLosslessCodec();
+        nativeCodec.Decode(compressed, decoded, nativeCodec.GetDefaultParameters());
+
+        Assert.Equal(PhotometricInterpretation.Rgb, compressed.PhotometricInterpretation);
+        Assert.Equal(new byte[] { 10, 10, 10, 20, 20, 20 }, decoded.GetFrame(0).Data);
+    }
+
+    [Fact]
+    public void Lossless_ybr_full_422_output_decodes_as_rgb_with_fo_dicom_codecs()
+    {
+        var source = CreateYbrPixelData(
+            PhotometricInterpretation.YbrFull422,
+            columns: 2,
+            new byte[] { 10, 20, 128, 128 });
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGLSLossless);
+        var decoded = CreateRgbInterleavedTarget(source);
+
+        var pureCodec = new DicomJpegLsLosslessCodec();
+        pureCodec.Encode(source, compressed, pureCodec.GetDefaultParameters());
+
+        var nativeCodec = new NativeJpegLsLosslessCodec();
+        nativeCodec.Decode(compressed, decoded, nativeCodec.GetDefaultParameters());
+
+        Assert.Equal(PhotometricInterpretation.Rgb, compressed.PhotometricInterpretation);
+        Assert.Equal(new byte[] { 10, 10, 10, 20, 20, 20 }, decoded.GetFrame(0).Data);
+    }
+
+    [Fact]
+    public void Lossless_odd_width_ybr_full_422_output_decodes_as_rgb_with_fo_dicom_codecs()
+    {
+        var source = CreateYbrPixelData(
+            PhotometricInterpretation.YbrFull422,
+            columns: 3,
+            new byte[] { 10, 20, 128, 128, 30, 0, 128, 128 });
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGLSLossless);
+        var decoded = CreateRgbInterleavedTarget(source);
+
+        var pureCodec = new DicomJpegLsLosslessCodec();
+        pureCodec.Encode(source, compressed, pureCodec.GetDefaultParameters());
+
+        var nativeCodec = new NativeJpegLsLosslessCodec();
+        nativeCodec.Decode(compressed, decoded, nativeCodec.GetDefaultParameters());
+
+        Assert.Equal(new byte[] { 10, 10, 10, 20, 20, 20, 30, 30, 30 }, decoded.GetFrame(0).Data);
+    }
+
+    [Fact]
     public void Lossless_round_trip_preserves_multi_frame_data()
     {
         AssertLosslessRoundTrip(DicomPixelDataFixtures.CreateMultiFrameMonochrome8());
@@ -205,6 +285,34 @@ public sealed class JpegLsCodecRoundTripTests
         }
 
         return DicomPixelData.Create(dataset, true);
+    }
+
+    private static DicomPixelData CreateRgbInterleavedTarget(DicomPixelData source)
+    {
+        var target = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        target.PhotometricInterpretation = PhotometricInterpretation.Rgb;
+        target.PlanarConfiguration = PlanarConfiguration.Interleaved;
+        return target;
+    }
+
+    private static DicomPixelData CreateYbrPixelData(
+        PhotometricInterpretation photometricInterpretation,
+        ushort columns,
+        byte[] frame)
+    {
+        var dataset = DicomPixelDataFixtures.CreateBaseDataset(
+            rows: 1,
+            columns,
+            samplesPerPixel: 3,
+            photometricInterpretation,
+            bitsAllocated: 8,
+            bitsStored: 8,
+            highBit: 7,
+            planarConfiguration: PlanarConfiguration.Interleaved,
+            numberOfFrames: 1,
+            transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
+            frame);
+        return DicomPixelData.Create(dataset);
     }
 
     private static byte[] CreateUInt16Frame(params int[] samples)
