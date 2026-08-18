@@ -46,6 +46,68 @@ public sealed class Htj2kDisplayValidationToolTests
         }
     }
 
+    [Fact]
+    public void Validation_tool_rejects_lossless_source_with_different_dimensions()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "purecodecs-htj2k-validation-shape-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var sourcePath = Path.Combine(directory, "source.dcm");
+            var compressedPath = Path.Combine(directory, "compressed.dcm");
+            var outputDirectory = Path.Combine(directory, "validation");
+            var fullDataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 64, columns: 64);
+            var fullFrame = DicomPixelData.Create(fullDataset).GetFrame(0).Data;
+            var shortDataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 16, columns: 64, frame: fullFrame[..(16 * 64)]);
+            new DicomFile(shortDataset).Save(sourcePath);
+            var compressedDataset = CloneForTransferSyntax(fullDataset, DicomTransferSyntax.HTJ2KLossless);
+            new DicomHtJpeg2000LosslessCodec().Encode(
+                DicomPixelData.Create(fullDataset),
+                DicomPixelData.Create(compressedDataset, true),
+                new DicomHtJpeg2000Params());
+            new DicomFile(compressedDataset).Save(compressedPath);
+
+            var result = RunValidationTool(sourcePath, compressedPath, outputDirectory);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("dimensions", result.Output, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Validation_tool_requires_explicit_tolerance_for_lossy_syntax()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "purecodecs-htj2k-validation-lossy-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var sourcePath = Path.Combine(directory, "source.dcm");
+            var compressedPath = Path.Combine(directory, "compressed.dcm");
+            var outputDirectory = Path.Combine(directory, "validation");
+            var sourceDataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 32, columns: 32);
+            new DicomFile(sourceDataset).Save(sourcePath);
+            var compressedDataset = CloneForTransferSyntax(sourceDataset, DicomTransferSyntax.HTJ2K);
+            new DicomHtJpeg2000LossyCodec().Encode(
+                DicomPixelData.Create(sourceDataset),
+                DicomPixelData.Create(compressedDataset, true),
+                new DicomHtJpeg2000Params { TargetRatio = 3 });
+            new DicomFile(compressedDataset).Save(compressedPath);
+
+            var result = RunValidationTool(sourcePath, compressedPath, outputDirectory);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("lossy-tolerance", result.Output, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static (int ExitCode, string Output) RunValidationTool(string sourcePath, string compressedPath, string outputDirectory)
     {
         var projectPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "tools", "fo-dicom.PureCodecs.Htj2kValidation", "fo-dicom.PureCodecs.Htj2kValidation.csproj"));

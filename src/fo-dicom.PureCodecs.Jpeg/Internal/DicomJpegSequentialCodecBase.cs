@@ -31,6 +31,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         public void Encode(DicomPixelData oldPixelData, DicomPixelData newPixelData, DicomCodecParams parameters)
         {
             var jpegParameters = JpegCodecParams.From(parameters);
+            ValidateEncodingParameters(jpegParameters);
             ValidateSupportedPixelData(oldPixelData);
 
             for (var frame = 0; frame < oldPixelData.NumberOfFrames; frame++)
@@ -62,7 +63,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                         oldPixelData.Height,
                         oldPixelData.SamplesPerPixel,
                         jpegParameters.Quality,
-                        useYbrFull422: false);
+                        useYbrFull422: oldPixelData.SamplesPerPixel == 3
+                            && jpegParameters.SampleFactor == DicomJpegSampleFactor.SF422);
                     newPixelData.AddFrame(new MemoryByteBuffer(encoded));
                 }
                 catch (Exception exception)
@@ -149,6 +151,19 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 && value != "YBR_FULL_422")
             {
                 throw new DicomCodecException($"JPEG sequential DCT does not support photometric interpretation {value ?? "<missing>"}.");
+            }
+        }
+
+        private static void ValidateEncodingParameters(JpegCodecParams parameters)
+        {
+            if (parameters.SmoothingFactor != 0)
+            {
+                throw new DicomCodecException("JPEG smoothing is not supported by the pure C# encoder.");
+            }
+
+            if (parameters.SampleFactor == DicomJpegSampleFactor.Unknown)
+            {
+                throw new DicomCodecException("JPEG sample factor must be SF444 or SF422.");
             }
         }
 
@@ -241,15 +256,12 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         }
     }
 
-    public class JpegCodecParams : DicomCodecParams
+    public class JpegCodecParams : DicomJpegParams
     {
-        public int Quality { get; set; } = 90;
-
-        public bool ConvertColorspaceToRGB { get; set; } = true;
-
-        public int Predictor { get; set; } = 1;
-
-        public int PointTransform { get; set; }
+        public JpegCodecParams()
+        {
+            ConvertColorspaceToRGB = true;
+        }
 
         public static JpegCodecParams From(DicomCodecParams parameters)
         {
@@ -263,7 +275,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 return new JpegCodecParams
                 {
                     Quality = coreParameters.Quality,
+                    SmoothingFactor = coreParameters.SmoothingFactor,
                     ConvertColorspaceToRGB = coreParameters.ConvertColorspaceToRGB,
+                    SampleFactor = coreParameters.SampleFactor,
                     Predictor = coreParameters.Predictor,
                     PointTransform = coreParameters.PointTransform
                 };

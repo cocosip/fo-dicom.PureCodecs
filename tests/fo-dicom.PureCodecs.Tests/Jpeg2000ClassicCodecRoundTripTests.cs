@@ -12,6 +12,23 @@ namespace FellowOakDicom.PureCodecs.Tests;
 public sealed class Jpeg2000ClassicCodecRoundTripTests
 {
     [Fact]
+    public void Jpeg2000_lossless_forces_reversible_transform_for_core_default_parameters()
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 5, columns: 6);
+        var source = DicomPixelData.Create(dataset);
+        var compressed = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.JPEG2000Lossless), true);
+        var decoded = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
+        var codec = new DicomJpeg2000LosslessCodec();
+        var coreDefaults = new FellowOakDicom.Imaging.Codec.DicomJpeg2000Params();
+
+        codec.Encode(source, compressed, coreDefaults);
+        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
+
+        Assert.Equal((byte)1, ReadCodingStyle(compressed.GetFrame(0).Data).Transformation);
+        Assert.Equal(source.GetFrame(0).Data, decoded.GetFrame(0).Data);
+    }
+
+    [Fact]
     public void Jpeg2000_lossless_round_trips_8_bit_monochrome_exactly()
     {
         var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 5, columns: 6);
@@ -224,5 +241,20 @@ public sealed class Jpeg2000ClassicCodecRoundTripTests
 
         clone.Remove(DicomTag.PixelData);
         return clone;
+    }
+
+    private static Jpeg2000CodingStyleDefault ReadCodingStyle(byte[] codestream)
+    {
+        var reader = new Jpeg2000CodestreamReader(codestream);
+        while (!reader.EndOfData)
+        {
+            var segment = reader.ReadNext();
+            if (segment.Code == Jpeg2000Marker.COD)
+            {
+                return Jpeg2000CodingStyleDefault.Parse(segment);
+            }
+        }
+
+        throw new Xunit.Sdk.XunitException("JPEG 2000 codestream does not contain a COD marker.");
     }
 }

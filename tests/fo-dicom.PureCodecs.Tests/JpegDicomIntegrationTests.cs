@@ -20,8 +20,42 @@ public sealed class JpegDicomIntegrationTests
 
         Assert.Equal(90, parameters.Quality);
         Assert.True(parameters.ConvertColorspaceToRGB);
+        Assert.Equal(0, parameters.SmoothingFactor);
+        Assert.Equal(DicomJpegSampleFactor.SF444, parameters.SampleFactor);
         Assert.Equal(1, parameters.Predictor);
         Assert.Equal(0, parameters.PointTransform);
+    }
+
+    [Fact]
+    public void Process1_maps_core_422_sample_factor_to_jpeg_sampling_factors()
+    {
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 16, columns: 16));
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess1);
+        var codec = new DicomJpegProcess1Codec();
+        var parameters = new DicomJpegParams
+        {
+            Quality = 90,
+            SampleFactor = DicomJpegSampleFactor.SF422
+        };
+
+        codec.Encode(source, compressed, parameters);
+
+        Assert.Equal(new byte[] { 0x21, 0x11, 0x11 }, GetSofSamplingFactors(ToArray(compressed.GetFrame(0))));
+    }
+
+    [Fact]
+    public void Process1_rejects_nonzero_smoothing_instead_of_ignoring_it()
+    {
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 16, columns: 16));
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess1);
+        var codec = new DicomJpegProcess1Codec();
+
+        var exception = Assert.Throws<DicomCodecException>(() => codec.Encode(
+            source,
+            compressed,
+            new DicomJpegParams { SmoothingFactor = 1 }));
+
+        Assert.Contains("smoothing", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

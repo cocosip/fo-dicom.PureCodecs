@@ -27,14 +27,15 @@ return await InteropValidationProgram.RunAsync(args);
 internal static class InteropValidationProgram
 {
     private const int DefaultParallelFormats = 4;
+    private const int DefaultWorkerTimeoutSeconds = 300;
     private const int Jpeg2000LossyRate = 16;
     private const int Jpeg2000LossyMaximumDifference = 58;
 
     private static readonly CodecDefinition[] CodecDefinitions =
     {
         new("rle", DicomTransferSyntax.RLELossless, () => new DicomRleLosslessCodec(), () => new NativeRleCodec(), null, SupportsAny),
-        new("jpeg-process-1", DicomTransferSyntax.JPEGProcess1, () => new DicomJpegProcess1Codec(), () => new NativeJpegProcess1Codec(), 64, SupportsSequentialDct),
-        new("jpeg-process-2-4", DicomTransferSyntax.JPEGProcess2_4, () => new DicomJpegProcess2_4Codec(), () => new NativeJpegProcess4Codec(), 64, SupportsSequentialDct),
+        new("jpeg-process-1", DicomTransferSyntax.JPEGProcess1, () => new DicomJpegProcess1Codec(), () => new NativeJpegProcess1Codec(), 64, SupportsJpegProcess1),
+        new("jpeg-process-2-4", DicomTransferSyntax.JPEGProcess2_4, () => new DicomJpegProcess2_4Codec(), () => new NativeJpegProcess4Codec(), 64, SupportsJpegProcess2_4),
         new("jpeg-lossless-14", DicomTransferSyntax.JPEGProcess14, () => new DicomJpegLossless14Codec(), () => new NativeJpegLossless14Codec(), null, SupportsAny),
         new("jpeg-lossless-14-sv1", DicomTransferSyntax.JPEGProcess14SV1, () => new DicomJpegLossless14SV1Codec(), () => new NativeJpegLossless14Sv1Codec(), null, SupportsAny),
         new("jpeg-ls-lossless", DicomTransferSyntax.JPEGLSLossless, () => new DicomJpegLsLosslessCodec(), () => new NativeJpegLsLosslessCodec(), null, SupportsAny, SupportsNativeJpegLsDecoder),
@@ -54,7 +55,7 @@ internal static class InteropValidationProgram
                 return RunWorker(repositoryRoot, options.WorkerFormat);
             }
 
-            return await RunOrchestratorAsync(repositoryRoot, options.ParallelFormats);
+            return await RunOrchestratorAsync(repositoryRoot, options.ParallelFormats, options.WorkerTimeoutSeconds);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -63,16 +64,16 @@ internal static class InteropValidationProgram
         }
     }
 
-    private static async Task<int> RunOrchestratorAsync(string repositoryRoot, int parallelFormats)
+    private static async Task<int> RunOrchestratorAsync(string repositoryRoot, int parallelFormats, int workerTimeoutSeconds)
     {
-        Console.WriteLine($"INTEROP|start|formats={CodecDefinitions.Length}|parallel={parallelFormats}|root={repositoryRoot}");
+        Console.WriteLine($"INTEROP|start|formats={CodecDefinitions.Length}|parallel={parallelFormats}|workerTimeoutSeconds={workerTimeoutSeconds}|root={repositoryRoot}");
         using var throttle = new SemaphoreSlim(parallelFormats, parallelFormats);
         var tasks = CodecDefinitions.Select(async definition =>
         {
             await throttle.WaitAsync();
             try
             {
-                return await RunWorkerProcessAsync(repositoryRoot, definition.Key);
+                return await RunWorkerProcessAsync(repositoryRoot, definition.Key, workerTimeoutSeconds);
             }
             finally
             {
@@ -100,16 +101,42 @@ internal static class InteropValidationProgram
         return failures == 0 ? 0 : 1;
     }
 
-    private static async Task<WorkerResult> RunWorkerProcessAsync(string repositoryRoot, string format)
+    private static async Task<WorkerResult> RunWorkerProcessAsync(string repositoryRoot, string format, int workerTimeoutSeconds)
     {
         var startInfo = CreateWorkerStartInfo(repositoryRoot, format);
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Unable to start interop worker {format}.");
         var outputTask = process.StandardOutput.ReadToEndAsync();
         var errorTask = process.StandardError.ReadToEndAsync();
         var stopwatch = Stopwatch.StartNew();
-        await process.WaitForExitAsync();
+        var timedOut = false;
+        using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(workerTimeoutSeconds)))
+        {
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token);
+            }
+            catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+            {
+                if (!process.HasExited)
+                {
+                    timedOut = true;
+                    process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync();
+                }
+            }
+        }
+
         stopwatch.Stop();
-        return new WorkerResult(format, process.ExitCode, stopwatch.ElapsedMilliseconds, await outputTask, await errorTask);
+        var output = await outputTask;
+        var error = await errorTask;
+        if (timedOut)
+        {
+            error = string.Concat(error, error.EndsWith(Environment.NewLine, StringComparison.Ordinal) || error.Length == 0 ? string.Empty : Environment.NewLine,
+                $"INTEROP|timeout|format={format}|timeoutSeconds={workerTimeoutSeconds}");
+            return new WorkerResult(format, -1, stopwatch.ElapsedMilliseconds, output, error);
+        }
+
+        return new WorkerResult(format, process.ExitCode, stopwatch.ElapsedMilliseconds, output, error);
     }
 
     private static ProcessStartInfo CreateWorkerStartInfo(string repositoryRoot, string format)
@@ -149,6 +176,7 @@ internal static class InteropValidationProgram
                 continue;
             }
 
+            Console.WriteLine($"INTEROP|case|fixture={Path.GetFileName(fixturePath)}|format={definition.Key}|bitsAllocated={source.BitsAllocated}|bitsStored={source.BitsStored}|samplesPerPixel={source.SamplesPerPixel}|frames={source.NumberOfFrames}");
             ValidatePureEncodeNativeDecode(source, fixturePath, definition, definition.SupportsNativeDecoder(source));
             ValidateNativeEncodePureDecode(source, fixturePath, definition);
             executed++;
@@ -396,7 +424,12 @@ internal static class InteropValidationProgram
 
     private static bool SupportsAny(DicomPixelData source) => source.BitsAllocated is 8 or 16 && source.SamplesPerPixel is 1 or 3;
 
-    private static bool SupportsSequentialDct(DicomPixelData source) => source.BitsAllocated == 8 && source.BitsStored == 8 && source.SamplesPerPixel is 1 or 3;
+    private static bool SupportsJpegProcess1(DicomPixelData source) =>
+        source.BitsAllocated == 8 && source.BitsStored == 8 && source.SamplesPerPixel is 1 or 3;
+
+    private static bool SupportsJpegProcess2_4(DicomPixelData source) =>
+        SupportsJpegProcess1(source)
+        || (source.BitsAllocated == 16 && source.BitsStored == 12 && source.SamplesPerPixel == 1);
 
     private static bool SupportsJpeg2000(DicomPixelData source) => source.BitsAllocated is 8 or 16 && source.SamplesPerPixel is 1 or 3;
 
@@ -450,13 +483,14 @@ internal static class InteropValidationProgram
 
     private sealed record WorkerResult(string Format, int ExitCode, long ElapsedMilliseconds, string Output, string Error);
 
-    private sealed record Options(string? WorkerFormat, string? RepositoryRoot, int ParallelFormats)
+    private sealed record Options(string? WorkerFormat, string? RepositoryRoot, int ParallelFormats, int WorkerTimeoutSeconds)
     {
         public static Options Parse(string[] args)
         {
             string? workerFormat = null;
             string? repositoryRoot = null;
             var parallelFormats = DefaultParallelFormats;
+            var workerTimeoutSeconds = DefaultWorkerTimeoutSeconds;
             for (var index = 0; index < args.Length; index++)
             {
                 switch (args[index])
@@ -474,12 +508,19 @@ internal static class InteropValidationProgram
                         }
 
                         break;
+                    case "--worker-timeout-seconds":
+                        if (!int.TryParse(NextValue(args, ref index, "--worker-timeout-seconds"), out workerTimeoutSeconds) || workerTimeoutSeconds < 1)
+                        {
+                            throw new ArgumentException("--worker-timeout-seconds must be a positive integer.");
+                        }
+
+                        break;
                     default:
-                        throw new ArgumentException($"Unknown argument '{args[index]}'. Use --worker <format>, --root <path>, or --parallel <count>.");
+                        throw new ArgumentException($"Unknown argument '{args[index]}'. Use --worker <format>, --root <path>, --parallel <count>, or --worker-timeout-seconds <count>.");
                 }
             }
 
-            return new Options(workerFormat, repositoryRoot, parallelFormats);
+            return new Options(workerFormat, repositoryRoot, parallelFormats, workerTimeoutSeconds);
         }
 
         private static string NextValue(string[] args, ref int index, string option)

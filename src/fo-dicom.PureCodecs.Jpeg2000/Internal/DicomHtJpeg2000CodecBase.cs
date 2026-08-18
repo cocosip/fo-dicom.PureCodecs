@@ -35,11 +35,25 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var progressionOrder = ResolveProgressionOrder(htParameters);
             var tolerance = ResolveTolerance(htParameters);
 
+            if (oldPixelData.SamplesPerPixel == 3)
+            {
+                newPixelData.PlanarConfiguration = PlanarConfiguration.Interleaved;
+            }
+
             for (var frame = 0; frame < oldPixelData.NumberOfFrames; frame++)
             {
                 try
                 {
-                    var encoded = _frameCodec.EncodeFrame(oldPixelData, oldPixelData.GetFrame(frame).ToArrayCopy(), _lossy, tolerance, progressionOrder);
+                    var sourceFrame = oldPixelData.GetFrame(frame).ToArrayCopy();
+                    if (oldPixelData.SamplesPerPixel == 3 && oldPixelData.PlanarConfiguration == PlanarConfiguration.Planar)
+                    {
+                        sourceFrame = Jpeg2000FrameLayout.PlanarToInterleaved(
+                            sourceFrame,
+                            oldPixelData.Width * oldPixelData.Height,
+                            oldPixelData.BitsAllocated / 8);
+                    }
+
+                    var encoded = _frameCodec.EncodeFrame(oldPixelData, sourceFrame, _lossy, tolerance, progressionOrder);
                     newPixelData.AddFrame(new MemoryByteBuffer(encoded));
                 }
                 catch (Exception exception)
@@ -66,6 +80,14 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 try
                 {
                     var decoded = _frameCodec.DecodeFrame(newPixelData, oldPixelData.GetFrame(frame).ToArrayCopy());
+                    if (newPixelData.SamplesPerPixel == 3 && newPixelData.PlanarConfiguration == PlanarConfiguration.Planar)
+                    {
+                        decoded = Jpeg2000FrameLayout.InterleavedToPlanar(
+                            decoded,
+                            newPixelData.Width * newPixelData.Height,
+                            newPixelData.BitsAllocated / 8);
+                    }
+
                     newPixelData.AddFrame(new MemoryByteBuffer(decoded));
                 }
                 catch (Exception exception)

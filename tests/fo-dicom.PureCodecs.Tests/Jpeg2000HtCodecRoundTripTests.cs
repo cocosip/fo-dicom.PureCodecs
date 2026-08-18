@@ -9,6 +9,27 @@ namespace FellowOakDicom.PureCodecs.Tests;
 
 public sealed class Jpeg2000HtCodecRoundTripTests
 {
+    [Theory]
+    [InlineData(8)]
+    [InlineData(16)]
+    public void Htj2k_lossless_round_trips_planar_rgb_exactly(int bitsAllocated)
+    {
+        var dataset = bitsAllocated == 8
+            ? DicomPixelDataFixtures.CreateRgbPlanar(rows: 2, columns: 3)
+            : CreateRgbPlanar16(rows: 2, columns: 3);
+        var source = DicomPixelData.Create(dataset);
+        var compressed = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.HTJ2KLossless), true);
+        var decoded = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
+        var codec = new DicomHtJpeg2000LosslessCodec();
+
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
+
+        Assert.Equal(PlanarConfiguration.Interleaved, compressed.PlanarConfiguration);
+        Assert.Equal(PlanarConfiguration.Planar, decoded.PlanarConfiguration);
+        Assert.Equal(source.GetFrame(0).Data, decoded.GetFrame(0).Data);
+    }
+
     [Fact]
     public void Htj2k_lossless_round_trips_8_bit_monochrome_exactly()
     {
@@ -405,5 +426,34 @@ public sealed class Jpeg2000HtCodecRoundTripTests
 
         clone.Remove(DicomTag.PixelData);
         return clone;
+    }
+
+    private static DicomDataset CreateRgbPlanar16(ushort rows, ushort columns)
+    {
+        var pixelCount = rows * columns;
+        var frame = new byte[pixelCount * 3 * 2];
+        for (var component = 0; component < 3; component++)
+        {
+            for (var pixel = 0; pixel < pixelCount; pixel++)
+            {
+                var sample = (ushort)(component * 10000 + pixel * 997 + 123);
+                var offset = (component * pixelCount + pixel) * 2;
+                frame[offset] = (byte)sample;
+                frame[offset + 1] = (byte)(sample >> 8);
+            }
+        }
+
+        return DicomPixelDataFixtures.CreateBaseDataset(
+            rows,
+            columns,
+            samplesPerPixel: 3,
+            photometricInterpretation: PhotometricInterpretation.Rgb,
+            bitsAllocated: 16,
+            bitsStored: 16,
+            highBit: 15,
+            planarConfiguration: PlanarConfiguration.Planar,
+            numberOfFrames: 1,
+            transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
+            frame);
     }
 }

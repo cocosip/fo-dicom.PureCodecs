@@ -105,10 +105,10 @@ Known phase 1 limitations are tracked in [`docs/development/phase-1-known-limita
 
 ## Native Interoperability Validation
 
-The Native/Pure codec interoperability matrix is a standalone process-isolated runner, not an xUnit test. It runs one worker process per transfer syntax and defaults to four concurrent formats:
+The Native/Pure codec interoperability matrix is a standalone process-isolated runner, not an xUnit test. It covers the nine RLE, JPEG, JPEG-LS, and classic JPEG 2000 transfer syntaxes, including 12-bit monochrome JPEG Process 2/4. HTJ2K is intentionally excluded because the current `fo-dicom.Codecs` HTJ2K implementation is not used as a standards-compliance baseline. The runner starts one worker process per transfer syntax, defaults to four concurrent formats, and terminates a worker process tree after five minutes:
 
 ```powershell
-dotnet run --project tools/fo-dicom.PureCodecs.InteropValidation -- --parallel 4
+dotnet run --project tools/fo-dicom.PureCodecs.InteropValidation -- --parallel 4 --worker-timeout-seconds 300
 ```
 
 Run one format directly while diagnosing a codec:

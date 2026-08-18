@@ -38,7 +38,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public void Encode(DicomPixelData oldPixelData, DicomPixelData newPixelData, DicomCodecParams parameters)
         {
             var jpeg2000Parameters = DicomJpeg2000Params.From(parameters ?? GetDefaultParameters());
-            var irreversible = jpeg2000Parameters.Irreversible;
+            var irreversible = TransferSyntax == DicomTransferSyntax.JPEG2000Lossy
+                && jpeg2000Parameters.Irreversible;
             var tolerance = ResolveTolerance(jpeg2000Parameters);
             var layerRates = ResolveLayerRates(jpeg2000Parameters, oldPixelData.BitsStored, oldPixelData.BitsAllocated);
             var layerCount = layerRates.Length;
@@ -262,7 +263,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             IByteBuffer normalized = new MemoryByteBuffer(frame);
             if (pixelData.SamplesPerPixel == 3 && pixelData.PlanarConfiguration == PlanarConfiguration.Planar)
             {
-                normalized = new MemoryByteBuffer(PlanarRgbToInterleaved(frame, pixelData.Width * pixelData.Height));
+                normalized = new MemoryByteBuffer(Jpeg2000FrameLayout.PlanarToInterleaved(
+                    frame,
+                    pixelData.Width * pixelData.Height,
+                    pixelData.BitsAllocated / 8));
             }
 
             if (pixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull)
@@ -295,46 +299,13 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         {
             if (targetPixelData.SamplesPerPixel == 3 && targetPixelData.PlanarConfiguration == PlanarConfiguration.Planar)
             {
-                return InterleavedRgbToPlanar(frame, targetPixelData.Width * targetPixelData.Height);
+                return Jpeg2000FrameLayout.InterleavedToPlanar(
+                    frame,
+                    targetPixelData.Width * targetPixelData.Height,
+                    targetPixelData.BitsAllocated / 8);
             }
 
             return frame;
-        }
-
-        private static byte[] PlanarRgbToInterleaved(byte[] planar, int pixelCount)
-        {
-            if (planar.Length != pixelCount * 3)
-            {
-                throw new DicomCodecException("JPEG 2000 planar RGB frame length does not match pixel count.");
-            }
-
-            var interleaved = new byte[planar.Length];
-            for (var pixel = 0; pixel < pixelCount; pixel++)
-            {
-                interleaved[pixel * 3] = planar[pixel];
-                interleaved[pixel * 3 + 1] = planar[pixelCount + pixel];
-                interleaved[pixel * 3 + 2] = planar[pixelCount * 2 + pixel];
-            }
-
-            return interleaved;
-        }
-
-        private static byte[] InterleavedRgbToPlanar(byte[] interleaved, int pixelCount)
-        {
-            if (interleaved.Length != pixelCount * 3)
-            {
-                throw new DicomCodecException("JPEG 2000 interleaved RGB frame length does not match pixel count.");
-            }
-
-            var planar = new byte[interleaved.Length];
-            for (var pixel = 0; pixel < pixelCount; pixel++)
-            {
-                planar[pixel] = interleaved[pixel * 3];
-                planar[pixelCount + pixel] = interleaved[pixel * 3 + 1];
-                planar[pixelCount * 2 + pixel] = interleaved[pixel * 3 + 2];
-            }
-
-            return planar;
         }
 
     }

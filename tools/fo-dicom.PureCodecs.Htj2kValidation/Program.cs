@@ -8,13 +8,26 @@ using FellowOakDicom.PureCodecs.Jpeg2000.Internal;
 
 if (args.Length < 3)
 {
-    Console.Error.WriteLine("Usage: htj2k-validation <source.dcm> <compressed-htj2k.dcm> <output-directory>");
+    Console.Error.WriteLine("Usage: htj2k-validation <source.dcm> <compressed-htj2k.dcm> <output-directory> [--lossy-tolerance <samples>]");
     return 2;
 }
 
 var sourcePath = args[0];
 var compressedPath = args[1];
 var outputDirectory = args[2];
+int? lossyTolerance = null;
+for (var index = 3; index < args.Length; index++)
+{
+    if (args[index] != "--lossy-tolerance" || ++index >= args.Length
+        || !int.TryParse(args[index], out var parsedTolerance) || parsedTolerance < 0)
+    {
+        Console.Error.WriteLine("VALIDATION|fail|--lossy-tolerance requires a non-negative integer.");
+        return 2;
+    }
+
+    lossyTolerance = parsedTolerance;
+}
+
 Directory.CreateDirectory(outputDirectory);
 
 new DicomSetupBuilder()
@@ -30,6 +43,11 @@ try
     var compressedFile = DicomFile.Open(compressedPath, FileReadOption.ReadAll);
     var sourcePixelData = DicomPixelData.Create(sourceFile.Dataset);
     var compressedPixelData = DicomPixelData.Create(compressedFile.Dataset);
+    var lossless = IsLosslessSyntax(compressedPixelData.Syntax);
+    if (!lossless && !lossyTolerance.HasValue)
+    {
+        throw new InvalidOperationException("HTJ2K lossy validation requires --lossy-tolerance <samples>.");
+    }
 
     var structure = ValidateStructure(compressedFile, compressedPixelData);
     Console.WriteLine($"STRUCTURE|ok|{structure}");
@@ -37,8 +55,11 @@ try
     var decodedDataset = new DicomTranscoder(compressedPixelData.Syntax, DicomTransferSyntax.ExplicitVRLittleEndian)
         .Transcode(compressedFile.Dataset);
     var decodedPixelData = DicomPixelData.Create(decodedDataset);
+    ValidateComparablePixelData(sourcePixelData, decodedPixelData);
     var maxDiff = MaxSampleDifference(sourcePixelData, decodedPixelData);
-    Console.WriteLine($"NATIVE-DECODE|ok|maxDiff={maxDiff}|decodedSyntax={decodedPixelData.Syntax.UID.UID}");
+    var tolerance = lossless ? 0 : lossyTolerance!.Value;
+    var decodePassed = maxDiff <= tolerance;
+    Console.WriteLine($"NATIVE-DECODE|{(decodePassed ? "ok" : "fail")}|maxDiff={maxDiff}|tolerance={tolerance}|decodedSyntax={decodedPixelData.Syntax.UID.UID}");
 
     var sourceRender = RenderGrayscale(sourcePixelData, preferDicomWindow: true);
     var decodedRender = RenderGrayscale(decodedPixelData, preferDicomWindow: true);
@@ -53,7 +74,7 @@ try
     Console.WriteLine($"RENDER|ok|sourceHash={sourceHash}|decodedHash={decodedHash}|maxDisplayDiff={MaxByteDifference(sourceRender, decodedRender)}|sourceBmp={Path.Combine(outputDirectory, "source.bmp")}|decodedBmp={Path.Combine(outputDirectory, "decoded.bmp")}");
     Console.WriteLine($"AUTO-RENDER|ok|sourceHash={Sha256(sourceAutoRender)}|decodedHash={Sha256(decodedAutoRender)}|maxDisplayDiff={MaxByteDifference(sourceAutoRender, decodedAutoRender)}|sourceBmp={Path.Combine(outputDirectory, "source_auto.bmp")}|decodedBmp={Path.Combine(outputDirectory, "decoded_auto.bmp")}");
 
-    return maxDiff == 0 || !IsLosslessSyntax(compressedPixelData.Syntax) ? 0 : 1;
+    return decodePassed ? 0 : 1;
 }
 catch (Exception exception) when (exception is not OperationCanceledException)
 {
@@ -241,7 +262,7 @@ static int MaxSampleDifference(DicomPixelData expected, DicomPixelData actual)
         var expectedFrame = ToArray(expected.GetFrame(frameIndex));
         var actualFrame = ToArray(actual.GetFrame(frameIndex));
         var bytesPerSample = Math.Max(1, expected.BitsAllocated / 8);
-        for (var offset = 0; offset + bytesPerSample <= Math.Min(expectedFrame.Length, actualFrame.Length); offset += bytesPerSample)
+        for (var offset = 0; offset < expectedFrame.Length; offset += bytesPerSample)
         {
             var expectedSample = ReadSample(expectedFrame, offset, bytesPerSample, expected.PixelRepresentation);
             var actualSample = ReadSample(actualFrame, offset, bytesPerSample, actual.PixelRepresentation);
@@ -250,6 +271,38 @@ static int MaxSampleDifference(DicomPixelData expected, DicomPixelData actual)
     }
 
     return max;
+}
+
+static void ValidateComparablePixelData(DicomPixelData expected, DicomPixelData actual)
+{
+    if (expected.NumberOfFrames != actual.NumberOfFrames)
+    {
+        throw new InvalidOperationException($"Decoded frame count {actual.NumberOfFrames} differs from source frame count {expected.NumberOfFrames}.");
+    }
+
+    if (expected.Width != actual.Width || expected.Height != actual.Height)
+    {
+        throw new InvalidOperationException($"Decoded dimensions {actual.Width}x{actual.Height} differ from source dimensions {expected.Width}x{expected.Height}.");
+    }
+
+    if (expected.BitsAllocated != actual.BitsAllocated
+        || expected.BitsStored != actual.BitsStored
+        || expected.HighBit != actual.HighBit
+        || expected.PixelRepresentation != actual.PixelRepresentation
+        || expected.SamplesPerPixel != actual.SamplesPerPixel)
+    {
+        throw new InvalidOperationException("Decoded bit depth, representation, or sample metadata differs from the source.");
+    }
+
+    for (var frame = 0; frame < expected.NumberOfFrames; frame++)
+    {
+        var expectedLength = expected.GetFrame(frame).Size;
+        var actualLength = actual.GetFrame(frame).Size;
+        if (expectedLength != actualLength)
+        {
+            throw new InvalidOperationException($"Decoded frame {frame} length {actualLength} differs from source length {expectedLength}.");
+        }
+    }
 }
 
 static int ReadSample(byte[] bytes, int offset, int bytesPerSample, PixelRepresentation pixelRepresentation)
