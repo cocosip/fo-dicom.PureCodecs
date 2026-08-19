@@ -120,10 +120,35 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         public void BuildCodeBlocks(int codeBlockWidth, int codeBlockHeight)
         {
-            BuildCodeBlocks(codeBlockWidth, codeBlockHeight, codingStyle: null);
+            BuildCodeBlocksCore(codeBlockWidth, codeBlockHeight, false, Array.Empty<byte>());
         }
 
         public void BuildCodeBlocks(int codeBlockWidth, int codeBlockHeight, Jpeg2000CodingStyle? codingStyle)
+        {
+            BuildCodeBlocksCore(
+                codeBlockWidth,
+                codeBlockHeight,
+                codingStyle != null && codingStyle.HasPrecinctSizes,
+                codingStyle?.PrecinctSizes ?? Array.Empty<byte>());
+        }
+
+        public void BuildCodeBlocks(
+            int codeBlockWidth,
+            int codeBlockHeight,
+            Jpeg2000ResolvedCodingStyle codingStyle)
+        {
+            BuildCodeBlocksCore(
+                codeBlockWidth,
+                codeBlockHeight,
+                codingStyle.HasPrecinctSizes,
+                codingStyle.PrecinctSizes);
+        }
+
+        private void BuildCodeBlocksCore(
+            int codeBlockWidth,
+            int codeBlockHeight,
+            bool hasPrecinctSizes,
+            IReadOnlyList<byte> precinctSizes)
         {
             if (_bands.Count != 0)
             {
@@ -134,7 +159,12 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             for (var resolution = 0; resolution <= Levels; resolution++)
             {
                 var subbands = Jpeg2000StandardGeometry.GetSubbands(Width, Height, X0, Y0, Levels, resolution);
-                var precinctMap = CreatePrecinctMap(codingStyle, resolution, Jpeg2000StandardGeometry.GetResolution(Width, Height, X0, Y0, Levels, resolution), out var precinctInfo);
+                var precinctMap = CreatePrecinctMap(
+                    hasPrecinctSizes,
+                    precinctSizes,
+                    resolution,
+                    Jpeg2000StandardGeometry.GetResolution(Width, Height, X0, Y0, Levels, resolution),
+                    out var precinctInfo);
                 _bands.Add(resolution, precinctMap);
 
                 foreach (var subband in subbands)
@@ -216,18 +246,19 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         }
 
         private static Dictionary<int, List<PrecinctBand>> CreatePrecinctMap(
-            Jpeg2000CodingStyle? codingStyle,
+            bool hasPrecinctSizes,
+            IReadOnlyList<byte> precinctSizes,
             int resolution,
             ResolutionGeometry resolutionGeometry,
             out PrecinctInfo precinctInfo)
         {
-            if (codingStyle == null || !codingStyle.HasPrecinctSizes || resolution >= codingStyle.PrecinctSizes.Count)
+            if (!hasPrecinctSizes || resolution >= precinctSizes.Count)
             {
                 precinctInfo = CreatePrecinctInfo(resolutionGeometry, 15, 15);
             }
             else
             {
-                var value = codingStyle.PrecinctSizes[resolution];
+                var value = precinctSizes[resolution];
                 precinctInfo = CreatePrecinctInfo(resolutionGeometry, value & 0x0F, (value >> 4) & 0x0F);
             }
 

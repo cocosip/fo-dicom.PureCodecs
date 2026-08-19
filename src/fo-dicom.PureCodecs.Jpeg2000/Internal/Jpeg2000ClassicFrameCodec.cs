@@ -68,6 +68,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                     parsed.Size,
                     parsedTile.CodingStyle,
                     parsedTile.Quantization,
+                    parsedTile.ComponentCodingStyles,
+                    parsedTile.ComponentQuantizations,
+                    parsedTile.RegionOfInterestShifts,
+                    parsedTile.ProgressionChanges,
+                    parsedTile.PackedPacketHeaders,
                     parsedTile.TileData,
                     tile);
                 CopyTileToFrame(frame, tileFrame, targetPixelData.Width, bytesPerPixel, parsed.Size, tile);

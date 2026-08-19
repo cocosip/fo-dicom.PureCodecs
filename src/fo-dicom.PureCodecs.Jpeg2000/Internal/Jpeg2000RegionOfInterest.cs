@@ -17,12 +17,13 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         public bool IsSupportedForDecoding
         {
-            get { return false; }
+            get { return true; }
         }
 
+        [System.Obsolete("RGN Maxshift decoding is supported.")]
         public string UnsupportedBehavior
         {
-            get { return "JPEG 2000 ROI marker is parsed but unsupported for decoding in the current managed pipeline."; }
+            get { return string.Empty; }
         }
 
         public static Jpeg2000RegionOfInterest Parse(Jpeg2000MarkerSegment segment, int componentCount)

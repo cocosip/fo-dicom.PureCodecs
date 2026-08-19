@@ -8,13 +8,112 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
     {
         public byte[] Decode(DicomPixelData targetPixelData, Jpeg2000SizeSegment siz, Jpeg2000CodingStyleDefault cod, Jpeg2000QuantizationDefault qcd, byte[] tileData)
         {
+            return Decode(
+                targetPixelData,
+                siz,
+                cod,
+                qcd,
+                ResolveDefaultCodingStyles(siz, cod),
+                ResolveDefaultQuantizations(siz, qcd),
+                tileData);
+        }
+
+        public byte[] Decode(
+            DicomPixelData targetPixelData,
+            Jpeg2000SizeSegment siz,
+            Jpeg2000CodingStyleDefault cod,
+            Jpeg2000QuantizationDefault qcd,
+            IReadOnlyList<Jpeg2000ResolvedCodingStyle> componentCodingStyles,
+            IReadOnlyList<Jpeg2000ResolvedQuantization> componentQuantizations,
+            byte[] tileData)
+        {
+            return Decode(
+                targetPixelData,
+                siz,
+                cod,
+                qcd,
+                componentCodingStyles,
+                componentQuantizations,
+                Array.Empty<Jpeg2000ProgressionOrderChange>(),
+                tileData);
+        }
+
+        public byte[] Decode(
+            DicomPixelData targetPixelData,
+            Jpeg2000SizeSegment siz,
+            Jpeg2000CodingStyleDefault cod,
+            Jpeg2000QuantizationDefault qcd,
+            IReadOnlyList<Jpeg2000ResolvedCodingStyle> componentCodingStyles,
+            IReadOnlyList<Jpeg2000ResolvedQuantization> componentQuantizations,
+            IReadOnlyList<Jpeg2000ProgressionOrderChange> progressionChanges,
+            byte[] tileData)
+        {
+            return Decode(
+                targetPixelData,
+                siz,
+                cod,
+                qcd,
+                componentCodingStyles,
+                componentQuantizations,
+                new int[siz.Components.Count],
+                progressionChanges,
+                tileData);
+        }
+
+        public byte[] Decode(
+            DicomPixelData targetPixelData,
+            Jpeg2000SizeSegment siz,
+            Jpeg2000CodingStyleDefault cod,
+            Jpeg2000QuantizationDefault qcd,
+            IReadOnlyList<Jpeg2000ResolvedCodingStyle> componentCodingStyles,
+            IReadOnlyList<Jpeg2000ResolvedQuantization> componentQuantizations,
+            IReadOnlyList<int> regionOfInterestShifts,
+            IReadOnlyList<Jpeg2000ProgressionOrderChange> progressionChanges,
+            byte[] tileData)
+        {
+            return Decode(
+                targetPixelData,
+                siz,
+                cod,
+                qcd,
+                componentCodingStyles,
+                componentQuantizations,
+                regionOfInterestShifts,
+                progressionChanges,
+                null,
+                tileData);
+        }
+
+        public byte[] Decode(
+            DicomPixelData targetPixelData,
+            Jpeg2000SizeSegment siz,
+            Jpeg2000CodingStyleDefault cod,
+            Jpeg2000QuantizationDefault qcd,
+            IReadOnlyList<Jpeg2000ResolvedCodingStyle> componentCodingStyles,
+            IReadOnlyList<Jpeg2000ResolvedQuantization> componentQuantizations,
+            IReadOnlyList<int> regionOfInterestShifts,
+            IReadOnlyList<Jpeg2000ProgressionOrderChange> progressionChanges,
+            byte[]? packedPacketHeaders,
+            byte[] tileData)
+        {
             var image = Jpeg2000ImageModel.FromSizeSegment(siz);
             if (image.Tiles.Count != 1)
             {
                 throw Jpeg2000Binary.CreateException("JPEG 2000 multi-tile codestream requires tile-indexed decoding.");
             }
 
-            return DecodeTile(targetPixelData, siz, cod, qcd, tileData, image.Tiles[0]);
+            return DecodeTile(
+                targetPixelData,
+                siz,
+                cod,
+                qcd,
+                componentCodingStyles,
+                componentQuantizations,
+                regionOfInterestShifts,
+                progressionChanges,
+                packedPacketHeaders,
+                tileData,
+                image.Tiles[0]);
         }
 
         public byte[] DecodeTile(
@@ -25,30 +124,154 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             byte[] tileData,
             Jpeg2000TileModel tile)
         {
-            Validate(targetPixelData, siz, cod);
+            return DecodeTile(
+                targetPixelData,
+                siz,
+                cod,
+                qcd,
+                ResolveDefaultCodingStyles(siz, cod),
+                ResolveDefaultQuantizations(siz, qcd),
+                tileData,
+                tile);
+        }
 
-            var components = CreateTileComponents(siz, cod, tile);
+        public byte[] DecodeTile(
+            DicomPixelData targetPixelData,
+            Jpeg2000SizeSegment siz,
+            Jpeg2000CodingStyleDefault cod,
+            Jpeg2000QuantizationDefault qcd,
+            IReadOnlyList<Jpeg2000ResolvedCodingStyle> componentCodingStyles,
+            IReadOnlyList<Jpeg2000ResolvedQuantization> componentQuantizations,
+            byte[] tileData,
+            Jpeg2000TileModel tile)
+        {
+            return DecodeTile(
+                targetPixelData,
+                siz,
+                cod,
+                qcd,
+                componentCodingStyles,
+                componentQuantizations,
+                Array.Empty<Jpeg2000ProgressionOrderChange>(),
+                tileData,
+                tile);
+        }
+
+        public byte[] DecodeTile(
+            DicomPixelData targetPixelData,
+            Jpeg2000SizeSegment siz,
+            Jpeg2000CodingStyleDefault cod,
+            Jpeg2000QuantizationDefault qcd,
+            IReadOnlyList<Jpeg2000ResolvedCodingStyle> componentCodingStyles,
+            IReadOnlyList<Jpeg2000ResolvedQuantization> componentQuantizations,
+            IReadOnlyList<Jpeg2000ProgressionOrderChange> progressionChanges,
+            byte[] tileData,
+            Jpeg2000TileModel tile)
+        {
+            return DecodeTile(
+                targetPixelData,
+                siz,
+                cod,
+                qcd,
+                componentCodingStyles,
+                componentQuantizations,
+                new int[siz.Components.Count],
+                progressionChanges,
+                tileData,
+                tile);
+        }
+
+        public byte[] DecodeTile(
+            DicomPixelData targetPixelData,
+            Jpeg2000SizeSegment siz,
+            Jpeg2000CodingStyleDefault cod,
+            Jpeg2000QuantizationDefault qcd,
+            IReadOnlyList<Jpeg2000ResolvedCodingStyle> componentCodingStyles,
+            IReadOnlyList<Jpeg2000ResolvedQuantization> componentQuantizations,
+            IReadOnlyList<int> regionOfInterestShifts,
+            IReadOnlyList<Jpeg2000ProgressionOrderChange> progressionChanges,
+            byte[] tileData,
+            Jpeg2000TileModel tile)
+        {
+            return DecodeTile(
+                targetPixelData,
+                siz,
+                cod,
+                qcd,
+                componentCodingStyles,
+                componentQuantizations,
+                regionOfInterestShifts,
+                progressionChanges,
+                null,
+                tileData,
+                tile);
+        }
+
+        public byte[] DecodeTile(
+            DicomPixelData targetPixelData,
+            Jpeg2000SizeSegment siz,
+            Jpeg2000CodingStyleDefault cod,
+            Jpeg2000QuantizationDefault qcd,
+            IReadOnlyList<Jpeg2000ResolvedCodingStyle> componentCodingStyles,
+            IReadOnlyList<Jpeg2000ResolvedQuantization> componentQuantizations,
+            IReadOnlyList<int> regionOfInterestShifts,
+            IReadOnlyList<Jpeg2000ProgressionOrderChange> progressionChanges,
+            byte[]? packedPacketHeaders,
+            byte[] tileData,
+            Jpeg2000TileModel tile)
+        {
+            Validate(targetPixelData, siz, cod);
+            ValidateComponentParameters(siz, componentCodingStyles, componentQuantizations);
+            if (regionOfInterestShifts == null || regionOfInterestShifts.Count != siz.Components.Count)
+            {
+                throw Jpeg2000Binary.CreateException("JPEG 2000 resolved RGN component count does not match SIZ.");
+            }
+
+            var components = CreateTileComponents(siz, componentCodingStyles, tile);
+            var resolutionCount = 0;
+            for (var component = 0; component < componentCodingStyles.Count; component++)
+            {
+                resolutionCount = Math.Max(
+                    resolutionCount,
+                    componentCodingStyles[component].DecompositionLevels + 1);
+            }
+
             var packetDecoder = new Jpeg2000StandardPacketDecoder(
                 tileData,
                 components.Length,
                 cod.LayerCount,
-                cod.DecompositionLevels + 1,
+                resolutionCount,
                 cod.ProgressionOrder,
                 components,
                 cod.CodeBlockWidth,
                 cod.CodeBlockHeight,
                 cod.CodeBlockStyle,
-                cod);
+                cod,
+                componentCodingStyles,
+                progressionChanges,
+                packedPacketHeaders);
             packetDecoder.Decode();
 
-            foreach (var component in components)
+            for (var component = 0; component < components.Length; component++)
             {
-                DecodeComponent(component, cod, qcd);
+                DecodeComponent(
+                    components[component],
+                    componentCodingStyles[component],
+                    componentQuantizations[component],
+                    regionOfInterestShifts[component]);
             }
 
             if (cod.UsesMultipleComponentTransform && components.Length == 3)
             {
-                if (cod.Transformation == 0)
+                var transform = componentCodingStyles[0].Transformation;
+                if (componentCodingStyles[1].Transformation != transform
+                    || componentCodingStyles[2].Transformation != transform)
+                {
+                    throw Jpeg2000Binary.CreateException(
+                        "JPEG 2000 multiple component transform requires matching component transformations.");
+                }
+
+                if (transform == 0)
                 {
                     ApplyInverseIct(components);
                 }
@@ -66,7 +289,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             return Pack(targetPixelData, components);
         }
 
-        private static void DecodeComponent(Jpeg2000StandardComponent component, Jpeg2000CodingStyleDefault cod, Jpeg2000QuantizationDefault qcd)
+        private static void DecodeComponent(
+            Jpeg2000StandardComponent component,
+            Jpeg2000ResolvedCodingStyle cod,
+            Jpeg2000ResolvedQuantization qcd,
+            int regionOfInterestShift)
         {
             foreach (var block in component.AllCodeBlocks())
             {
@@ -78,7 +305,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 double[]? irreversibleCoefficients = null;
                 var coefficients = IsHighThroughput(cod)
                     ? DecodeHighThroughputBlock(component, cod, qcd, block, out irreversibleCoefficients)
-                    : DecodeStandardBlock(component, cod, qcd, block);
+                    : DecodeStandardBlock(component, cod, qcd, block, regionOfInterestShift);
                 for (var y = 0; y < block.Height; y++)
                 {
                     for (var x = 0; x < block.Width; x++)
@@ -117,21 +344,22 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         private static int[] DecodeStandardBlock(
             Jpeg2000StandardComponent component,
-            Jpeg2000CodingStyleDefault cod,
-            Jpeg2000QuantizationDefault qcd,
-            Jpeg2000StandardCodeBlock block)
+            Jpeg2000ResolvedCodingStyle cod,
+            Jpeg2000ResolvedQuantization qcd,
+            Jpeg2000StandardCodeBlock block,
+            int regionOfInterestShift)
         {
             var bitPlaneCount = EstimateBitPlaneCount(component, cod, qcd, block);
             var decoder = new Jpeg2000StandardTier1Decoder(block.Width, block.Height, block.Orientation, cod.CodeBlockStyle);
             return cod.Transformation == 0
-                ? decoder.DecodeScaled(block.Data, block.TotalPasses, bitPlaneCount)
-                : decoder.Decode(block.Data, block.TotalPasses, bitPlaneCount);
+                ? decoder.DecodeScaled(block.Data, block.TotalPasses, bitPlaneCount, regionOfInterestShift)
+                : decoder.Decode(block.Data, block.TotalPasses, bitPlaneCount, regionOfInterestShift);
         }
 
         private static int[] DecodeHighThroughputBlock(
             Jpeg2000StandardComponent component,
-            Jpeg2000CodingStyleDefault cod,
-            Jpeg2000QuantizationDefault qcd,
+            Jpeg2000ResolvedCodingStyle cod,
+            Jpeg2000ResolvedQuantization qcd,
             Jpeg2000StandardCodeBlock block,
             out double[]? irreversibleCoefficients)
         {
@@ -237,8 +465,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         private static int EstimateHighThroughputBandKmax(
             Jpeg2000StandardComponent component,
-            Jpeg2000CodingStyleDefault cod,
-            Jpeg2000QuantizationDefault qcd,
+            Jpeg2000ResolvedCodingStyle cod,
+            Jpeg2000ResolvedQuantization qcd,
             Jpeg2000StandardCodeBlock block)
         {
             var resolution = ResolutionForBlock(cod.DecompositionLevels, block.Orientation, block.X0, block.Y0, component.Width, component.Height);
@@ -275,8 +503,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         private static double[] UnscaleOpenJphIrreversibleCodeBlock(
             Jpeg2000StandardComponent component,
-            Jpeg2000CodingStyleDefault cod,
-            Jpeg2000QuantizationDefault qcd,
+            Jpeg2000ResolvedCodingStyle cod,
+            Jpeg2000ResolvedQuantization qcd,
             Jpeg2000StandardCodeBlock block,
             IReadOnlyList<int> coefficients,
             int kMax)
@@ -297,12 +525,12 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             return Jpeg2000HtIrreversibleQuantization.FromSignMagnitude(coefficients, delta);
         }
 
-        private static bool IsHighThroughput(Jpeg2000CodingStyleDefault cod)
+        private static bool IsHighThroughput(Jpeg2000ResolvedCodingStyle cod)
         {
             return (cod.CodeBlockStyle & 0x40) != 0;
         }
 
-        private static double[] DequantizeIrreversible(Jpeg2000StandardComponent component, Jpeg2000CodingStyleDefault cod, Jpeg2000QuantizationDefault qcd)
+        private static double[] DequantizeIrreversible(Jpeg2000StandardComponent component, Jpeg2000ResolvedCodingStyle cod, Jpeg2000ResolvedQuantization qcd)
         {
             var samples = new double[component.Coefficients.Length];
             foreach (var block in component.AllCodeBlocks())
@@ -347,7 +575,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             return result;
         }
 
-        private static int EstimateBitPlaneCount(Jpeg2000StandardComponent component, Jpeg2000CodingStyleDefault cod, Jpeg2000QuantizationDefault qcd, Jpeg2000StandardCodeBlock block)
+        private static int EstimateBitPlaneCount(Jpeg2000StandardComponent component, Jpeg2000ResolvedCodingStyle cod, Jpeg2000ResolvedQuantization qcd, Jpeg2000StandardCodeBlock block)
         {
             var zeroBitPlanes = block.ZeroBitPlanes;
             var subbandBits = EstimateBandBitPlaneDepth(component, cod, qcd, block);
@@ -360,7 +588,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             return codeBlockBits;
         }
 
-        private static int EstimateBandBitPlaneDepth(Jpeg2000StandardComponent component, Jpeg2000CodingStyleDefault cod, Jpeg2000QuantizationDefault qcd, Jpeg2000StandardCodeBlock block)
+        private static int EstimateBandBitPlaneDepth(Jpeg2000StandardComponent component, Jpeg2000ResolvedCodingStyle cod, Jpeg2000ResolvedQuantization qcd, Jpeg2000StandardCodeBlock block)
         {
             if (qcd.Style != Jpeg2000QuantizationStyle.None)
             {
@@ -430,12 +658,15 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             Jpeg2000SizeSegment siz,
             Jpeg2000CodingStyleDefault cod)
         {
-            return CreateTileComponents(siz, cod, Jpeg2000ImageModel.FromSizeSegment(siz).Tiles[0]);
+            return CreateTileComponents(
+                siz,
+                ResolveDefaultCodingStyles(siz, cod),
+                Jpeg2000ImageModel.FromSizeSegment(siz).Tiles[0]);
         }
 
         private static Jpeg2000StandardComponent[] CreateTileComponents(
             Jpeg2000SizeSegment siz,
-            Jpeg2000CodingStyleDefault cod,
+            IReadOnlyList<Jpeg2000ResolvedCodingStyle> componentCodingStyles,
             Jpeg2000TileModel tile)
         {
             var components = new Jpeg2000StandardComponent[siz.Components.Count];
@@ -458,12 +689,60 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     tileY0,
                     tileX1 - tileX0,
                     tileY1 - tileY0,
-                    cod.DecompositionLevels,
+                    componentCodingStyles[i].DecompositionLevels,
                     source.Precision,
                     source.IsSigned);
             }
 
             return components;
+        }
+
+        private static Jpeg2000ResolvedCodingStyle[] ResolveDefaultCodingStyles(
+            Jpeg2000SizeSegment siz,
+            Jpeg2000CodingStyleDefault cod)
+        {
+            var styles = new Jpeg2000ResolvedCodingStyle[siz.Components.Count];
+            for (var component = 0; component < styles.Length; component++)
+            {
+                styles[component] = Jpeg2000ResolvedCodingStyle.FromDefault(component, cod);
+            }
+
+            return styles;
+        }
+
+        private static Jpeg2000ResolvedQuantization[] ResolveDefaultQuantizations(
+            Jpeg2000SizeSegment siz,
+            Jpeg2000QuantizationDefault qcd)
+        {
+            var quantizations = new Jpeg2000ResolvedQuantization[siz.Components.Count];
+            for (var component = 0; component < quantizations.Length; component++)
+            {
+                quantizations[component] = Jpeg2000ResolvedQuantization.FromDefault(component, qcd);
+            }
+
+            return quantizations;
+        }
+
+        private static void ValidateComponentParameters(
+            Jpeg2000SizeSegment siz,
+            IReadOnlyList<Jpeg2000ResolvedCodingStyle> codingStyles,
+            IReadOnlyList<Jpeg2000ResolvedQuantization> quantizations)
+        {
+            if (codingStyles.Count != siz.Components.Count || quantizations.Count != siz.Components.Count)
+            {
+                throw Jpeg2000Binary.CreateException(
+                    "JPEG 2000 component marker state does not match the SIZ component count.");
+            }
+
+            for (var component = 0; component < siz.Components.Count; component++)
+            {
+                if (codingStyles[component].ComponentIndex != component
+                    || quantizations[component].ComponentIndex != component)
+                {
+                    throw Jpeg2000Binary.CreateException(
+                        "JPEG 2000 component marker state is out of order.");
+                }
+            }
         }
 
         private static void ApplyInverseLevelShift(Jpeg2000StandardComponent component)
@@ -597,6 +876,23 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 || targetPixelData.SamplesPerPixel != siz.Components.Count)
             {
                 throw Jpeg2000Binary.CreateException("JPEG 2000 codestream dimensions conflict with DICOM pixel metadata.");
+            }
+
+            var targetIsSigned = targetPixelData.PixelRepresentation == PixelRepresentation.Signed;
+            for (var component = 0; component < siz.Components.Count; component++)
+            {
+                var sizeComponent = siz.Components[component];
+                if (sizeComponent.Precision != targetPixelData.BitsStored)
+                {
+                    throw Jpeg2000Binary.CreateException(
+                        $"JPEG 2000 SIZ component {component} precision conflicts with DICOM BitsStored.");
+                }
+
+                if (sizeComponent.IsSigned != targetIsSigned)
+                {
+                    throw Jpeg2000Binary.CreateException(
+                        $"JPEG 2000 SIZ component {component} signedness conflicts with DICOM PixelRepresentation.");
+                }
             }
 
             if (cod.LayerCount <= 0)

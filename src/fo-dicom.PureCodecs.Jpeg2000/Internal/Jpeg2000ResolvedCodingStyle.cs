@@ -26,6 +26,13 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             PrecinctSizes = precincts;
         }
 
+        public static Jpeg2000ResolvedCodingStyle FromDefault(
+            int componentIndex,
+            Jpeg2000CodingStyleDefault defaults)
+        {
+            return new Jpeg2000ResolvedCodingStyle(componentIndex, defaults, defaults);
+        }
+
         public int ComponentIndex { get; }
 
         public Jpeg2000ProgressionOrder ProgressionOrder { get; }

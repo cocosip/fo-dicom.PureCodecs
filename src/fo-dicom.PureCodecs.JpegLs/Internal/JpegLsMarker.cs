@@ -6,6 +6,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
         public const byte SOI = 0xD8;
         public const byte EOI = 0xD9;
         public const byte SOS = 0xDA;
+        public const byte DRI = 0xDD;
         public const byte LSE = 0xF8;
         public const byte RST0 = 0xD0;
         public const byte RST7 = 0xD7;
@@ -23,6 +24,11 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
         public static bool IsMetadata(byte code)
         {
             return (code >= APP0 && code <= APP15) || code == COM;
+        }
+
+        public static bool IsRestart(byte code)
+        {
+            return code >= RST0 && code <= RST7;
         }
     }
 }

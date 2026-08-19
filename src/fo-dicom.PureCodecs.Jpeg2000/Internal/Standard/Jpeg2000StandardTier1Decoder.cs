@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
@@ -58,9 +59,59 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             return DecodeInternal(bytes, passCount, bitPlaneCount, preserveFractionalBits: false);
         }
 
+        public int[] Decode(byte[] bytes, int passCount, int bitPlaneCount, int roiShift)
+        {
+            return DecodeWithRegionOfInterest(bytes, passCount, bitPlaneCount, roiShift, preserveFractionalBits: false);
+        }
+
         public int[] DecodeScaled(byte[] bytes, int passCount, int bitPlaneCount)
         {
             return DecodeInternal(bytes, passCount, bitPlaneCount, preserveFractionalBits: true);
+        }
+
+        public int[] DecodeScaled(byte[] bytes, int passCount, int bitPlaneCount, int roiShift)
+        {
+            return DecodeWithRegionOfInterest(bytes, passCount, bitPlaneCount, roiShift, preserveFractionalBits: true);
+        }
+
+        private int[] DecodeWithRegionOfInterest(
+            byte[] bytes,
+            int passCount,
+            int bitPlaneCount,
+            int roiShift,
+            bool preserveFractionalBits)
+        {
+            if (roiShift < 0 || roiShift + bitPlaneCount >= 31)
+            {
+                throw Jpeg2000Binary.CreateException("JPEG 2000 RGN shift produces an unsupported Tier-1 bit-plane count.");
+            }
+
+            var result = DecodeInternal(bytes, passCount, bitPlaneCount + roiShift, preserveFractionalBits);
+            if (roiShift == 0)
+            {
+                return result;
+            }
+
+            var thresholdShift = preserveFractionalBits ? roiShift + Tier1FractionalBits : roiShift;
+            if (thresholdShift >= 31)
+            {
+                Array.Clear(result, 0, result.Length);
+                return result;
+            }
+
+            var threshold = 1 << thresholdShift;
+            for (var index = 0; index < result.Length; index++)
+            {
+                var value = result[index];
+                var magnitude = Math.Abs((long)value);
+                if (magnitude >= threshold)
+                {
+                    magnitude >>= roiShift;
+                    result[index] = value < 0 ? -(int)magnitude : (int)magnitude;
+                }
+            }
+
+            return result;
         }
 
         public int[] DecodeSegments(IReadOnlyList<Jpeg2000StandardCodeBlockSegment> segments, int bitPlaneCount)

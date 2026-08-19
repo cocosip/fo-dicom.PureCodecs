@@ -147,6 +147,38 @@ public sealed class Jpeg2000StandardInternalTests
     }
 
     [Fact]
+    public void Tier1_decoder_applies_rgn_maxshift_to_roi_coefficients_only()
+    {
+        const int roiShift = 8;
+        const int baseBitPlaneCount = 2;
+        const int passCount = (baseBitPlaneCount * 3) - 2;
+        var encodedCoefficients = new int[16];
+        encodedCoefficients[0] = 3 << Tier1FractionalBits;
+        encodedCoefficients[1] = 1 << Tier1FractionalBits;
+        encodedCoefficients[2] = -2 << Tier1FractionalBits;
+        encodedCoefficients[3] = -1 << Tier1FractionalBits;
+
+        var encoder = Create(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardTier1Encoder",
+            4,
+            4,
+            0,
+            (byte)0);
+        var bytes = (byte[])Invoke(encoder, "Encode", encodedCoefficients, passCount);
+        var decoder = Create(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardTier1Decoder",
+            4,
+            4,
+            0,
+            (byte)0);
+
+        var decoded = (int[])Invoke(decoder, "Decode", bytes, passCount, baseBitPlaneCount, roiShift);
+
+        Assert.Equal(new[] { 3, 1, -2, -1 }, decoded.Take(4));
+        Assert.All(decoded.Skip(4), value => Assert.Equal(0, value));
+    }
+
+    [Fact]
     public void Tier1_encoders_share_immutable_context_lookup_tables()
     {
         var first = Create("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardTier1Encoder", 4, 4, 0, (byte)0);
@@ -363,6 +395,97 @@ public sealed class Jpeg2000StandardInternalTests
         Assert.Equal(2, Property<int>(block, "ZeroBitPlanes"));
         Assert.Equal(4, Property<int>(block, "TotalPasses"));
         Assert.Equal(data, Property<byte[]>(block, "Data"));
+    }
+
+    [Fact]
+    public void Packet_decoder_reads_packed_header_separately_from_packet_body()
+    {
+        var data = new byte[] { 0x12, 0x34, 0x56 };
+        var blockType = Jpeg2000Assembly.GetType("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000EncodedBlock", throwOnError: true)!;
+        var blocks = Array.CreateInstance(blockType, 1);
+        blocks.SetValue(Create(blockType, 0, 0, 1, 1, 2, 4, data), 0);
+        var packetEncoder = Jpeg2000Assembly.GetType("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardPacketEncoder", throwOnError: true)!;
+        var encoded = (byte[])packetEncoder.GetMethod("EncodeSingleLayerPacket")!.Invoke(null, new object[] { blocks })!;
+        var headerLength = encoded.Length - data.Length;
+        var packedHeader = encoded.Take(headerLength).ToArray();
+        var packetBody = encoded.Skip(headerLength).ToArray();
+        Assert.Equal(data, packetBody);
+        var component = Create("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardComponent", 0, 0, 0, 1, 1, 0, 8, true);
+        var decoder = Create(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardPacketDecoder",
+            packetBody,
+            1,
+            1,
+            1,
+            Jpeg2000ProgressionOrder.LRCP,
+            ToArray("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardComponent", component),
+            64,
+            64,
+            (byte)0,
+            null!,
+            null!,
+            null!,
+            packedHeader);
+
+        Invoke(decoder, "Decode");
+        var block = ((IEnumerable)Invoke(component, "AllCodeBlocks")).Cast<object>().Single();
+
+        Assert.Equal(2, Property<int>(block, "ZeroBitPlanes"));
+        Assert.Equal(4, Property<int>(block, "TotalPasses"));
+        Assert.Equal(data, Property<byte[]>(block, "Data"));
+    }
+
+    [Fact]
+    public void Packet_decoder_applies_poc_ranges_in_marker_order_without_decoding_packets_twice()
+    {
+        var componentTypeName = "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardComponent";
+        var componentType = Jpeg2000Assembly.GetType(componentTypeName, throwOnError: true)!;
+        var components = Array.CreateInstance(componentType, 2);
+        components.SetValue(Create(componentType, 0, 0, 0, 4, 4, 1, 8, true), 0);
+        components.SetValue(Create(componentType, 1, 0, 0, 4, 4, 1, 8, true), 1);
+        var changes = new[]
+        {
+            Assert.Single(Jpeg2000ProgressionOrderChange.Parse(
+                new Jpeg2000MarkerSegment(Jpeg2000Marker.POC, new byte[] { 0, 0, 0, 1, 2, 2, (byte)Jpeg2000ProgressionOrder.RPCL }),
+                componentCount: 2)),
+            Assert.Single(Jpeg2000ProgressionOrderChange.Parse(
+                new Jpeg2000MarkerSegment(Jpeg2000Marker.POC, new byte[] { 0, 0, 0, 2, 2, 2, (byte)Jpeg2000ProgressionOrder.LRCP }),
+                componentCount: 2)),
+        };
+        var decoder = Create(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardPacketDecoder",
+            Array.Empty<byte>(),
+            2,
+            2,
+            2,
+            Jpeg2000ProgressionOrder.LRCP,
+            components,
+            64,
+            64,
+            (byte)0,
+            null!,
+            null!,
+            changes);
+
+        var packets = ((IEnumerable)Invoke(decoder, "Decode")).Cast<object>()
+            .Select(packet => (
+                Property<int>(packet, "Layer"),
+                Property<int>(packet, "Resolution"),
+                Property<int>(packet, "Component"),
+                Property<int>(packet, "Precinct")))
+            .ToArray();
+
+        Assert.Equal(new[]
+        {
+            (0, 0, 0, 0),
+            (0, 0, 1, 0),
+            (0, 1, 0, 0),
+            (0, 1, 1, 0),
+            (1, 0, 0, 0),
+            (1, 0, 1, 0),
+            (1, 1, 0, 0),
+            (1, 1, 1, 0),
+        }, packets);
     }
 
     [Fact]

@@ -138,6 +138,31 @@ public sealed class JpegDicomIntegrationTests
             GetSofSamplingFactors(ToArray(compressedPixelData.GetFrame(0))));
     }
 
+    [Theory]
+    [InlineData(DicomJpegSampleFactor.SF444, 0x11)]
+    [InlineData(DicomJpegSampleFactor.SF422, 0x21)]
+    public void Process1_encodes_raw_ybr_full_422_for_native_decode(
+        DicomJpegSampleFactor sampleFactor,
+        byte expectedLumaSampling)
+    {
+        var (source, expectedRgb) = CreateRawYbrFull422AndExpectedRgb(rows: 8, columns: 8);
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess1);
+        var nativeDecoded = CreateRgbTargetPixelData(expectedRgb);
+        var pureCodec = new DicomJpegProcess1Codec();
+        var nativeCodec = new NativeJpegProcess1Codec();
+        var nativeParameters = Assert.IsType<NativeJpegCodecParams>(nativeCodec.GetDefaultParameters());
+        nativeParameters.ConvertColorSpaceToRGB = true;
+
+        pureCodec.Encode(
+            source,
+            compressed,
+            new JpegCodecParams { Quality = 90, SampleFactor = sampleFactor });
+        nativeCodec.Decode(compressed, nativeDecoded, nativeParameters);
+
+        Assert.Equal(expectedLumaSampling, GetSofSamplingFactors(ToArray(compressed.GetFrame(0)))[0]);
+        Assert.InRange(PixelDataAssertions.MaxSampleDifference(expectedRgb, nativeDecoded), 0, 64);
+    }
+
     [Fact]
     public void Process1_rgb_encode_then_decode_is_not_less_accurate_than_native_default()
     {
@@ -298,6 +323,56 @@ public sealed class JpegDicomIntegrationTests
         var pixelData = DicomPixelData.Create(dataset, true);
         pixelData.AddFrame(new MemoryByteBuffer(new byte[] { 76, 84, 255, 150, 128, 128 }));
         return pixelData;
+    }
+
+    private static (DicomPixelData Source, DicomPixelData ExpectedRgb) CreateRawYbrFull422AndExpectedRgb(
+        ushort rows,
+        ushort columns)
+    {
+        var pixelCount = rows * columns;
+        var packed = new byte[pixelCount * 2];
+        var rgb = new byte[pixelCount * 3];
+        for (var pixel = 0; pixel < pixelCount; pixel += 2)
+        {
+            var first = (byte)((pixel * 7 + 19) % 240);
+            var second = (byte)(((pixel + 1) * 7 + 19) % 240);
+            var packedOffset = pixel * 2;
+            packed[packedOffset] = first;
+            packed[packedOffset + 1] = second;
+            packed[packedOffset + 2] = 128;
+            packed[packedOffset + 3] = 128;
+            for (var component = 0; component < 3; component++)
+            {
+                rgb[pixel * 3 + component] = first;
+                rgb[(pixel + 1) * 3 + component] = second;
+            }
+        }
+
+        var sourceDataset = DicomPixelDataFixtures.CreateBaseDataset(
+            rows,
+            columns,
+            samplesPerPixel: 3,
+            PhotometricInterpretation.YbrFull422,
+            bitsAllocated: 8,
+            bitsStored: 8,
+            highBit: 7,
+            planarConfiguration: PlanarConfiguration.Interleaved,
+            numberOfFrames: 1,
+            transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
+            packed);
+        var expectedDataset = DicomPixelDataFixtures.CreateBaseDataset(
+            rows,
+            columns,
+            samplesPerPixel: 3,
+            PhotometricInterpretation.Rgb,
+            bitsAllocated: 8,
+            bitsStored: 8,
+            highBit: 7,
+            planarConfiguration: PlanarConfiguration.Interleaved,
+            numberOfFrames: 1,
+            transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
+            rgb);
+        return (DicomPixelData.Create(sourceDataset), DicomPixelData.Create(expectedDataset));
     }
 
     private static DicomPixelData CreateUnsupportedPhotometricPixelData()

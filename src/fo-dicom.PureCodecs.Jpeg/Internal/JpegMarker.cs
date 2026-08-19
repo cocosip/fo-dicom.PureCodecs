@@ -29,5 +29,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         {
             return (code >= APP0 && code <= APP15) || code == COM;
         }
+
+        public static bool IsRestart(byte code)
+        {
+            return code >= RST0 && code <= RST7;
+        }
     }
 }

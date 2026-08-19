@@ -5,22 +5,22 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
     public sealed class Jpeg2000ProgressionOrderChange
     {
         private Jpeg2000ProgressionOrderChange(
-            int layerStart,
-            int resolutionEnd,
+            int resolutionStart,
             int componentStart,
             int layerEnd,
+            int resolutionEnd,
             int componentEnd,
             Jpeg2000ProgressionOrder progressionOrder)
         {
-            LayerStart = layerStart;
-            ResolutionEnd = resolutionEnd;
+            ResolutionStart = resolutionStart;
             ComponentStart = componentStart;
             LayerEnd = layerEnd;
+            ResolutionEnd = resolutionEnd;
             ComponentEnd = componentEnd;
             ProgressionOrder = progressionOrder;
         }
 
-        public int LayerStart { get; }
+        public int ResolutionStart { get; }
 
         public int ResolutionEnd { get; }
 
@@ -50,13 +50,13 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var offset = 0;
             for (var i = 0; i < changes.Length; i++)
             {
-                var layerStart = segment.Payload[offset++];
-                var resolutionEnd = segment.Payload[offset++];
+                var resolutionStart = segment.Payload[offset++];
                 var componentStart = componentBytes == 1
                     ? segment.Payload[offset++]
                     : Jpeg2000Binary.ReadUInt16(segment.Payload, Advance(ref offset, 2));
                 var layerEnd = Jpeg2000Binary.ReadUInt16(segment.Payload, offset);
                 offset += 2;
+                var resolutionEnd = segment.Payload[offset++];
                 var componentEnd = componentBytes == 1
                     ? segment.Payload[offset++]
                     : Jpeg2000Binary.ReadUInt16(segment.Payload, Advance(ref offset, 2));
@@ -68,10 +68,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 }
 
                 changes[i] = new Jpeg2000ProgressionOrderChange(
-                    layerStart,
-                    resolutionEnd,
+                    resolutionStart,
                     componentStart,
                     layerEnd,
+                    resolutionEnd,
                     componentEnd,
                     (Jpeg2000ProgressionOrder)progression);
             }

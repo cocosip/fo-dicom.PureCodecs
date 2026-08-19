@@ -68,11 +68,13 @@ Decoder must handle at least:
 - SOF3 for lossless sequential.
 - DHT.
 - DQT.
-- DRI.
+- DRI is recognized and rejected with a managed exception until restart
+  interval decoding is implemented.
 - SOS.
 - APPn markers by skipping them safely.
 - COM markers by skipping them safely.
-- RST markers where restart intervals are present.
+- RST0 through RST7 are recognized and rejected with a managed exception until
+  MCU restart state is implemented.
 
 Unsupported marker combinations must fail with a managed codec exception.
 
@@ -230,7 +232,7 @@ Error messages should include:
 - Marker parsing.
 - Huffman table construction.
 - Bit reader and bit writer.
-- Restart marker handling.
+- Explicit managed rejection of DRI and RST restart structures.
 - Lossless predictor functions.
 - DCT block encode/decode primitives.
 - Invalid marker length handling.
@@ -273,10 +275,18 @@ Current implementation status:
 - JPEG Process 14 and Process 14 SV1 use a managed lossless predictive path with predictors 1 through 7, Huffman-coded differences, and exact 8-bit, 12-bit, and 16-bit monochrome round-trips. Process 14 honors `JpegCodecParams.Predictor`; Process 14 SV1 fixes the predictor to 1 as required by the transfer syntax.
 - `JpegCodecParams` provides quality, predictor, point transform, and `ConvertColorspaceToRGB`, with color conversion enabled by default for Process 1 and Process 2/4. The codecs also map fo-dicom Core `DicomJpegParams` instead of silently replacing them with defaults. Lossless encode writes predictor and point transform to SOS, and lossless decode reads both values from the codestream. A non-zero point transform intentionally clears discarded low bits, matching Native behavior.
 - RGB planar input is normalized to interleaved layout for sequential DCT encode, and decoded output can be converted back to planar when the target pixel data requires it.
+- Packed raw `YBR_FULL_422` input is expanded through fo-dicom's pixel converter
+  before sequential DCT encoding and is covered by Pure encode ->
+  `fo-dicom.Codecs` Native decode tests for both 4:4:4 and 4:2:2 output sampling.
+- DRI and RST restart structures are rejected explicitly by both sequential DCT
+  and lossless JPEG decoders; the current entropy paths do not silently decode
+  them without resetting predictor and Huffman state.
 
 Known limitations before full JPEG release readiness:
 
 - Process 2/4 high-bit support is monochrome-only for `BitsStored=12` in a 16-bit DICOM sample container; high-bit colour data remains unsupported.
 - The sequential DCT implementation prioritizes correctness and compatibility coverage over optimized performance.
-- Progressive JPEG, arithmetic coding, CMYK/YCCK, and restart interval MCU resynchronization beyond marker recognition are not implemented.
-- Efferent acceptance coverage currently verifies JPEG baseline YBRFull/YBR422 decode; broader transcode/render parity still belongs to the full compatibility matrix.
+- Progressive JPEG, arithmetic coding, CMYK/YCCK, and restart interval MCU resynchronization are not implemented.
+- Native bidirectional interoperability is exercised by the non-HTJ2K worker
+  matrix for Process 1, Process 2/4, Process 14, and Process 14 SV1, with exact
+  decoded output for lossless syntaxes and tolerance checks for lossy syntaxes.

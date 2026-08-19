@@ -63,6 +63,8 @@ Decoder must handle at least:
 - SOF55.
 - SOS.
 - LSE preset coding parameters.
+- DRI and RST restart structures are recognized and rejected explicitly until
+  JPEG-LS restart-state decoding is implemented.
 - APPn markers by skipping them safely.
 - COM markers by skipping them safely.
 
@@ -190,6 +192,7 @@ Error messages should include:
 - Run mode encode/decode.
 - Near-lossless sample tolerance checks.
 - Invalid marker length handling.
+- Explicit managed rejection of DRI and RST restart structures.
 
 ### Codec Tests
 
@@ -232,3 +235,6 @@ The current implementation is fully managed and lives in `fo-dicom.PureCodecs.Jp
 - Before encoding, planar RGB is normalized through fo-dicom's planar-to-interleaved converter, then `YBR_FULL` is independently normalized to RGB. Interleaved `YBR_FULL_422` is normalized to RGB; planar `YBR_FULL_422` is rejected explicitly. Compressed metadata is updated to interleaved RGB, including exact frame-length handling for odd-width `YBR_FULL_422` input. These paths are validated by decoding the Pure codestream with `fo-dicom.Codecs`/CharLS.
 - Line interleave follows the CharLS state model: regular contexts and run interruption contexts are shared for the scan, while run index and left-edge line state are maintained per component.
 - Unsupported photometric interpretations, unsupported bit depths, invalid NEAR values, and malformed marker streams fail with managed `DicomCodecException`.
+- DRI and RST restart structures fail with explicit managed exceptions; legal
+  multi-scan color streams containing one non-interleaved SOS per component
+  remain supported.

@@ -68,7 +68,11 @@ Limitations that remain outside this alpha are compatibility edges or fixture ga
 - JPEG XL remains outside phase 1.
 - JPEG 2000 Part 2 multi-component and JPIP/JPT transfer syntaxes remain unregistered.
 - Some rare JPEG/JPEG 2000 marker combinations fail with explicit managed exceptions.
-- HTJ2K `.201`, `.202`, and `.203` use a managed Part 15 codestream path and have local `fo-dicom.Codecs`/OpenJPH native decoder compatibility coverage, but broad third-party HTJ2K fixture coverage remains limited by available redistributable samples.
+- HTJ2K `.201`, `.202`, and `.203` use a managed Part 15 codestream path and
+  are validated with managed round-trips, standard HT vectors, and local
+  OpenJPH-derived fixtures. HTJ2K Native interoperability is not a release gate,
+  and broad third-party fixture coverage remains limited by available
+  redistributable samples.
 
 ## Upgrade Notes
 

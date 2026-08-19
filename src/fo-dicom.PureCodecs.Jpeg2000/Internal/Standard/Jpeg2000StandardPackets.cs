@@ -15,8 +15,12 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         private readonly int _codeBlockHeight;
         private readonly byte _codeBlockStyle;
         private readonly Jpeg2000CodingStyleDefault? _codingStyle;
+        private readonly IReadOnlyList<Jpeg2000ResolvedCodingStyle>? _componentCodingStyles;
+        private readonly IReadOnlyList<Jpeg2000ProgressionOrderChange>? _progressionChanges;
+        private readonly byte[]? _packedPacketHeaders;
         private readonly Dictionary<string, PacketHeaderContext> _contexts = new Dictionary<string, PacketHeaderContext>();
         private int _offset;
+        private int _packetHeaderOffset;
 
         public Jpeg2000StandardPacketDecoder(
             byte[] data,
@@ -43,6 +47,93 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             int codeBlockHeight,
             byte codeBlockStyle,
             Jpeg2000CodingStyleDefault? codingStyle)
+            : this(
+                data,
+                componentCount,
+                layerCount,
+                resolutionCount,
+                progressionOrder,
+                components,
+                codeBlockWidth,
+                codeBlockHeight,
+                codeBlockStyle,
+                codingStyle,
+                null)
+        {
+        }
+
+        public Jpeg2000StandardPacketDecoder(
+            byte[] data,
+            int componentCount,
+            int layerCount,
+            int resolutionCount,
+            Jpeg2000ProgressionOrder progressionOrder,
+            Jpeg2000StandardComponent[] components,
+            int codeBlockWidth,
+            int codeBlockHeight,
+            byte codeBlockStyle,
+            Jpeg2000CodingStyleDefault? codingStyle,
+            IReadOnlyList<Jpeg2000ResolvedCodingStyle>? componentCodingStyles)
+            : this(
+                data,
+                componentCount,
+                layerCount,
+                resolutionCount,
+                progressionOrder,
+                components,
+                codeBlockWidth,
+                codeBlockHeight,
+                codeBlockStyle,
+                codingStyle,
+                componentCodingStyles,
+                null)
+        {
+        }
+
+        public Jpeg2000StandardPacketDecoder(
+            byte[] data,
+            int componentCount,
+            int layerCount,
+            int resolutionCount,
+            Jpeg2000ProgressionOrder progressionOrder,
+            Jpeg2000StandardComponent[] components,
+            int codeBlockWidth,
+            int codeBlockHeight,
+            byte codeBlockStyle,
+            Jpeg2000CodingStyleDefault? codingStyle,
+            IReadOnlyList<Jpeg2000ResolvedCodingStyle>? componentCodingStyles,
+            IReadOnlyList<Jpeg2000ProgressionOrderChange>? progressionChanges)
+            : this(
+                data,
+                componentCount,
+                layerCount,
+                resolutionCount,
+                progressionOrder,
+                components,
+                codeBlockWidth,
+                codeBlockHeight,
+                codeBlockStyle,
+                codingStyle,
+                componentCodingStyles,
+                progressionChanges,
+                null)
+        {
+        }
+
+        public Jpeg2000StandardPacketDecoder(
+            byte[] data,
+            int componentCount,
+            int layerCount,
+            int resolutionCount,
+            Jpeg2000ProgressionOrder progressionOrder,
+            Jpeg2000StandardComponent[] components,
+            int codeBlockWidth,
+            int codeBlockHeight,
+            byte codeBlockStyle,
+            Jpeg2000CodingStyleDefault? codingStyle,
+            IReadOnlyList<Jpeg2000ResolvedCodingStyle>? componentCodingStyles,
+            IReadOnlyList<Jpeg2000ProgressionOrderChange>? progressionChanges,
+            byte[]? packedPacketHeaders)
         {
             _data = data ?? new byte[0];
             _componentCount = componentCount;
@@ -54,6 +145,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             _codeBlockHeight = codeBlockHeight;
             _codeBlockStyle = codeBlockStyle;
             _codingStyle = codingStyle;
+            _componentCodingStyles = componentCodingStyles;
+            _progressionChanges = progressionChanges;
+            _packedPacketHeaders = packedPacketHeaders;
         }
 
         public IReadOnlyList<Jpeg2000StandardPacket> Decode()
@@ -71,6 +165,24 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         private IEnumerable<Jpeg2000PacketModel> EnumeratePackets()
         {
+            if (_progressionChanges != null && _progressionChanges.Count != 0)
+            {
+                var decoded = new HashSet<string>();
+                foreach (var change in _progressionChanges)
+                {
+                    foreach (var packet in EnumeratePacketRange(change))
+                    {
+                        var key = packet.LayerIndex + ":" + packet.ResolutionLevel + ":" + packet.ComponentIndex + ":" + packet.PrecinctIndex;
+                        if (decoded.Add(key))
+                        {
+                            yield return packet;
+                        }
+                    }
+                }
+
+                yield break;
+            }
+
             switch (_progressionOrder)
             {
                 case Jpeg2000ProgressionOrder.LRCP:
@@ -140,9 +252,89 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             }
         }
 
+        private IEnumerable<Jpeg2000PacketModel> EnumeratePacketRange(Jpeg2000ProgressionOrderChange change)
+        {
+            var layerEnd = Math.Min(change.LayerEnd, _layerCount);
+            var resolutionEnd = Math.Min(change.ResolutionEnd, _resolutionCount);
+            var componentEnd = Math.Min(change.ComponentEnd, _componentCount);
+            if (layerEnd <= 0
+                || change.ResolutionStart < 0
+                || change.ResolutionStart >= resolutionEnd
+                || change.ComponentStart < 0
+                || change.ComponentStart >= componentEnd)
+            {
+                throw Jpeg2000Binary.CreateException("JPEG 2000 POC progression bounds are invalid.");
+            }
+
+            switch (change.ProgressionOrder)
+            {
+                case Jpeg2000ProgressionOrder.LRCP:
+                    for (var l = 0; l < layerEnd; l++)
+                    for (var r = change.ResolutionStart; r < resolutionEnd; r++)
+                    for (var c = change.ComponentStart; c < componentEnd; c++)
+                    foreach (var p in GetPrecincts(c, r))
+                    {
+                        yield return new Jpeg2000PacketModel(l, r, c, p);
+                    }
+
+                    yield break;
+                case Jpeg2000ProgressionOrder.RLCP:
+                    for (var r = change.ResolutionStart; r < resolutionEnd; r++)
+                    for (var l = 0; l < layerEnd; l++)
+                    for (var c = change.ComponentStart; c < componentEnd; c++)
+                    foreach (var p in GetPrecincts(c, r))
+                    {
+                        yield return new Jpeg2000PacketModel(l, r, c, p);
+                    }
+
+                    yield break;
+                case Jpeg2000ProgressionOrder.RPCL:
+                    for (var r = change.ResolutionStart; r < resolutionEnd; r++)
+                    for (var p = 0; p <= MaxPrecinctIndex(r); p++)
+                    for (var c = change.ComponentStart; c < componentEnd; c++)
+                    for (var l = 0; l < layerEnd; l++)
+                    {
+                        if (HasPacket(c, r, p))
+                        {
+                            yield return new Jpeg2000PacketModel(l, r, c, p);
+                        }
+                    }
+
+                    yield break;
+                case Jpeg2000ProgressionOrder.PCRL:
+                    for (var p = 0; p <= MaxPrecinctIndex(); p++)
+                    for (var c = change.ComponentStart; c < componentEnd; c++)
+                    for (var r = change.ResolutionStart; r < resolutionEnd; r++)
+                    for (var l = 0; l < layerEnd; l++)
+                    {
+                        if (HasPacket(c, r, p))
+                        {
+                            yield return new Jpeg2000PacketModel(l, r, c, p);
+                        }
+                    }
+
+                    yield break;
+                case Jpeg2000ProgressionOrder.CPRL:
+                    for (var c = change.ComponentStart; c < componentEnd; c++)
+                    for (var p = 0; p <= MaxPrecinctIndex(null, c); p++)
+                    for (var r = change.ResolutionStart; r < resolutionEnd; r++)
+                    for (var l = 0; l < layerEnd; l++)
+                    {
+                        if (HasPacket(c, r, p))
+                        {
+                            yield return new Jpeg2000PacketModel(l, r, c, p);
+                        }
+                    }
+
+                    yield break;
+                default:
+                    throw Jpeg2000Binary.CreateException($"JPEG 2000 progression order {change.ProgressionOrder} is not supported.");
+            }
+        }
+
         private IEnumerable<int> GetPrecincts(int component, int resolution)
         {
-            return IsHighThroughput()
+            return IsHighThroughput(component)
                 ? _components[component].GetPrecinctsIncludingEmpty(resolution)
                 : _components[component].GetPrecincts(resolution);
         }
@@ -150,12 +342,19 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         private bool HasPacket(int component, int resolution, int precinct)
         {
             return _components[component].GetBands(resolution, precinct).Count != 0
-                || (IsHighThroughput() && _components[component].HasPrecinct(resolution, precinct));
+                || (IsHighThroughput(component) && _components[component].HasPrecinct(resolution, precinct));
         }
 
-        private bool IsHighThroughput()
+        private bool IsHighThroughput(int component)
         {
-            return (_codeBlockStyle & 0x40) != 0;
+            return (GetCodeBlockStyle(component) & 0x40) != 0;
+        }
+
+        private byte GetCodeBlockStyle(int component)
+        {
+            return _componentCodingStyles != null && component < _componentCodingStyles.Count
+                ? _componentCodingStyles[component].CodeBlockStyle
+                : _codeBlockStyle;
         }
 
         private int MaxPrecinctIndex(int? resolution = null, int? component = null)
@@ -183,21 +382,24 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         private Jpeg2000StandardPacket DecodePacket(int layer, int resolution, int componentIndex, int precinctIndex)
         {
             var packet = new Jpeg2000StandardPacket(layer, resolution, componentIndex, precinctIndex);
-            if (_offset >= _data.Length)
+            var packetHeaderData = _packedPacketHeaders ?? _data;
+            var packetHeaderOffset = _packedPacketHeaders == null ? _offset : _packetHeaderOffset;
+            if (packetHeaderOffset >= packetHeaderData.Length)
             {
                 return packet;
             }
 
-            var reader = new Jpeg2000BioReader(_data, _offset);
+            var reader = new Jpeg2000BioReader(packetHeaderData, packetHeaderOffset);
             var present = reader.ReadBit() != 0;
             if (!present)
             {
                 reader.AlignToByte();
-                _offset = reader.BytesRead;
+                AdvancePacketHeader(reader.BytesRead);
                 return packet;
             }
 
             var component = _components[componentIndex];
+            var codeBlockStyle = GetCodeBlockStyle(componentIndex);
             foreach (var band in component.GetBands(resolution, precinctIndex))
             {
                 var context = GetContext(componentIndex, resolution, precinctIndex, band.Orientation, band.CodeBlockCountX, band.CodeBlockCountY);
@@ -216,18 +418,18 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                         state.Included = true;
                         state.NumLenBits = 3;
                         state.ZeroBitPlanes = DecodeZeroBitPlanes(reader, context, block.LocalX, block.LocalY);
-                        state.StartNewSegment(_codeBlockStyle, first: true);
+                        state.StartNewSegment(codeBlockStyle, first: true);
                     }
 
                     var passCount = DecodePassCount(reader);
                     state.TotalPasses += passCount;
-                    var segments = DecodeContributionSegments(reader, passCount, state, _codeBlockStyle);
+                    var segments = DecodeContributionSegments(reader, passCount, state, codeBlockStyle);
                     packet.Contributions.Add(new Jpeg2000StandardContribution(block, true, passCount, segments, state));
                 }
             }
 
             reader.AlignToByte();
-            _offset = reader.BytesRead;
+            AdvancePacketHeader(reader.BytesRead);
 
             foreach (var contribution in packet.Contributions)
             {
@@ -259,12 +461,24 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             return packet;
         }
 
+        private void AdvancePacketHeader(int bytesRead)
+        {
+            if (_packedPacketHeaders == null)
+            {
+                _offset = bytesRead;
+            }
+            else
+            {
+                _packetHeaderOffset = bytesRead;
+            }
+        }
+
         private PacketHeaderContext GetContext(int component, int resolution, int precinct, int orientation, int width, int height)
         {
             var key = component + ":" + resolution + ":" + precinct + ":" + orientation;
             if (!_contexts.TryGetValue(key, out var context))
             {
-                context = new PacketHeaderContext(width, height, (_codeBlockStyle & 0x40) != 0);
+                context = new PacketHeaderContext(width, height, IsHighThroughput(component));
                 _contexts.Add(key, context);
             }
 
@@ -401,9 +615,18 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         private void BuildCodeBlockMaps()
         {
-            foreach (var component in _components)
+            for (var componentIndex = 0; componentIndex < _components.Length; componentIndex++)
             {
-                component.BuildCodeBlocks(_codeBlockWidth, _codeBlockHeight, _codingStyle);
+                var component = _components[componentIndex];
+                if (_componentCodingStyles != null && componentIndex < _componentCodingStyles.Count)
+                {
+                    var style = _componentCodingStyles[componentIndex];
+                    component.BuildCodeBlocks(style.CodeBlockWidth, style.CodeBlockHeight, style);
+                }
+                else
+                {
+                    component.BuildCodeBlocks(_codeBlockWidth, _codeBlockHeight, _codingStyle);
+                }
             }
         }
 

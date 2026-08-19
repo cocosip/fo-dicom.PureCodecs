@@ -65,6 +65,37 @@ public sealed class JpegSequentialDctCodecTests
         Assert.Contains("quantization", exception.Message, System.StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Baseline_decoder_explicitly_rejects_restart_intervals()
+    {
+        var codec = new JpegSequentialDctCodec(JpegSequentialProcess.Baseline);
+        var encoded = codec.Encode(new byte[8 * 8], width: 8, height: 8, quality: 90);
+        var withRestartInterval = InsertBeforeMarker(
+            encoded,
+            JpegMarker.SOS,
+            new byte[] { 0xFF, JpegMarker.DRI, 0x00, 0x04, 0x00, 0x01 });
+
+        var exception = Assert.Throws<FellowOakDicom.Imaging.Codec.DicomCodecException>(
+            () => codec.Decode(withRestartInterval, expectedWidth: 8, expectedHeight: 8));
+
+        Assert.Contains("restart", exception.Message, System.StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not supported", exception.Message, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Baseline_decoder_explicitly_rejects_restart_markers()
+    {
+        var codec = new JpegSequentialDctCodec(JpegSequentialProcess.Baseline);
+        var encoded = codec.Encode(new byte[8 * 8], width: 8, height: 8, quality: 90);
+        var withRestartMarker = InsertAtEntropyStart(encoded, new byte[] { 0xFF, JpegMarker.RST0 });
+
+        var exception = Assert.Throws<FellowOakDicom.Imaging.Codec.DicomCodecException>(
+            () => codec.Decode(withRestartMarker, expectedWidth: 8, expectedHeight: 8));
+
+        Assert.Contains("restart", exception.Message, System.StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not supported", exception.Message, System.StringComparison.OrdinalIgnoreCase);
+    }
+
     private static byte[] CreateGradient(int width, int height)
     {
         var samples = new byte[width * height];
@@ -103,6 +134,44 @@ public sealed class JpegSequentialDctCodecTests
         }
 
         throw new Xunit.Sdk.XunitException("JPEG frame does not contain a DHT marker.");
+    }
+
+    private static byte[] InsertBeforeMarker(byte[] jpeg, byte marker, byte[] insertion)
+    {
+        for (var index = 0; index + 1 < jpeg.Length; index++)
+        {
+            if (jpeg[index] == 0xFF && jpeg[index + 1] == marker)
+            {
+                return InsertAt(jpeg, index, insertion);
+            }
+        }
+
+        throw new Xunit.Sdk.XunitException($"JPEG frame does not contain marker 0x{marker:X2}.");
+    }
+
+    private static byte[] InsertAtEntropyStart(byte[] jpeg, byte[] insertion)
+    {
+        for (var index = 0; index + 3 < jpeg.Length; index++)
+        {
+            if (jpeg[index] != 0xFF || jpeg[index + 1] != JpegMarker.SOS)
+            {
+                continue;
+            }
+
+            var segmentLength = (jpeg[index + 2] << 8) | jpeg[index + 3];
+            return InsertAt(jpeg, index + 2 + segmentLength, insertion);
+        }
+
+        throw new Xunit.Sdk.XunitException("JPEG frame does not contain an SOS marker.");
+    }
+
+    private static byte[] InsertAt(byte[] source, int offset, byte[] insertion)
+    {
+        var result = new byte[source.Length + insertion.Length];
+        System.Buffer.BlockCopy(source, 0, result, 0, offset);
+        System.Buffer.BlockCopy(insertion, 0, result, offset, insertion.Length);
+        System.Buffer.BlockCopy(source, offset, result, offset + insertion.Length, source.Length - offset);
+        return result;
     }
 
     private static void AssertWithinTolerance(byte[] expected, byte[] actual, int tolerance)

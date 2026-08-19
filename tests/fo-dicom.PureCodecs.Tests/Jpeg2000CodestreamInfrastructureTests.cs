@@ -188,11 +188,11 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
     {
         var changes = Jpeg2000ProgressionOrderChange.Parse(new Jpeg2000MarkerSegment(
             Jpeg2000Marker.POC,
-            new byte[] { 0, 2, 0, 0, 3, 2, 2 }),
+            new byte[] { 0, 0, 0, 3, 2, 2, 2 }),
             componentCount: 2);
 
         var change = Assert.Single(changes);
-        Assert.Equal(0, change.LayerStart);
+        Assert.Equal(0, change.ResolutionStart);
         Assert.Equal(2, change.ResolutionEnd);
         Assert.Equal(0, change.ComponentStart);
         Assert.Equal(3, change.LayerEnd);
@@ -201,7 +201,7 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
     }
 
     [Fact]
-    public void RGN_parses_marker_and_documents_unsupported_ROI_behavior()
+    public void RGN_parses_maxshift_region_of_interest()
     {
         var rgn = Jpeg2000RegionOfInterest.Parse(new Jpeg2000MarkerSegment(
             Jpeg2000Marker.RGN,
@@ -211,8 +211,7 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
         Assert.Equal(1, rgn.ComponentIndex);
         Assert.Equal(0, rgn.Style);
         Assert.Equal(3, rgn.Shift);
-        Assert.False(rgn.IsSupportedForDecoding);
-        Assert.Contains("unsupported", rgn.UnsupportedBehavior);
+        Assert.True(rgn.IsSupportedForDecoding);
     }
 
     [Fact]
@@ -335,16 +334,62 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
         Assert.Equal(new uint[] { 5u, 128u, 16384u }, table.PacketLengths);
     }
 
-    [Theory]
-    [InlineData(Jpeg2000Marker.PPM)]
-    [InlineData(Jpeg2000Marker.PPT)]
-    public void Packed_packet_header_markers_fail_with_managed_rejection(byte marker)
+    [Fact]
+    public void PPM_orders_marker_segments_and_restores_nppm_packet_header_chunks()
     {
-        var exception = Assert.Throws<DicomCodecException>(() =>
-            Jpeg2000UnsupportedMarker.RejectPackedPacketHeaders(new Jpeg2000MarkerSegment(marker, new byte[] { 0x00 })));
+        var segments = new[]
+        {
+            new Jpeg2000MarkerSegment(Jpeg2000Marker.PPM, new byte[] { 0x02, 0xCC, 0xDD, 0xEE, 0x00, 0x00, 0x00, 0x02, 0xF0, 0xF1 }),
+            new Jpeg2000MarkerSegment(Jpeg2000Marker.PPM, new byte[] { 0x00, 0x00, 0x00, 0x00, 0x05, 0xAA, 0xBB }),
+        };
 
-        Assert.Contains("JPEG 2000", exception.Message);
-        Assert.Contains("unsupported", exception.Message, System.StringComparison.OrdinalIgnoreCase);
+        var chunks = ((System.Collections.IEnumerable)InvokeStatic(
+                "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Jpeg2000PackedPacketHeaderParser",
+                "ParsePpm",
+                (object)segments))
+            .Cast<byte[]>()
+            .ToArray();
+
+        Assert.Equal(2, chunks.Length);
+        Assert.Equal(new byte[] { 0xAA, 0xBB, 0xCC, 0xDD, 0xEE }, chunks[0]);
+        Assert.Equal(new byte[] { 0xF0, 0xF1 }, chunks[1]);
+    }
+
+    [Fact]
+    public void PPT_orders_marker_segments_by_zppt()
+    {
+        var segments = new[]
+        {
+            new Jpeg2000MarkerSegment(Jpeg2000Marker.PPT, new byte[] { 0x02, 0xCC }),
+            new Jpeg2000MarkerSegment(Jpeg2000Marker.PPT, new byte[] { 0x00, 0xAA, 0xBB }),
+        };
+
+        var packed = (byte[])InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Jpeg2000PackedPacketHeaderParser",
+            "ParsePpt",
+            (object)segments);
+
+        Assert.Equal(new byte[] { 0xAA, 0xBB, 0xCC }, packed);
+    }
+
+    [Theory]
+    [InlineData(Jpeg2000Marker.PPM, "ParsePpm")]
+    [InlineData(Jpeg2000Marker.PPT, "ParsePpt")]
+    public void Packed_packet_headers_reject_duplicate_marker_indexes(byte marker, string method)
+    {
+        var segments = new[]
+        {
+            new Jpeg2000MarkerSegment(marker, new byte[] { 0x00, 0x01 }),
+            new Jpeg2000MarkerSegment(marker, new byte[] { 0x00, 0x02 }),
+        };
+
+        var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() => InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Jpeg2000PackedPacketHeaderParser",
+            method,
+            (object)segments));
+
+        Assert.IsType<DicomCodecException>(exception.InnerException);
+        Assert.Contains("duplicated", exception.InnerException!.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -573,5 +618,14 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
             : magnitudeBound < 28
                 ? magnitudeBound - 8
                 : 13 + (magnitudeBound >> 2);
+    }
+
+    private static object InvokeStatic(string typeName, string method, params object[] args)
+    {
+        var type = typeof(Jpeg2000Marker).Assembly.GetType(typeName, throwOnError: true)!;
+        return type.GetMethod(
+            method,
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, args)!;
     }
 }

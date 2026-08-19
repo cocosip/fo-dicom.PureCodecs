@@ -5,19 +5,41 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
     public sealed class Jpeg2000ResolvedQuantization
     {
         public Jpeg2000ResolvedQuantization(int componentIndex, Jpeg2000QuantizationComponent component, int defaultGuardBits)
+            : this(componentIndex, component.Style, component.GuardBits, defaultGuardBits, component.StepSizes)
+        {
+        }
+
+        private Jpeg2000ResolvedQuantization(
+            int componentIndex,
+            Jpeg2000QuantizationStyle style,
+            int guardBits,
+            int defaultGuardBits,
+            IReadOnlyList<ushort> stepSizes)
         {
             ComponentIndex = componentIndex;
-            Style = component.Style;
-            GuardBits = component.GuardBits;
+            Style = style;
+            GuardBits = guardBits;
             DefaultGuardBits = defaultGuardBits;
 
-            var values = new ushort[component.StepSizes.Count];
+            var values = new ushort[stepSizes.Count];
             for (var i = 0; i < values.Length; i++)
             {
-                values[i] = component.StepSizes[i];
+                values[i] = stepSizes[i];
             }
 
             StepSizes = values;
+        }
+
+        public static Jpeg2000ResolvedQuantization FromDefault(
+            int componentIndex,
+            Jpeg2000QuantizationDefault defaults)
+        {
+            return new Jpeg2000ResolvedQuantization(
+                componentIndex,
+                defaults.Style,
+                defaults.GuardBits,
+                defaults.GuardBits,
+                defaults.StepSizes);
         }
 
         public int ComponentIndex { get; }

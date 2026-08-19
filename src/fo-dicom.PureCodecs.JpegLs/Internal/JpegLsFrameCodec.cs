@@ -112,6 +112,8 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                     case JpegLsMarker.LSE:
                         preset = JpegLsPresetCodingParameters.Parse(segment);
                         break;
+                    case JpegLsMarker.DRI:
+                        throw CreateException("JPEG-LS restart intervals are not supported.");
                     case JpegLsMarker.SOS:
                         var scan = JpegLsStartOfScan.Parse(segment);
                         scans.Add(new ParsedJpegLsScan(scan, reader.ReadEntropyDataUntilNextMarker(), preset));
@@ -120,6 +122,11 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                         reachedEndOfImage = true;
                         break;
                     default:
+                        if (JpegLsMarker.IsRestart(segment.Code))
+                        {
+                            throw CreateException("JPEG-LS restart markers are not supported.");
+                        }
+
                         throw CreateException($"JPEG-LS marker 0x{segment.Code:X2} is not supported.");
                 }
 

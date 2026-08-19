@@ -96,11 +96,27 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 codestream,
                 sodFamilyName: "HTJ2K",
                 codestreamName: "HTJ2K");
+            foreach (var shift in parsed.RegionOfInterestShifts)
+            {
+                if (shift != 0)
+                {
+                    throw Jpeg2000Binary.CreateException("HTJ2K RGN decoding is not supported by the pure decoder.");
+                }
+            }
+
+            if (parsed.PackedPacketHeaders != null)
+            {
+                throw Jpeg2000Binary.CreateException("HTJ2K packed packet-header decoding is not supported by the pure decoder.");
+            }
+
             return new Jpeg2000StandardFrameDecoder().Decode(
                 targetPixelData,
                 parsed.Size,
                 parsed.CodingStyle,
                 parsed.Quantization,
+                parsed.ComponentCodingStyles,
+                parsed.ComponentQuantizations,
+                parsed.ProgressionChanges,
                 parsed.TileData);
         }
 

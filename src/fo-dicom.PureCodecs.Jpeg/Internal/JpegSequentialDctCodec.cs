@@ -461,6 +461,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                     case JpegMarker.DHT:
                         ParseHuffmanTables(segment.Payload, dcHuffmanTables, acHuffmanTables);
                         break;
+                    case JpegMarker.DRI:
+                        throw CreateException("JPEG sequential restart intervals are not supported.");
                     case JpegMarker.SOS:
                         scan = JpegStartOfScan.Parse(segment);
                         scanData = reader.ReadEntropyDataUntilMarker(JpegMarker.EOI);
@@ -468,6 +470,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                     case JpegMarker.EOI:
                         break;
                     default:
+                        if (JpegMarker.IsRestart(segment.Code))
+                        {
+                            throw CreateException("JPEG sequential restart markers are not supported.");
+                        }
+
                         throw CreateException($"JPEG sequential marker 0x{segment.Code:X2} is not supported.");
                 }
 

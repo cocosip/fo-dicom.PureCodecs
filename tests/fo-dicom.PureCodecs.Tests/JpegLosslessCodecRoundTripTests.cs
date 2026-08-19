@@ -153,6 +153,23 @@ public sealed class JpegLosslessCodecRoundTripTests
     }
 
     [Fact]
+    public void Process14_decoder_explicitly_rejects_restart_intervals()
+    {
+        var target = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8());
+        var codec = new JpegLosslessFrameCodec();
+        var encoded = codec.EncodeFrame(target, target.GetFrame(0).Data, selectionValue: 1);
+        var withRestartInterval = InsertBeforeMarker(
+            encoded,
+            JpegMarker.SOS,
+            new byte[] { 0xFF, JpegMarker.DRI, 0x00, 0x04, 0x00, 0x01 });
+
+        var exception = Assert.Throws<DicomCodecException>(() => codec.DecodeFrame(target, withRestartInterval));
+
+        Assert.Contains("restart", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not supported", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Process14_sv1_rgb_encoding_matches_native_optimized_huffman_table()
     {
         var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 16, columns: 16));
@@ -258,6 +275,25 @@ public sealed class JpegLosslessCodecRoundTripTests
         }
 
         throw new Xunit.Sdk.XunitException("JPEG frame does not contain an SOS marker.");
+    }
+
+    private static byte[] InsertBeforeMarker(byte[] jpeg, byte marker, byte[] insertion)
+    {
+        for (var index = 0; index + 1 < jpeg.Length; index++)
+        {
+            if (jpeg[index] != 0xFF || jpeg[index + 1] != marker)
+            {
+                continue;
+            }
+
+            var result = new byte[jpeg.Length + insertion.Length];
+            Buffer.BlockCopy(jpeg, 0, result, 0, index);
+            Buffer.BlockCopy(insertion, 0, result, index, insertion.Length);
+            Buffer.BlockCopy(jpeg, index, result, index + insertion.Length, jpeg.Length - index);
+            return result;
+        }
+
+        throw new Xunit.Sdk.XunitException($"JPEG frame does not contain marker 0x{marker:X2}.");
     }
 
     private static byte[] CreateUInt16Frame(params int[] samples)

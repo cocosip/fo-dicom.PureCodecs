@@ -113,6 +113,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                     continue;
                 }
 
+                if (JpegMarker.IsRestart(code))
+                {
+                    throw CreateException("JPEG restart markers are not supported.");
+                }
+
                 var length = _offset - start;
                 var payload = new byte[length];
                 Buffer.BlockCopy(_data, start, payload, 0, length);

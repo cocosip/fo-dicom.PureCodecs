@@ -168,7 +168,7 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Add Huffman table builder.
 - [x] Test Huffman decode table construction.
 - [x] Test Huffman encode table construction.
-- [x] Add restart marker handling.
+- [x] Recognize DRI/RST restart structures and reject them explicitly until MCU restart state is implemented.
 
 ### 4.2 JPEG Lossless Core
 
@@ -294,23 +294,26 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Test SOC parsing.
 - [x] Test SIZ parsing.
 - [x] Test COD parsing.
-- [x] Test COC parsing and component-level COD override inheritance.
+- [x] Test COC parsing and apply component-level COD overrides from main and tile headers.
 - [x] Test QCD parsing.
-- [x] Test QCC parsing and component-level QCD override inheritance.
-- [x] Test POC parsing and progression order change validation.
-- [x] Test RGN parsing and explicitly document unsupported ROI behavior.
+- [x] Test QCC parsing and apply component-level QCD overrides from main and tile headers.
+- [x] Parse and apply POC progression ranges in marker order without decoding packets twice.
+- [x] Parse main/tile RGN state and apply Maxshift during classic Tier-1 decode.
 - [x] Test COM parsing and safe preservation or rejection behavior.
 - [x] Test SOT parsing.
 - [x] Test SOD parsing.
 - [x] Test EOC parsing.
+- [x] Require EOC before accepting a complete classic JPEG 2000 or HTJ2K frame.
 - [x] Test PLT parsing or explicit managed rejection.
-- [x] Test PPM/PPT parsing or explicit managed rejection.
+- [x] Parse PPM/PPT indexes, separate packet-header/body cursors, and reject invalid placement or conflicts.
 - [x] Test SOP/EPH parsing or explicit managed rejection.
 - [x] Detect raw J2K codestream frames.
 - [x] Detect JP2 wrapper frames and fail explicitly unless supported.
 - [x] Test invalid marker length failure.
 - [x] Test multi-tile codestream geometry.
 - [x] Test multi-tile-part `Psot`, `TPsot`, and `TNsot` validation.
+- [x] Exclude SOT-through-SOD tile-header bytes from the `Psot` tile payload.
+- [x] Validate every SIZ component precision and signedness against DICOM metadata.
 - [x] Add image model.
 - [x] Add tile model.
 - [x] Add component model.
@@ -402,12 +405,12 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Add HT block decoder.
 - [x] Add HT block encoder.
 - [x] Cross-check HT block vectors against OpenJPH or OpenJPEG reference output.
-- [x] Implement standard HTJ2K Lossless decode compatible with `fo-dicom.Codecs`/OpenJPH output.
-- [x] Implement standard HTJ2K Lossless encode compatible with `fo-dicom.Codecs`/OpenJPH decoders.
-- [x] Implement standard HTJ2K Lossless RPCL decode compatible with `fo-dicom.Codecs`/OpenJPH output.
-- [x] Implement standard HTJ2K Lossless RPCL encode compatible with `fo-dicom.Codecs`/OpenJPH decoders.
-- [x] Implement standard HTJ2K Lossy decode compatible with `fo-dicom.Codecs`/OpenJPH output.
-- [x] Implement standard HTJ2K Lossy encode compatible with `fo-dicom.Codecs`/OpenJPH decoders.
+- [x] Implement standard HTJ2K Lossless decode and validate with managed round-trips and local standard fixtures.
+- [x] Implement standard HTJ2K Lossless encode and validate with managed round-trips and standard HT vectors.
+- [x] Implement standard HTJ2K Lossless RPCL decode with RPCL packet-order validation.
+- [x] Implement standard HTJ2K Lossless RPCL encode with RPCL packet-order validation.
+- [x] Implement standard HTJ2K Lossy decode and validate with managed tolerance checks and local standard fixtures.
+- [x] Implement standard HTJ2K Lossy encode and validate with managed tolerance checks and standard HT vectors.
 - [x] Test HTJ2K Lossless exact round-trip.
 - [x] Test HTJ2K Lossless RPCL exact round-trip.
 - [x] Test HTJ2K Lossless RPCL codestream uses RPCL progression.
@@ -466,6 +469,8 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Run render tests where rendering dependencies are available.
 - [x] Compare lossless outputs with exact byte equality after decode.
 - [x] Compare lossy outputs with agreed tolerance after decode.
+- [x] Run isolated bidirectional `fo-dicom.Codecs` Native workers for RLE, four JPEG syntaxes, two JPEG-LS syntaxes, and two classic JPEG 2000 syntaxes.
+- [x] Keep HTJ2K outside the required Native interoperability gate; validate it with managed round-trips, standard vectors, and local fixtures.
 - [x] Verify invalid streams throw managed exceptions.
 - [x] Document unsupported edge cases before release.
 

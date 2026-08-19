@@ -50,7 +50,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                     }
 
                     var convertRgbToYbrFull = oldPixelData.SamplesPerPixel == 3
-                        && oldPixelData.PhotometricInterpretation == PhotometricInterpretation.Rgb;
+                        && (oldPixelData.PhotometricInterpretation == PhotometricInterpretation.Rgb
+                            || oldPixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull422);
                     var sourceFrame = NormalizeFrameForEncode(oldPixelData, ToArray(oldPixelData.GetFrame(frame)));
                     if (convertRgbToYbrFull)
                     {
@@ -180,6 +181,30 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
         private static byte[] NormalizeFrameForEncode(DicomPixelData pixelData, byte[] frame)
         {
+            if (pixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull422)
+            {
+                if (pixelData.PlanarConfiguration == PlanarConfiguration.Planar)
+                {
+                    throw new DicomCodecException("JPEG planar YBR_FULL_422 encoding is not supported.");
+                }
+
+                var rgb = ToArray(PixelDataConverter.YbrFull422ToRgb(new MemoryByteBuffer(frame), pixelData.Width));
+                var expectedLength = pixelData.Width * pixelData.Height * pixelData.SamplesPerPixel;
+                if (rgb.Length < expectedLength)
+                {
+                    throw new DicomCodecException("JPEG YBR_FULL_422 conversion produced an incomplete RGB frame.");
+                }
+
+                if (rgb.Length == expectedLength)
+                {
+                    return rgb;
+                }
+
+                var trimmed = new byte[expectedLength];
+                Buffer.BlockCopy(rgb, 0, trimmed, 0, trimmed.Length);
+                return trimmed;
+            }
+
             if (pixelData.SamplesPerPixel == 3 && pixelData.PlanarConfiguration == PlanarConfiguration.Planar)
             {
                 return JpegColorConverter.PlanarRgbToInterleaved(frame, pixelData.Width * pixelData.Height);
