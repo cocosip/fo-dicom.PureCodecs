@@ -7,7 +7,7 @@ using FellowOakDicom.PureCodecs.Htj2kReference;
 
 return Htj2kReferenceWorkerProgram.Run(args);
 
-internal static class Htj2kReferenceWorkerProgram
+public static class Htj2kReferenceWorkerProgram
 {
     private const string ReferencePackageVersion = "5.16.7";
     private const string ReferenceReleaseCommit = "1d05c6cca14883d06b835f8dadca5dae7d97577c";

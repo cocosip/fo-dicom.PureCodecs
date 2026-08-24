@@ -20,9 +20,9 @@ public sealed class Htj2kReferenceWorkerTests
             var manifestPath = Path.Combine(directory, "reference.json");
             new DicomFile(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 32, columns: 32)).Save(sourcePath);
 
-            var result = await RunWorkerAsync(sourcePath, "201", manifestPath);
+            var exitCode = RunWorker(sourcePath, "201", manifestPath);
 
-            Assert.True(result.ExitCode == 0, result.Output);
+            Assert.True(exitCode == 0, "Reference worker returned a non-zero exit code.");
             var manifest = JsonSerializer.Deserialize<Htj2kReferenceManifest>(File.ReadAllText(manifestPath));
             Assert.NotNull(manifest);
             Assert.Equal("5.16.7", manifest.ReferencePackageVersion);
@@ -46,48 +46,14 @@ public sealed class Htj2kReferenceWorkerTests
         }
     }
 
-    private static async Task<(int ExitCode, string Output)> RunWorkerAsync(string sourcePath, string syntax, string manifestPath)
+    private static int RunWorker(string sourcePath, string syntax, string manifestPath)
     {
-        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
-        var workerAssembly = Path.Combine(
-            root,
-            "tools",
-            "fo-dicom.PureCodecs.Htj2kReference",
-            "bin",
-            "Debug",
-            "net10.0",
-            "fo-dicom.PureCodecs.Htj2kReference.dll");
-        var startInfo = new ProcessStartInfo
+        return Htj2kReferenceWorkerProgram.Run(new[]
         {
-            FileName = "dotnet",
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
-        startInfo.ArgumentList.Add(workerAssembly);
-        startInfo.ArgumentList.Add("--worker");
-        startInfo.ArgumentList.Add("--input");
-        startInfo.ArgumentList.Add(sourcePath);
-        startInfo.ArgumentList.Add("--syntax");
-        startInfo.ArgumentList.Add(syntax);
-        startInfo.ArgumentList.Add("--output");
-        startInfo.ArgumentList.Add(manifestPath);
-
-        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the HTJ2K reference worker.");
-        var outputTask = process.StandardOutput.ReadToEndAsync();
-        var errorTask = process.StandardError.ReadToEndAsync();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
-        try
-        {
-            await process.WaitForExitAsync(timeout.Token);
-        }
-        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
-        {
-            process.Kill(entireProcessTree: true);
-            await process.WaitForExitAsync();
-            throw new TimeoutException("HTJ2K reference worker exceeded 120 seconds.");
-        }
-
-        return (process.ExitCode, (await outputTask) + (await errorTask));
+            "--worker",
+            "--input", sourcePath,
+            "--syntax", syntax,
+            "--output", manifestPath
+        });
     }
 }
