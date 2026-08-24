@@ -14,7 +14,7 @@ This release is intended for compatibility testing against applications that cur
 - Does not require users to register RLE, JPEG, JPEG-LS, or JPEG 2000 assemblies separately.
 - Contains no native codec DLLs, P/Invoke codec paths, or native fallback paths.
 - Includes managed encode and decode coverage for the phase 1 transfer syntax matrix.
-- Includes package consumer smoke tests for modern .NET and .NET Framework 4.7.2 on Windows.
+- Includes direct-project consumer smoke tests for modern .NET and .NET Framework 4.7.2 on Windows, plus separate NuGet package-content inspection.
 
 ## Supported Transfer Syntaxes
 
@@ -57,7 +57,8 @@ The repository validation suite covers:
 - Lossy tolerance checks after decode.
 - Efferent `fo-dicom.Codecs` unit and acceptance fixtures available in this repository.
 - Managed exception behavior for invalid compressed input.
-- Package install and single-manager registration smoke tests.
+- Direct-project consumer and single-manager registration smoke tests.
+- NuGet package-content checks for managed `netstandard2.0` assemblies only.
 
 ## Known Limitations
 
@@ -69,10 +70,13 @@ Limitations that remain outside this alpha are compatibility edges or fixture ga
 - JPEG 2000 Part 2 multi-component and JPIP/JPT transfer syntaxes remain unregistered.
 - Some rare JPEG/JPEG 2000 marker combinations fail with explicit managed exceptions.
 - HTJ2K `.201`, `.202`, and `.203` use a managed Part 15 codestream path and
-  are validated with managed round-trips, standard HT vectors, and local
-  OpenJPH-derived fixtures. HTJ2K Native interoperability is not a release gate,
-  and broad third-party fixture coverage remains limited by available
-  redistributable samples.
+  are validated with managed round-trips, standard HT vectors, exact default
+  `fo-dicom.Codecs 5.16.7` codestreams, and process-isolated interoperability.
+  Complete `.201/.202` native-to-Pure multi-frame decode is byte-exact. The
+  reverse complete-dataset native call has a documented `fo-dicom.Codecs 5.16.7`
+  wrapper difference even though every identical Pure codestream decodes
+  byte-exact through an individual native call. Broad independent third-party
+  fixture coverage remains limited by available redistributable samples.
 
 ## Upgrade Notes
 

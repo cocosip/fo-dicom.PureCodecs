@@ -4,8 +4,26 @@ using FellowOakDicom.Imaging;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 {
+    internal enum Jpeg2000DecodeProfile
+    {
+        ClassicOpenJpeg,
+        HighThroughputOpenJph
+    }
+
     internal sealed class Jpeg2000StandardFrameDecoder
     {
+        private readonly Jpeg2000DecodeProfile _profile;
+
+        public Jpeg2000StandardFrameDecoder()
+            : this(Jpeg2000DecodeProfile.ClassicOpenJpeg)
+        {
+        }
+
+        public Jpeg2000StandardFrameDecoder(Jpeg2000DecodeProfile profile)
+        {
+            _profile = profile;
+        }
+
         public byte[] Decode(DicomPixelData targetPixelData, Jpeg2000SizeSegment siz, Jpeg2000CodingStyleDefault cod, Jpeg2000QuantizationDefault qcd, byte[] tileData)
         {
             return Decode(
@@ -830,13 +848,18 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             return value >= 0 ? (int)(value + 0.5) : (int)(value - 0.5);
         }
 
-        private static byte[] Pack(DicomPixelData targetPixelData, Jpeg2000StandardComponent[] components)
+        private byte[] Pack(DicomPixelData targetPixelData, Jpeg2000StandardComponent[] components)
         {
             var bytesPerSample = targetPixelData.BitsAllocated / 8;
             var pixelCount = components[0].Width * components[0].Height;
             var result = new byte[pixelCount * components.Length * bytesPerSample];
             var precision = components[0].Precision;
             var max = (1 << precision) - 1;
+            var targetIsSigned = targetPixelData.PixelRepresentation == PixelRepresentation.Signed;
+            var storedMin = targetIsSigned ? -(1 << (targetPixelData.BitsStored - 1)) : 0;
+            var storedMax = targetIsSigned
+                ? (1 << (targetPixelData.BitsStored - 1)) - 1
+                : (1 << targetPixelData.BitsStored) - 1;
 
             for (var pixel = 0; pixel < pixelCount; pixel++)
             {
@@ -846,6 +869,19 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     var value = floatSamples != null
                         ? RoundSample(floatSamples[pixel])
                         : components[component].Samples[pixel];
+                    if (_profile == Jpeg2000DecodeProfile.HighThroughputOpenJph
+                        && components[component].Precision != targetPixelData.BitsStored
+                        && (value < storedMin || value > storedMax))
+                    {
+                        if (floatSamples == null)
+                        {
+                            throw Jpeg2000Binary.CreateException(
+                                "HTJ2K decoded sample is outside the DICOM BitsStored range.");
+                        }
+
+                        value = Math.Min(storedMax, Math.Max(storedMin, value));
+                    }
+
                     if (components[component].IsSigned)
                     {
                         var min = -(1 << (components[component].Precision - 1));
@@ -885,7 +921,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             return result;
         }
 
-        private static void Validate(DicomPixelData targetPixelData, Jpeg2000SizeSegment siz, Jpeg2000CodingStyleDefault cod)
+        private void Validate(DicomPixelData targetPixelData, Jpeg2000SizeSegment siz, Jpeg2000CodingStyleDefault cod)
         {
             if (targetPixelData.Width != (int)(siz.ReferenceGridWidth - siz.ImageOffsetX)
                 || targetPixelData.Height != (int)(siz.ReferenceGridHeight - siz.ImageOffsetY)
@@ -898,7 +934,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             for (var component = 0; component < siz.Components.Count; component++)
             {
                 var sizeComponent = siz.Components[component];
-                var usesAllocatedContainerPrecision = targetPixelData.BitsStored < targetPixelData.BitsAllocated
+                var usesAllocatedContainerPrecision = _profile == Jpeg2000DecodeProfile.HighThroughputOpenJph
+                    && targetPixelData.BitsStored < targetPixelData.BitsAllocated
                     && sizeComponent.Precision == targetPixelData.BitsAllocated;
                 if (sizeComponent.Precision != targetPixelData.BitsStored && !usesAllocatedContainerPrecision)
                 {

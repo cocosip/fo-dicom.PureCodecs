@@ -9,14 +9,11 @@ return Htj2kReferenceWorkerProgram.Run(args);
 
 public static class Htj2kReferenceWorkerProgram
 {
-    private const string ReferencePackageVersion = "5.16.7";
-    private const string ReferenceReleaseCommit = "1d05c6cca14883d06b835f8dadca5dae7d97577c";
-    private const string CodestreamReportedOpenJphVersion = "0.21.2";
-
     public static int Run(string[] args)
     {
         try
         {
+            DelayForWorkerContractTest(args);
             var options = Options.Parse(args);
             WriteReference(options);
             Console.WriteLine("HTJ2K_REFERENCE|ok");
@@ -26,6 +23,28 @@ public static class Htj2kReferenceWorkerProgram
         {
             Console.Error.WriteLine($"HTJ2K_REFERENCE|fail|{exception.GetType().Name}: {exception.Message}");
             return 1;
+        }
+    }
+
+    private static void DelayForWorkerContractTest(string[] args)
+    {
+        for (var index = 0; index < args.Length; index++)
+        {
+            if (args[index] != "--delay-ms")
+            {
+                continue;
+            }
+
+            if (++index >= args.Length
+                || !int.TryParse(args[index], out var delayMilliseconds)
+                || delayMilliseconds < 0
+                || delayMilliseconds > 60000)
+            {
+                throw new ArgumentException("--delay-ms requires a value from 0 through 60000.");
+            }
+
+            Thread.Sleep(delayMilliseconds);
+            return;
         }
     }
 
@@ -60,7 +79,10 @@ public static class Htj2kReferenceWorkerProgram
             var compressedFrame = compressed.GetFrame(frameIndex);
             var logicalCodestream = ExtractLogicalCodestream(compressedFrame, frameIndex);
             File.WriteAllBytes(Path.Combine(outputDirectory, frameIndex + ".j2c"), logicalCodestream);
-            encodedFrames.Add(new EncodedFrame(rawFrame, logicalCodestream, ReadMarkerSummary(logicalCodestream)));
+            encodedFrames.Add(new EncodedFrame(
+                rawFrame,
+                logicalCodestream,
+                Htj2kReferenceManifestBuilder.ReadMarkerSummary(logicalCodestream)));
         }
 
         var decoded = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
@@ -84,11 +106,26 @@ public static class Htj2kReferenceWorkerProgram
                 encodedFrame.MarkerSummary));
         }
 
+        var provenance = Htj2kReferenceProvenanceReader.ReadAndValidate(codec.GetType().Assembly);
+        var codestreamReportedVersion = Htj2kReferenceManifestBuilder.ReadCodestreamReportedOpenJphVersion(
+            encodedFrames[0].LogicalCodestream);
+        var effectiveParameters = Htj2kReferenceManifestBuilder.ReadEffectiveParameters(encodedFrames[0].LogicalCodestream);
+        foreach (var encodedFrame in encodedFrames)
+        {
+            if (Htj2kReferenceManifestBuilder.ReadCodestreamReportedOpenJphVersion(encodedFrame.LogicalCodestream) != codestreamReportedVersion
+                || Htj2kReferenceManifestBuilder.ReadEffectiveParameters(encodedFrame.LogicalCodestream) != effectiveParameters)
+            {
+                throw new InvalidDataException("HTJ2K reference frames report inconsistent provenance or effective parameters.");
+            }
+        }
+
         var manifest = new Htj2kReferenceManifest(
-            ReferencePackageVersion,
-            ReferenceReleaseCommit,
-            CodestreamReportedOpenJphVersion,
+            provenance.PackageVersion,
+            provenance.ReleaseCommit,
+            codestreamReportedVersion,
             codec.TransferSyntax.UID.UID,
+            source.NumberOfFrames,
+            effectiveParameters,
             frames);
         File.WriteAllText(options.OutputPath, JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
     }
@@ -140,104 +177,6 @@ public static class Htj2kReferenceWorkerProgram
         return clone;
     }
 
-    private static Htj2kMarkerSummary ReadMarkerSummary(byte[] codestream)
-    {
-        var markerCodes = new List<string>();
-        var tilePartCount = 0;
-        var offset = 0;
-        while (offset < codestream.Length)
-        {
-            RequireMarker(codestream, offset);
-            var marker = codestream[offset + 1];
-            markerCodes.Add("FF" + marker.ToString("X2"));
-            if (marker == 0xD9)
-            {
-                break;
-            }
-
-            if (marker == 0x90)
-            {
-                tilePartCount++;
-                offset = SkipTilePart(codestream, offset, markerCodes);
-                continue;
-            }
-
-            offset += MarkerLength(codestream, offset, marker);
-        }
-
-        if (markerCodes.Count == 0 || markerCodes[^1] != "FFD9")
-        {
-            throw new InvalidDataException("HTJ2K codestream marker sequence does not end with EOC.");
-        }
-
-        return new Htj2kMarkerSummary(markerCodes, tilePartCount);
-    }
-
-    private static int SkipTilePart(byte[] codestream, int offset, List<string> markerCodes)
-    {
-        if (offset + 12 > codestream.Length || ReadUInt16(codestream, offset + 2) != 10)
-        {
-            throw new InvalidDataException("HTJ2K SOT marker is invalid.");
-        }
-
-        var tilePartLength = ReadUInt32(codestream, offset + 6);
-        if (tilePartLength < 14 || tilePartLength > codestream.Length - offset)
-        {
-            throw new InvalidDataException("HTJ2K SOT length is invalid.");
-        }
-
-        var tilePartEnd = checked(offset + (int)tilePartLength);
-        offset += 12;
-        while (offset < tilePartEnd)
-        {
-            RequireMarker(codestream, offset);
-            var marker = codestream[offset + 1];
-            markerCodes.Add("FF" + marker.ToString("X2"));
-            if (marker == 0x93)
-            {
-                return tilePartEnd;
-            }
-
-            offset += MarkerLength(codestream, offset, marker);
-        }
-
-        throw new InvalidDataException("HTJ2K tile part does not contain SOD.");
-    }
-
-    private static int MarkerLength(byte[] codestream, int offset, byte marker)
-    {
-        if (marker is 0x4F or 0x92 or 0x93 or 0xD9)
-        {
-            return 2;
-        }
-
-        if (offset + 4 > codestream.Length)
-        {
-            throw new InvalidDataException("HTJ2K marker length is outside the codestream.");
-        }
-
-        var length = ReadUInt16(codestream, offset + 2);
-        if (length < 2 || length > codestream.Length - offset - 2)
-        {
-            throw new InvalidDataException("HTJ2K marker length is invalid.");
-        }
-
-        return 2 + length;
-    }
-
-    private static void RequireMarker(byte[] codestream, int offset)
-    {
-        if (offset + 1 >= codestream.Length || codestream[offset] != 0xFF)
-        {
-            throw new InvalidDataException("HTJ2K marker prefix is invalid.");
-        }
-    }
-
-    private static int ReadUInt16(byte[] bytes, int offset) => (bytes[offset] << 8) | bytes[offset + 1];
-
-    private static uint ReadUInt32(byte[] bytes, int offset) =>
-        ((uint)bytes[offset] << 24) | ((uint)bytes[offset + 1] << 16) | ((uint)bytes[offset + 2] << 8) | bytes[offset + 3];
-
     private sealed record Options(string InputPath, DicomTransferSyntax TransferSyntax, string OutputPath)
     {
         public static Options Parse(string[] args)
@@ -261,6 +200,9 @@ public static class Htj2kReferenceWorkerProgram
                         break;
                     case "--output":
                         outputPath = NextValue(args, ref index, "--output");
+                        break;
+                    case "--delay-ms":
+                        NextValue(args, ref index, "--delay-ms");
                         break;
                     default:
                         throw new ArgumentException("Unknown HTJ2K reference worker option.");

@@ -52,9 +52,18 @@ public static class Htj2kReferenceDiffComparer
             return Htj2kReferenceDiff.Mismatch(provenanceMismatch);
         }
 
-        if (expected.Frames.Count != actual.Frames.Count || expectedFrames.Count != actualFrames.Count || expected.Frames.Count != expectedFrames.Count)
+        if (expected.FrameCount != actual.FrameCount
+            || expected.FrameCount != expected.Frames.Count
+            || actual.FrameCount != actual.Frames.Count
+            || expectedFrames.Count != actualFrames.Count
+            || expected.Frames.Count != expectedFrames.Count)
         {
             return Htj2kReferenceDiff.Mismatch("HTJ2K reference frame count differs.");
+        }
+
+        if (expected.EffectiveParameters != actual.EffectiveParameters)
+        {
+            return Htj2kReferenceDiff.Mismatch("HTJ2K effective parameters differ.");
         }
 
         for (var frameIndex = 0; frameIndex < expected.Frames.Count; frameIndex++)
@@ -64,6 +73,12 @@ public static class Htj2kReferenceDiffComparer
             if (expectedFrame.FrameIndex != actualFrame.FrameIndex)
             {
                 return Htj2kReferenceDiff.Mismatch("HTJ2K reference frame indexes differ.");
+            }
+
+
+            if (!string.Equals(expectedFrame.RawFrameSha256, actualFrame.RawFrameSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                return Htj2kReferenceDiff.Mismatch("HTJ2K raw-frame hashes differ.");
             }
 
             var byteDifference = FindFirstByteDifference(expectedFrames[frameIndex], actualFrames[frameIndex], frameIndex);
@@ -77,10 +92,21 @@ public static class Htj2kReferenceDiffComparer
                 return Htj2kReferenceDiff.Mismatch("HTJ2K logical codestream hashes differ.");
             }
 
+
+            if (!string.Equals(expectedFrame.DecodedFrameSha256, actualFrame.DecodedFrameSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                return Htj2kReferenceDiff.Mismatch("HTJ2K decoded-frame hashes differ.");
+            }
+
+            if (expectedFrame.LogicalCodestreamLength != actualFrame.LogicalCodestreamLength)
+            {
+                return Htj2kReferenceDiff.Mismatch("HTJ2K logical codestream lengths differ.");
+            }
+
             if (!expectedFrame.MarkerSummary.MarkerCodes.SequenceEqual(actualFrame.MarkerSummary.MarkerCodes, StringComparer.Ordinal)
                 || expectedFrame.MarkerSummary.TilePartCount != actualFrame.MarkerSummary.TilePartCount)
             {
-                return Htj2kReferenceDiff.Mismatch("HTJ2K marker summaries differ.");
+                return Htj2kReferenceDiff.Mismatch("HTJ2K marker summary differs.");
             }
         }
 

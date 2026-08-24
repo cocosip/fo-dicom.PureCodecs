@@ -1,14 +1,10 @@
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
-using FellowOakDicom.Imaging.NativeCodec;
 using FellowOakDicom.IO.Buffer;
 using FellowOakDicom.PureCodecs.Jpeg2000.Internal;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
-using NativeHtJpeg2000LosslessCodec = FellowOakDicom.Imaging.NativeCodec.DicomHtJpeg2000LosslessCodec;
-using NativeHtJpeg2000LosslessRpclCodec = FellowOakDicom.Imaging.NativeCodec.DicomHtJpeg2000LosslessRPCLCodec;
-using NativeHtJpeg2000LossyCodec = FellowOakDicom.Imaging.NativeCodec.DicomHtJpeg2000LossyCodec;
 using PureHtJpeg2000LosslessCodec = FellowOakDicom.PureCodecs.Jpeg2000.DicomHtJpeg2000LosslessCodec;
 using PureHtJpeg2000LosslessRpclCodec = FellowOakDicom.PureCodecs.Jpeg2000.DicomHtJpeg2000LosslessRpclCodec;
 using PureHtJpeg2000LossyCodec = FellowOakDicom.PureCodecs.Jpeg2000.DicomHtJpeg2000LossyCodec;
@@ -21,14 +17,9 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
     public void Fo_dicom_codecs_native_htj2k_lossless_output_decodes_with_native_decoder()
     {
         var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 32, columns: 32));
-        var compressedDataset = CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.HTJ2KLossless);
-        var compressedPixelData = DicomPixelData.Create(compressedDataset, true);
-        var decodedDataset = CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian);
-        var decodedPixelData = DicomPixelData.Create(decodedDataset, true);
-        var codec = new NativeHtJpeg2000LosslessCodec();
-
-        codec.Encode(source, compressedPixelData, codec.GetDefaultParameters());
-        codec.Decode(compressedPixelData, decodedPixelData, codec.GetDefaultParameters());
+        var compressedDataset = NativeTranscode(source.Dataset, DicomTransferSyntax.HTJ2KLossless);
+        var decodedPixelData = DicomPixelData.Create(
+            NativeTranscode(compressedDataset, DicomTransferSyntax.ExplicitVRLittleEndian));
 
         PixelDataAssertions.FramesMatchExactly(source, decodedPixelData);
     }
@@ -43,18 +34,8 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
 
         codec.Encode(source, compressedPixelData, codec.GetDefaultParameters());
 
-        new DicomSetupBuilder()
-            .RegisterServices(services => services
-                .AddFellowOakDicom()
-                .AddTranscoderManager<NativeTranscoderManager>())
-            .SkipValidation()
-            .Build();
-
-        var decodedDataset = new DicomTranscoder(
-                DicomTransferSyntax.HTJ2KLossless,
-                DicomTransferSyntax.ExplicitVRLittleEndian)
-            .Transcode(compressedDataset);
-        var decodedPixelData = DicomPixelData.Create(decodedDataset);
+        var decodedPixelData = DicomPixelData.Create(
+            NativeTranscode(compressedDataset, DicomTransferSyntax.ExplicitVRLittleEndian));
 
         PixelDataAssertions.FramesMatchExactly(source, decodedPixelData);
     }
@@ -69,18 +50,8 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
 
         codec.Encode(source, compressedPixelData, codec.GetDefaultParameters());
 
-        new DicomSetupBuilder()
-            .RegisterServices(services => services
-                .AddFellowOakDicom()
-                .AddTranscoderManager<NativeTranscoderManager>())
-            .SkipValidation()
-            .Build();
-
-        var decodedDataset = new DicomTranscoder(
-                DicomTransferSyntax.HTJ2KLossless,
-                DicomTransferSyntax.ExplicitVRLittleEndian)
-            .Transcode(compressedDataset);
-        var decodedPixelData = DicomPixelData.Create(decodedDataset);
+        var decodedPixelData = DicomPixelData.Create(
+            NativeTranscode(compressedDataset, DicomTransferSyntax.ExplicitVRLittleEndian));
 
         PixelDataAssertions.FramesMatchExactly(source, decodedPixelData);
     }
@@ -95,18 +66,8 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
 
         codec.Encode(source, compressedPixelData, codec.GetDefaultParameters());
 
-        new DicomSetupBuilder()
-            .RegisterServices(services => services
-                .AddFellowOakDicom()
-                .AddTranscoderManager<NativeTranscoderManager>())
-            .SkipValidation()
-            .Build();
-
-        var decodedDataset = new DicomTranscoder(
-                DicomTransferSyntax.HTJ2KLossless,
-                DicomTransferSyntax.ExplicitVRLittleEndian)
-            .Transcode(compressedDataset);
-        var decodedPixelData = DicomPixelData.Create(decodedDataset);
+        var decodedPixelData = DicomPixelData.Create(
+            NativeTranscode(compressedDataset, DicomTransferSyntax.ExplicitVRLittleEndian));
 
         PixelDataAssertions.FramesMatchExactly(source, decodedPixelData);
     }
@@ -121,18 +82,8 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
 
         codec.Encode(source, compressedPixelData, codec.GetDefaultParameters());
 
-        new DicomSetupBuilder()
-            .RegisterServices(services => services
-                .AddFellowOakDicom()
-                .AddTranscoderManager<NativeTranscoderManager>())
-            .SkipValidation()
-            .Build();
-
-        var decodedDataset = new DicomTranscoder(
-                DicomTransferSyntax.HTJ2KLossless,
-                DicomTransferSyntax.ExplicitVRLittleEndian)
-            .Transcode(compressedDataset);
-        var decodedPixelData = DicomPixelData.Create(decodedDataset);
+        var decodedPixelData = DicomPixelData.Create(
+            NativeTranscode(compressedDataset, DicomTransferSyntax.ExplicitVRLittleEndian));
 
         PixelDataAssertions.FramesMatchExactly(source, decodedPixelData);
     }
@@ -147,18 +98,8 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
 
         codec.Encode(source, compressedPixelData, codec.GetDefaultParameters());
 
-        new DicomSetupBuilder()
-            .RegisterServices(services => services
-                .AddFellowOakDicom()
-                .AddTranscoderManager<NativeTranscoderManager>())
-            .SkipValidation()
-            .Build();
-
-        var decodedDataset = new DicomTranscoder(
-                DicomTransferSyntax.HTJ2KLosslessRPCL,
-                DicomTransferSyntax.ExplicitVRLittleEndian)
-            .Transcode(compressedDataset);
-        var decodedPixelData = DicomPixelData.Create(decodedDataset);
+        var decodedPixelData = DicomPixelData.Create(
+            NativeTranscode(compressedDataset, DicomTransferSyntax.ExplicitVRLittleEndian));
 
         PixelDataAssertions.FramesMatchExactly(source, decodedPixelData);
     }
@@ -167,13 +108,10 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
     public void Fo_dicom_codecs_htj2k_lossless_16_allocated_12_stored_output_decodes_with_pure_decoder()
     {
         var source = DicomPixelData.Create(CreateMonochrome12(rows: 32, columns: 32));
-        var compressedDataset = CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.HTJ2KLossless);
-        var compressedPixelData = DicomPixelData.Create(compressedDataset, true);
+        var compressedDataset = NativeTranscode(source.Dataset, DicomTransferSyntax.HTJ2KLossless);
+        var compressedPixelData = DicomPixelData.Create(compressedDataset);
         var decodedDataset = CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian);
         var decodedPixelData = DicomPixelData.Create(decodedDataset, true);
-
-        var nativeCodec = new NativeHtJpeg2000LosslessCodec();
-        nativeCodec.Encode(source, compressedPixelData, nativeCodec.GetDefaultParameters());
 
         new PureHtJpeg2000LosslessCodec().Decode(compressedPixelData, decodedPixelData, new Jpeg2000.DicomHtJpeg2000Params());
 
@@ -191,18 +129,8 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
         codec.Encode(source, compressedPixelData, new Jpeg2000.DicomHtJpeg2000Params { TargetRatio = 3.0 });
 
         Assert.False(ReadUsesReversibleTransform(compressedPixelData.GetFrame(0).Data));
-        new DicomSetupBuilder()
-            .RegisterServices(services => services
-                .AddFellowOakDicom()
-                .AddTranscoderManager<NativeTranscoderManager>())
-            .SkipValidation()
-            .Build();
-
-        var decodedDataset = new DicomTranscoder(
-                DicomTransferSyntax.HTJ2K,
-                DicomTransferSyntax.ExplicitVRLittleEndian)
-            .Transcode(compressedDataset);
-        var decodedPixelData = DicomPixelData.Create(decodedDataset);
+        var decodedPixelData = DicomPixelData.Create(
+            NativeTranscode(compressedDataset, DicomTransferSyntax.ExplicitVRLittleEndian));
 
         PixelDataAssertions.FramesMatchWithinTolerance(source, decodedPixelData, tolerance: 8);
     }
@@ -217,18 +145,8 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
 
         codec.Encode(source, compressedPixelData, codec.GetDefaultParameters());
 
-        new DicomSetupBuilder()
-            .RegisterServices(services => services
-                .AddFellowOakDicom()
-                .AddTranscoderManager<NativeTranscoderManager>())
-            .SkipValidation()
-            .Build();
-
-        var decodedDataset = new DicomTranscoder(
-                DicomTransferSyntax.HTJ2K,
-                DicomTransferSyntax.ExplicitVRLittleEndian)
-            .Transcode(compressedDataset);
-        var decodedPixelData = DicomPixelData.Create(decodedDataset);
+        var decodedPixelData = DicomPixelData.Create(
+            NativeTranscode(compressedDataset, DicomTransferSyntax.ExplicitVRLittleEndian));
 
         PixelDataAssertions.FramesMatchWithinTolerance(source, decodedPixelData, tolerance: 8);
     }
@@ -253,24 +171,47 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Htj2k_lossless_12_bit_multiframe_fixture_preserves_every_sample_through_fo_dicom_codecs(bool rpcl)
+    public void Fo_dicom_codecs_multiframe_decode_difference_is_not_a_pure_codestream_failure(bool rpcl)
     {
         var sourceFrames = DecodeSample05ToRaw();
         var syntax = rpcl ? DicomTransferSyntax.HTJ2KLosslessRPCL : DicomTransferSyntax.HTJ2KLossless;
         IDicomCodec codec = rpcl ? new PureHtJpeg2000LosslessRpclCodec() : new PureHtJpeg2000LosslessCodec();
-        IDicomCodec referenceCodec = rpcl ? new NativeHtJpeg2000LosslessRpclCodec() : new NativeHtJpeg2000LosslessCodec();
+        var pureCompressedDataset = CloneForTransferSyntax(sourceFrames.Dataset, syntax);
+        var pureCompressed = DicomPixelData.Create(pureCompressedDataset, true);
+        codec.Encode(sourceFrames, pureCompressed, codec.GetDefaultParameters());
 
-        for (var frame = 0; frame < sourceFrames.NumberOfFrames; frame++)
+        var nativeDecoded = DicomPixelData.Create(
+            NativeTranscode(pureCompressedDataset, DicomTransferSyntax.ExplicitVRLittleEndian));
+        var difference = FindFirstDifference(sourceFrames, nativeDecoded);
+        Assert.NotNull(difference);
+        Assert.Equal(1, difference.Value.FrameIndex);
+        Assert.Equal(32400, difference.Value.ByteOffset);
+
+        for (var frameIndex = 0; frameIndex < sourceFrames.NumberOfFrames; frameIndex++)
         {
-            var source = ExtractSample05Frame(frame);
-            var compressed = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, syntax), true);
-            var decoded = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
-
-            codec.Encode(source, compressed, codec.GetDefaultParameters());
-            referenceCodec.Decode(compressed, decoded, referenceCodec.GetDefaultParameters());
-
-            PixelDataAssertions.FramesMatchExactly(source, decoded);
+            var sourceFrame = ExtractSingleFrame(sourceFrames, frameIndex, DicomTransferSyntax.ExplicitVRLittleEndian);
+            var compressedFrame = ExtractSingleFrame(pureCompressed, frameIndex, syntax);
+            var decodedFrame = DicomPixelData.Create(
+                NativeTranscode(compressedFrame.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian));
+            AssertFramesMatchExactlyWithLocation(sourceFrame, decodedFrame);
         }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Htj2k_lossless_12_bit_multiframe_fixture_preserves_every_sample_from_fo_dicom_codecs_to_pure(bool rpcl)
+    {
+        var sourceFrames = DecodeSample05ToRaw();
+        var syntax = rpcl ? DicomTransferSyntax.HTJ2KLosslessRPCL : DicomTransferSyntax.HTJ2KLossless;
+        IDicomCodec codec = rpcl ? new PureHtJpeg2000LosslessRpclCodec() : new PureHtJpeg2000LosslessCodec();
+
+        var nativeCompressed = DicomPixelData.Create(NativeTranscode(sourceFrames.Dataset, syntax));
+        var pureDecoded = DicomPixelData.Create(
+            CloneForTransferSyntax(sourceFrames.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian),
+            true);
+        codec.Decode(nativeCompressed, pureDecoded, codec.GetDefaultParameters());
+        AssertFramesMatchExactlyWithLocation(sourceFrames, pureDecoded);
     }
 
     [Fact]
@@ -294,12 +235,11 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
             transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
             frame));
         var compressed = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.HTJ2KLossless), true);
-        var decoded = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
         var codec = new PureHtJpeg2000LosslessCodec();
-        var referenceCodec = new NativeHtJpeg2000LosslessCodec();
 
         codec.Encode(source, compressed, codec.GetDefaultParameters());
-        referenceCodec.Decode(compressed, decoded, referenceCodec.GetDefaultParameters());
+        var decoded = DicomPixelData.Create(
+            NativeTranscode(compressed.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian));
 
         PixelDataAssertions.FramesMatchExactly(source, decoded);
     }
@@ -308,11 +248,9 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
     public void Fo_dicom_codecs_htj2k_lossy_fixture_output_decodes_within_tolerance()
     {
         var source = LoadInteropFixtureToRaw("sample-01.dcm");
-        var compressed = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.HTJ2K), true);
+        var compressed = DicomPixelData.Create(NativeTranscode(source.Dataset, DicomTransferSyntax.HTJ2K));
         var decoded = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
-        var referenceCodec = new NativeHtJpeg2000LossyCodec();
 
-        referenceCodec.Encode(source, compressed, referenceCodec.GetDefaultParameters());
         new PureHtJpeg2000LossyCodec().Decode(compressed, decoded, new Jpeg2000.DicomHtJpeg2000Params());
 
         PixelDataAssertions.FramesMatchWithinTolerance(source, decoded, tolerance: 8);
@@ -341,27 +279,14 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
         var file = DicomFile.Open(
             Path.Combine(root, "tools", "fo-dicom.PureCodecs.InteropValidation", "Fixtures", fileName),
             FileReadOption.ReadAll);
-        var compressed = DicomPixelData.Create(file.Dataset);
-        if (!compressed.Syntax.IsEncapsulated)
+        var pixelData = DicomPixelData.Create(file.Dataset);
+        if (!pixelData.Syntax.IsEncapsulated)
         {
-            return compressed;
+            return pixelData;
         }
 
-        var decoded = DicomPixelData.Create(CloneForTransferSyntax(file.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
-        var decoder = new FellowOakDicom.Imaging.NativeCodec.DicomJpegLossless14SV1Codec();
-
-        decoder.Decode(compressed, decoded, decoder.GetDefaultParameters());
-        return decoded;
-    }
-
-    private static DicomPixelData ExtractSample05Frame(int frameIndex)
-    {
-        var source = DecodeSample05ToRaw();
-        var dataset = CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian);
-        var singleFrame = DicomPixelData.Create(dataset, true);
-        singleFrame.NumberOfFrames = 0;
-        singleFrame.AddFrame(new MemoryByteBuffer(source.GetFrame(frameIndex).Data));
-        return singleFrame;
+        return DicomPixelData.Create(
+            NativeTranscode(file.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian));
     }
 
     private static DicomDataset CreateSmoothMonochrome16(ushort rows, ushort columns)
@@ -422,5 +347,117 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
         }
 
         throw new Xunit.Sdk.XunitException("COD marker not found.");
+    }
+
+    private static DicomDataset NativeTranscode(
+        DicomDataset sourceDataset,
+        DicomTransferSyntax targetSyntax)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "purecodecs-native-htj2k-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var inputPath = Path.Combine(directory, "input.dcm");
+            var outputPath = Path.Combine(directory, "output.dcm");
+            new DicomFile(sourceDataset).Save(inputPath);
+            var result = BoundedWorkerProcess.Run(
+                Path.Combine(AppContext.BaseDirectory, "fo-dicom.NativeCodecs.Tools.dll"),
+                new[]
+                {
+                    "--worker",
+                    "--input", inputPath,
+                    "--output", outputPath,
+                    "--syntax", NativeSyntaxArgument(targetSyntax)
+                });
+            if (result.TimedOut || result.ExitCode != 0)
+            {
+                throw new Xunit.Sdk.XunitException(
+                    result.TimedOut
+                        ? "Native HTJ2K worker timed out."
+                        : "Native HTJ2K worker failed: " + result.StandardError);
+            }
+
+            return DicomFile.Open(outputPath, FileReadOption.ReadAll).Dataset;
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static string NativeSyntaxArgument(DicomTransferSyntax syntax)
+    {
+        if (syntax == DicomTransferSyntax.ExplicitVRLittleEndian)
+        {
+            return "raw";
+        }
+
+        if (syntax == DicomTransferSyntax.HTJ2KLossless)
+        {
+            return "201";
+        }
+
+        if (syntax == DicomTransferSyntax.HTJ2KLosslessRPCL)
+        {
+            return "202";
+        }
+
+        if (syntax == DicomTransferSyntax.HTJ2K)
+        {
+            return "203";
+        }
+
+        throw new ArgumentOutOfRangeException(nameof(syntax), "Unsupported native HTJ2K worker syntax.");
+    }
+
+    private static void AssertFramesMatchExactlyWithLocation(DicomPixelData expected, DicomPixelData actual)
+    {
+        Assert.Equal(expected.NumberOfFrames, actual.NumberOfFrames);
+        for (var frameIndex = 0; frameIndex < expected.NumberOfFrames; frameIndex++)
+        {
+            var expectedFrame = expected.GetFrame(frameIndex).Data;
+            var actualFrame = actual.GetFrame(frameIndex).Data;
+            Assert.Equal(expectedFrame.Length, actualFrame.Length);
+            for (var offset = 0; offset < expectedFrame.Length; offset++)
+            {
+                Assert.True(
+                    expectedFrame[offset] == actualFrame[offset],
+                    $"Frame {frameIndex} first differs at byte {offset}: expected {expectedFrame[offset]}, actual {actualFrame[offset]}.");
+            }
+        }
+    }
+
+    private static (int FrameIndex, int ByteOffset)? FindFirstDifference(
+        DicomPixelData expected,
+        DicomPixelData actual)
+    {
+        Assert.Equal(expected.NumberOfFrames, actual.NumberOfFrames);
+        for (var frameIndex = 0; frameIndex < expected.NumberOfFrames; frameIndex++)
+        {
+            var expectedFrame = expected.GetFrame(frameIndex).Data;
+            var actualFrame = actual.GetFrame(frameIndex).Data;
+            Assert.Equal(expectedFrame.Length, actualFrame.Length);
+            for (var offset = 0; offset < expectedFrame.Length; offset++)
+            {
+                if (expectedFrame[offset] != actualFrame[offset])
+                {
+                    return (frameIndex, offset);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static DicomPixelData ExtractSingleFrame(
+        DicomPixelData source,
+        int frameIndex,
+        DicomTransferSyntax syntax)
+    {
+        var dataset = CloneForTransferSyntax(source.Dataset, syntax);
+        var singleFrame = DicomPixelData.Create(dataset, true);
+        singleFrame.NumberOfFrames = 0;
+        singleFrame.AddFrame(new MemoryByteBuffer(source.GetFrame(frameIndex).Data));
+        return singleFrame;
     }
 }

@@ -38,8 +38,9 @@ public sealed class Htj2kReferenceAlignmentTests
             var manifestPath = Path.Combine(directory, "reference.json");
             new DicomFile(sourceDataset).Save(sourcePath);
 
-            var exitCode = RunReferenceWorker(sourcePath, syntax, manifestPath);
-            Assert.True(exitCode == 0, "Reference worker returned a non-zero exit code.");
+            var workerResult = RunReferenceWorker(sourcePath, syntax, manifestPath);
+            Assert.False(workerResult.TimedOut);
+            Assert.True(workerResult.ExitCode == 0, workerResult.StandardError);
             var expected = JsonSerializer.Deserialize<Htj2kReferenceManifest>(File.ReadAllText(manifestPath));
             Assert.NotNull(expected);
             var expectedBytes = new[] { File.ReadAllBytes(Path.Combine(directory, "0.j2c")) };
@@ -50,17 +51,24 @@ public sealed class Htj2kReferenceAlignmentTests
             var pure = DicomPixelData.Create(pureDataset, true);
             codec.Encode(source, pure, codec.GetDefaultParameters());
             var actualBytes = Htj2kReferenceManifestBuilder.ExtractLogicalCodestream(pure.GetFrame(0).Data);
-            var actual = expected with
-            {
-                Frames = new[]
+            var actualDecoded = DecodeFrame(sourceDataset, actualBytes);
+            var actual = new Htj2kReferenceManifest(
+                Htj2kReferenceProvenanceReader.ExpectedPackageVersion,
+                Htj2kReferenceProvenanceReader.ExpectedReleaseCommit,
+                Htj2kReferenceManifestBuilder.ReadCodestreamReportedOpenJphVersion(actualBytes),
+                codec.TransferSyntax.UID.UID,
+                source.NumberOfFrames,
+                Htj2kReferenceManifestBuilder.ReadEffectiveParameters(actualBytes),
+                new[]
                 {
-                    expected.Frames[0] with
-                    {
-                        CodestreamSha256 = Htj2kReferenceManifestBuilder.ComputeSha256(actualBytes),
-                        LogicalCodestreamLength = actualBytes.Length
-                    }
-                }
-            };
+                    new Htj2kReferenceFrame(
+                        0,
+                        Htj2kReferenceManifestBuilder.ComputeSha256(source.GetFrame(0).Data),
+                        Htj2kReferenceManifestBuilder.ComputeSha256(actualBytes),
+                        Htj2kReferenceManifestBuilder.ComputeSha256(actualDecoded),
+                        actualBytes.Length,
+                        Htj2kReferenceManifestBuilder.ReadMarkerSummary(actualBytes))
+                });
 
             var expectedHeader = HeaderThroughSod(expectedBytes[0]);
             var actualHeader = HeaderThroughSod(actualBytes);
@@ -71,7 +79,6 @@ public sealed class Htj2kReferenceAlignmentTests
                 $"expectedMarkers={DescribeMarkers(expectedHeader)}, actualMarkers={DescribeMarkers(actualHeader)}");
             var diff = Htj2kReferenceDiffComparer.Compare(expected, expectedBytes, actual, new[] { actualBytes });
             var expectedDecoded = DecodeFrame(sourceDataset, expectedBytes[0]);
-            var actualDecoded = DecodeFrame(sourceDataset, actualBytes);
 
             Assert.True(
                 diff.IsMatch,
@@ -88,9 +95,9 @@ public sealed class Htj2kReferenceAlignmentTests
         }
     }
 
-    private static int RunReferenceWorker(string sourcePath, string syntax, string manifestPath)
+    private static BoundedWorkerResult RunReferenceWorker(string sourcePath, string syntax, string manifestPath)
     {
-        return Htj2kReferenceWorkerProgram.Run(new[]
+        return BoundedWorkerProcess.Run(typeof(Htj2kReferenceWorkerProgram).Assembly.Location, new[]
         {
             "--worker",
             "--input", sourcePath,

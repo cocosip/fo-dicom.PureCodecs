@@ -32,6 +32,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public void Encode(DicomPixelData oldPixelData, DicomPixelData newPixelData, DicomCodecParams parameters)
         {
             var htParameters = DicomHtJpeg2000Params.From(parameters ?? GetDefaultParameters());
+            ValidateParameters(htParameters);
             var progressionOrder = ResolveProgressionOrder(htParameters);
             var tolerance = ResolveTolerance(htParameters);
 
@@ -105,6 +106,22 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             }
 
             return 0;
+        }
+
+        private static void ValidateParameters(DicomHtJpeg2000Params parameters)
+        {
+            if (parameters.NumLayers != 1)
+            {
+                throw new DicomCodecException("HTJ2K NumLayers must equal 1 until HT packet-layer contributions are supported.");
+            }
+
+            if (parameters.TargetRatio != 0
+                && (double.IsNaN(parameters.TargetRatio)
+                    || double.IsInfinity(parameters.TargetRatio)
+                    || parameters.TargetRatio <= 1))
+            {
+                throw new DicomCodecException("HTJ2K TargetRatio must be 0 or a finite value greater than 1.");
+            }
         }
 
     }

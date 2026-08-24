@@ -1,7 +1,6 @@
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
-using FellowOakDicom.Imaging.NativeCodec;
 using FellowOakDicom.PureCodecs.Tools;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
@@ -577,20 +576,17 @@ public sealed class ToolsCompressionPlanTests
         var pureOutputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-tool-regression-htj2k-default-qcd", Guid.NewGuid().ToString("N"));
         var nativeOutputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-native-tool-regression-htj2k-default-qcd", Guid.NewGuid().ToString("N"));
         var pureFormat = CompressionTargetFormats.All.Single(item => item.TransferSyntax == DicomTransferSyntax.HTJ2K);
-        var nativeFormat = FellowOakDicom.NativeCodecs.Tools.CompressionTargetFormats.All
-            .Single(item => item.TransferSyntax == DicomTransferSyntax.HTJ2K);
 
         try
         {
-            var nativeResult = Assert.Single(new FellowOakDicom.NativeCodecs.Tools.DicomCompressionTool()
-                .Compress(inputPath, nativeOutputDirectory, nativeFormat));
+            var nativeOutputPath = Path.Combine(nativeOutputDirectory, "native.dcm");
+            RunNativeWorker(inputPath, nativeOutputPath, "203");
             var pureResult = Assert.Single(new DicomCompressionTool()
                 .Compress(inputPath, pureOutputDirectory, pureFormat));
 
-            Assert.Equal(FellowOakDicom.NativeCodecs.Tools.CompressionResultStatus.Success, nativeResult.Status);
             Assert.Equal(CompressionResultStatus.Success, pureResult.Status);
 
-            var nativeFrame = DicomPixelData.Create(DicomFile.Open(nativeResult.Item.OutputPath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
+            var nativeFrame = DicomPixelData.Create(DicomFile.Open(nativeOutputPath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
             var pureFrame = DicomPixelData.Create(DicomFile.Open(pureResult.Item.OutputPath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
 
             Assert.Equal(ReadJpeg2000QcdPayload(nativeFrame), ReadJpeg2000QcdPayload(pureFrame));
@@ -641,13 +637,6 @@ public sealed class ToolsCompressionPlanTests
 
             Assert.Equal(CompressionResultStatus.Success, result.Status);
 
-            new DicomSetupBuilder()
-                .RegisterServices(services => services
-                    .AddFellowOakDicom()
-                    .AddTranscoderManager<NativeTranscoderManager>())
-                .SkipValidation()
-                .Build();
-
             AssertNativeDecode(result.Item.OutputPath, sourcePixelData, tolerance: 512);
         }
         finally
@@ -687,17 +676,14 @@ public sealed class ToolsCompressionPlanTests
         {
             new DicomFile(sourceDataset).Save(inputPath);
             var pureFormat = CompressionTargetFormats.All.Single(item => item.TransferSyntax == DicomTransferSyntax.HTJ2KLossless);
-            var nativeFormat = FellowOakDicom.NativeCodecs.Tools.CompressionTargetFormats.All
-                .Single(item => item.TransferSyntax == DicomTransferSyntax.HTJ2KLossless);
-            var nativeResult = Assert.Single(new FellowOakDicom.NativeCodecs.Tools.DicomCompressionTool()
-                .Compress(inputPath, nativeOutputDirectory, nativeFormat));
+            var nativeOutputPath = Path.Combine(nativeOutputDirectory, "native.dcm");
+            RunNativeWorker(inputPath, nativeOutputPath, "201");
             var pureResult = Assert.Single(new DicomCompressionTool()
                 .Compress(inputPath, pureOutputDirectory, pureFormat));
 
-            Assert.Equal(FellowOakDicom.NativeCodecs.Tools.CompressionResultStatus.Success, nativeResult.Status);
             Assert.Equal(CompressionResultStatus.Success, pureResult.Status);
 
-            var nativeFrame = DicomPixelData.Create(DicomFile.Open(nativeResult.Item.OutputPath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
+            var nativeFrame = DicomPixelData.Create(DicomFile.Open(nativeOutputPath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
             var pureFrame = DicomPixelData.Create(DicomFile.Open(pureResult.Item.OutputPath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
 
             Assert.Equal(ReadJpeg2000ComponentPrecision(nativeFrame), ReadJpeg2000ComponentPrecision(pureFrame));
@@ -744,13 +730,6 @@ public sealed class ToolsCompressionPlanTests
         Assert.True(
             lossy.OutputSize < lossless.OutputSize,
             $"HTJ2K lossy file should be smaller than lossless. Lossy={lossy.OutputSize}, lossless={lossless.OutputSize}.");
-
-        new DicomSetupBuilder()
-            .RegisterServices(services => services
-                .AddFellowOakDicom()
-                .AddTranscoderManager<NativeTranscoderManager>())
-            .SkipValidation()
-            .Build();
 
         AssertNativeDecode(lossless.Item.OutputPath, sourcePixelData, tolerance: 0);
         AssertNativeDecode(losslessRpcl.Item.OutputPath, sourcePixelData, tolerance: 0);
@@ -866,19 +845,47 @@ public sealed class ToolsCompressionPlanTests
 
     private static void AssertNativeDecode(string path, DicomPixelData sourcePixelData, int tolerance)
     {
-        var compressedFile = DicomFile.Open(path, FileReadOption.ReadAll);
-        var compressedPixelData = DicomPixelData.Create(compressedFile.Dataset);
-        var decoded = new DicomTranscoder(compressedPixelData.Syntax, DicomTransferSyntax.ExplicitVRLittleEndian)
-            .Transcode(compressedFile.Dataset);
-        var decodedPixelData = DicomPixelData.Create(decoded);
+        var outputPath = Path.Combine(Path.GetTempPath(), "purecodecs-native-decode-" + Guid.NewGuid().ToString("N") + ".dcm");
+        try
+        {
+            RunNativeWorker(path, outputPath, "raw");
+            var decodedPixelData = DicomPixelData.Create(DicomFile.Open(outputPath, FileReadOption.ReadAll).Dataset);
 
-        if (tolerance == 0)
-        {
-            PixelDataAssertions.FramesMatchExactly(sourcePixelData, decodedPixelData);
+            if (tolerance == 0)
+            {
+                PixelDataAssertions.FramesMatchExactly(sourcePixelData, decodedPixelData);
+            }
+            else
+            {
+                PixelDataAssertions.FramesMatchWithinTolerance(sourcePixelData, decodedPixelData, tolerance);
+            }
         }
-        else
+        finally
         {
-            PixelDataAssertions.FramesMatchWithinTolerance(sourcePixelData, decodedPixelData, tolerance);
+            if (File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+        }
+    }
+
+    private static void RunNativeWorker(string inputPath, string outputPath, string syntax)
+    {
+        var result = BoundedWorkerProcess.Run(
+            Path.Combine(AppContext.BaseDirectory, "fo-dicom.NativeCodecs.Tools.dll"),
+            new[]
+            {
+                "--worker",
+                "--input", inputPath,
+                "--output", outputPath,
+                "--syntax", syntax
+            });
+        if (result.TimedOut || result.ExitCode != 0)
+        {
+            throw new Xunit.Sdk.XunitException(
+                result.TimedOut
+                    ? "Native HTJ2K worker timed out."
+                    : "Native HTJ2K worker failed: " + result.StandardError);
         }
     }
 

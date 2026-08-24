@@ -53,7 +53,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var image = Jpeg2000ImageModel.FromSizeSegment(parsed.Size);
             var bytesPerPixel = targetPixelData.SamplesPerPixel * targetPixelData.BytesAllocated;
             var frame = new byte[targetPixelData.Width * targetPixelData.Height * bytesPerPixel];
-            var decoder = new Jpeg2000StandardFrameDecoder();
+            var decoder = new Jpeg2000StandardFrameDecoder(Jpeg2000DecodeProfile.ClassicOpenJpeg);
             for (var tileIndex = 0; tileIndex < parsed.Tiles.Count; tileIndex++)
             {
                 var parsedTile = parsed.Tiles[tileIndex];

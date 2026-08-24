@@ -205,7 +205,7 @@ public sealed class DicomCompressionTool
         }
     }
 
-    private static void TrimHtj2kFrames(DicomDataset dataset, DicomTransferSyntax targetSyntax)
+    internal static void TrimHtj2kFrames(DicomDataset dataset, DicomTransferSyntax targetSyntax)
     {
         if (targetSyntax != DicomTransferSyntax.HTJ2KLossless &&
             targetSyntax != DicomTransferSyntax.HTJ2KLosslessRPCL &&

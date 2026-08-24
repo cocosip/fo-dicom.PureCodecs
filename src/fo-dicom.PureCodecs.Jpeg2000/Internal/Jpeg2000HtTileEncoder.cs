@@ -54,14 +54,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
             var isSigned = pixelData.PixelRepresentation == PixelRepresentation.Signed;
             var components = ReadComponentSamples(frame, pixelData.SamplesPerPixel, pixelData.BitsAllocated, codingBitDepth, isSigned);
-            ApplyForwardLevelShift(components, codingBitDepth, isSigned);
-            var values = CreateDoubleComponents(components);
-            if (values.Length == 3)
-            {
-                ApplyForwardIct(values);
-            }
-
-            ScaleComponents(values, 1.0 / (1 << codingBitDepth));
+            var values = Jpeg2000HtColorTransform.CreateNormalizedIrreversibleComponents(
+                components,
+                codingBitDepth,
+                isSigned,
+                applyColorTransform: components.Length == 3);
 
             var encodedComponents = new List<List<List<Jpeg2000EncodedBlock>>>(values.Length);
             foreach (var component in values)
@@ -611,45 +608,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 components[0][i] = y;
                 components[1][i] = db;
                 components[2][i] = dr;
-            }
-        }
-
-        private static double[][] CreateDoubleComponents(int[][] components)
-        {
-            var values = new double[components.Length][];
-            for (var component = 0; component < components.Length; component++)
-            {
-                values[component] = new double[components[component].Length];
-                for (var i = 0; i < components[component].Length; i++)
-                {
-                    values[component][i] = components[component][i];
-                }
-            }
-
-            return values;
-        }
-
-        private static void ApplyForwardIct(double[][] components)
-        {
-            for (var i = 0; i < components[0].Length; i++)
-            {
-                var r = (float)components[0][i];
-                var g = (float)components[1][i];
-                var b = (float)components[2][i];
-                components[0][i] = (0.299f * r) + (0.587f * g) + (0.114f * b);
-                components[1][i] = (-0.16875f * r) - (0.331260f * g) + (0.5f * b);
-                components[2][i] = (0.5f * r) - (0.418690f * g) - (0.081310f * b);
-            }
-        }
-
-        private static void ScaleComponents(double[][] components, double scale)
-        {
-            foreach (var component in components)
-            {
-                for (var i = 0; i < component.Length; i++)
-                {
-                    component[i] *= scale;
-                }
             }
         }
 

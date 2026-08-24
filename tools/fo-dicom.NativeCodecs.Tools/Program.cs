@@ -7,6 +7,11 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
+        if (args.Contains("--worker", StringComparer.Ordinal))
+        {
+            return Htj2kNativeWorkerProgram.Run(args);
+        }
+
         try
         {
             return Run(args);

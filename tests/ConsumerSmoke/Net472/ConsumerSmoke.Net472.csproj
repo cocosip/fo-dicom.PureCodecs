@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="fo-dicom.PureCodecs" />
+    <ProjectReference Include="..\..\..\src\fo-dicom.PureCodecs\fo-dicom.PureCodecs.csproj" />
   </ItemGroup>
 
   <ItemGroup>

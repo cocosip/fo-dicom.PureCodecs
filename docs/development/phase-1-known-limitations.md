@@ -18,6 +18,12 @@ This document records compatibility edges that are intentionally outside the pha
 - JPEG 2000 JP2 wrapper frames are detected and rejected unless a raw J2K codestream is supplied.
 - JPEG 2000 decoding supports POC progression changes, RGN Maxshift, and PPM/PPT packed packet headers for classic codestreams. The managed encoder still emits LRCP without ROI or packed packet headers; component subsampling remains unsupported.
 - HTJ2K decoding does not currently accept RGN or PPM/PPT semantics.
+- `fo-dicom.Codecs 5.16.7` complete-dataset decode of the bundled 12-bit
+  multi-frame fixture differs at frame 1 byte 32400 for Pure `.201/.202`
+  output. Each identical Pure codestream decodes byte-exact through an
+  individual native call, and complete native-to-Pure decoding is byte-exact;
+  this is tracked as a reference wrapper limitation rather than a managed
+  codestream defect.
 
 ## Fixture Availability
 

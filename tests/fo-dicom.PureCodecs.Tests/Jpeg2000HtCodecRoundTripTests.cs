@@ -9,6 +9,29 @@ namespace FellowOakDicom.PureCodecs.Tests;
 
 public sealed class Jpeg2000HtCodecRoundTripTests
 {
+    [Fact]
+    public void Htj2k_lossy_rgb_input_matches_openjph_normalization_and_ict_operation_order()
+    {
+        var components = new[]
+        {
+            new[] { 47 },
+            new[] { 60 },
+            new[] { 73 }
+        };
+
+        var transformType = typeof(Jpeg2000HtFrameCodec).Assembly.GetType(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Jpeg2000HtColorTransform",
+            throwOnError: true)!;
+        var method = transformType.GetMethod(
+            "CreateNormalizedIrreversibleComponents",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;
+        var actual = (double[][])method.Invoke(null, new object[] { components, 8, false, true })!;
+
+        Assert.Equal(unchecked((int)0xBE8CCF5C), BitConverter.SingleToInt32Bits((float)actual[0][0]));
+        Assert.Equal(unchecked((int)0x3D0B18D9), BitConverter.SingleToInt32Bits((float)actual[1][0]));
+        Assert.Equal(unchecked((int)0xBCF1D373), BitConverter.SingleToInt32Bits((float)actual[2][0]));
+    }
+
     [Theory]
     [InlineData(8)]
     [InlineData(16)]
@@ -156,7 +179,7 @@ public sealed class Jpeg2000HtCodecRoundTripTests
         codec.Encode(source, compressed, new DicomHtJpeg2000Params
         {
             Jpeg2000ProgressionOrder = Jpeg2000ProgressionOrder.CPRL,
-            NumLayers = 3,
+            NumLayers = 1,
             TargetRatio = 12
         });
         var codestream = compressed.GetFrame(0).Data;

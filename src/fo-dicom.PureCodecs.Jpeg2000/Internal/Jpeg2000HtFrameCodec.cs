@@ -109,7 +109,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 throw Jpeg2000Binary.CreateException("HTJ2K packed packet-header decoding is not supported by the pure decoder.");
             }
 
-            return new Jpeg2000StandardFrameDecoder().Decode(
+            return new Jpeg2000StandardFrameDecoder(Jpeg2000DecodeProfile.HighThroughputOpenJph).Decode(
                 targetPixelData,
                 parsed.Size,
                 parsed.CodingStyle,

@@ -28,6 +28,25 @@ must be recorded in generated fixture manifests. If the package changes,
 baselines must be regenerated and reviewed explicitly rather than silently
 accepting new output.
 
+## Verified Alignment Status (2026-08-24)
+
+- Default `.201`, `.202`, and RGB/monochrome `.203` reference cases have exact
+  logical-codestream alignment with `fo-dicom.Codecs 5.16.7`.
+- Runtime provenance is read from the loaded package informational version and
+  the codestream COM marker, then checked against the frozen baseline.
+- Invalid HT extension parameters fail before frame access, and the 12-in-16
+  SIZ precision exception is restricted to the HT decode profile. Reversible
+  out-of-range samples are rejected; irreversible reconstruction overshoot is
+  clipped to the DICOM stored range.
+- All HT native reference calls in the alignment, compatibility, and tool
+  regression tests execute in bounded child processes.
+- Complete multi-frame `.201/.202` native-to-Pure decoding is byte-exact.
+  `fo-dicom.Codecs 5.16.7` complete-dataset decoding of Pure output has a
+  reproducible frame 1 difference at byte 32400; the identical Pure
+  codestreams decode byte-exact when passed to the same native decoder as
+  individual frames. This reference wrapper behavior remains an external
+  limitation and is not reproduced by the managed codec.
+
 ## Hard Constraints
 
 - Production libraries continue to target `netstandard2.0` only.

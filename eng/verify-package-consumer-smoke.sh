@@ -36,7 +36,7 @@ fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
-package_id="fo-dicom.PureCodecs"
+package_id="FoDicom.PureCodecs"
 main_project="$repo_root/src/fo-dicom.PureCodecs/fo-dicom.PureCodecs.csproj"
 modern_project="$repo_root/tests/ConsumerSmoke/Modern/ConsumerSmoke.Modern.csproj"
 package_output="$repo_root/artifacts/packages"

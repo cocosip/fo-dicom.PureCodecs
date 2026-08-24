@@ -424,14 +424,21 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 ### 6.5 OpenJPEG/OpenJPH Compatibility Separation
 
 - [ ] Keep explicit classic and high-throughput 5/3 and 9/7 transform entry points where arithmetic differs.
-- [ ] Prove classic `.90/.91` behavior is unchanged after every shared JPEG 2000 infrastructure change.
-- [ ] Complete exact default `.203` RGB codestream alignment; do not widen pixel tolerance around the remaining difference.
-- [ ] Scope 12-in-16 SIZ precision compatibility to HTJ2K and reject out-of-range decoded values.
-- [ ] Reject invalid HTJ2K `TargetRatio` and unsupported `NumLayers` values before frame processing.
-- [ ] Compare every HTJ2K reference manifest field and build Pure manifests independently.
-- [ ] Move all Native HTJ2K operations into bounded worker processes.
+- [x] Prove classic `.90/.91` behavior is unchanged after every shared JPEG 2000 infrastructure change.
+- [x] Complete exact default `.203` RGB codestream alignment; do not widen pixel tolerance around the remaining difference.
+- [x] Scope 12-in-16 SIZ precision compatibility to HTJ2K, reject reversible out-of-range samples, and clip irreversible overshoot.
+- [x] Reject invalid HTJ2K `TargetRatio` and unsupported `NumLayers` values before frame processing.
+- [x] Compare every HTJ2K reference manifest field and build Pure manifests independently.
+- [x] Move all Native HTJ2K operations into bounded worker processes.
 - [ ] Validate HTJ2K multi-frame interoperability with one complete encode/decode call per direction.
 - [ ] Require `.201`, `.202`, and `.203` bidirectional interoperability as release gates.
+
+Multi-frame status: complete `.201/.202` native-to-Pure calls are byte-exact.
+For Pure-to-native, `fo-dicom.Codecs 5.16.7` complete-dataset decode first
+differs at frame 1 byte 32400, while the same Pure codestreams decode byte-exact
+when submitted to the native decoder individually. Keep the complete-direction
+item open until the reference wrapper limitation is resolved or a second
+independent external decoder supplies the missing complete-dataset gate.
 
 ### 6.6 JPEG 2000 DICOM Integration
 
@@ -493,14 +500,14 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Pack one `fo-dicom.PureCodecs` NuGet package.
 - [x] Confirm package contains all codec-family DLLs under `lib/netstandard2.0`.
 - [x] Confirm package does not contain native codec DLLs.
-- [x] Create .NET Framework 4.7.2 consumer smoke test.
+- [x] Create .NET Framework 4.7.2 direct-project consumer smoke test.
 - [x] Register only `PureTranscoderManager` in .NET Framework smoke test.
 - [x] Decode at least one compressed sample in .NET Framework smoke test.
-- [x] Create modern .NET consumer smoke test.
+- [x] Create modern .NET direct-project consumer smoke test.
 - [x] Register only `PureTranscoderManager` in modern .NET smoke test.
 - [x] Decode at least one compressed sample in modern .NET smoke test.
-- [x] Verify package install does not require per-family registration.
-- [x] Verify package install does not require native runtime dependencies.
+- [x] Verify direct project consumption does not require per-family registration.
+- [x] Verify package inspection finds no native runtime dependencies.
 
 ## 9. Documentation and Release Readiness
 

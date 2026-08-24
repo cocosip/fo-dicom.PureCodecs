@@ -138,7 +138,7 @@ operating system alongside the result.
 
 ## Package Consumer Smoke Validation
 
-The repository includes smoke scripts that pack `FoDicom.PureCodecs`, install the generated NuGet package into sample consumer apps, and verify that the package contains only the expected managed `netstandard2.0` assemblies.
+The repository includes smoke scripts that run sample consumer apps through direct project references, pack `FoDicom.PureCodecs`, and independently verify that the package contains only the expected managed `netstandard2.0` assemblies.
 
 Use the platform-native script in CI:
 

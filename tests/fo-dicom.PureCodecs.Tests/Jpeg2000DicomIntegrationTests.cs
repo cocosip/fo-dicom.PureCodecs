@@ -42,6 +42,67 @@ public sealed class Jpeg2000DicomIntegrationTests
         Assert.Equal(ProgressionOrder.RPCL, parameters.ProgressionOrder);
     }
 
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.NegativeInfinity)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(-1.0)]
+    [InlineData(0.5)]
+    [InlineData(1.0)]
+    public void Htj2k_rejects_invalid_target_ratio_before_reading_a_frame(double targetRatio)
+    {
+        var source = DicomPixelDataFixtures.CreateEmptyMonochrome8PixelData(DicomTransferSyntax.ExplicitVRLittleEndian);
+        var compressed = DicomPixelData.Create(
+            CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.HTJ2K),
+            true);
+        var codec = new DicomHtJpeg2000LossyCodec();
+
+        var exception = Assert.Throws<DicomCodecException>(() => codec.Encode(
+            source,
+            compressed,
+            new PureHtJpeg2000Params { TargetRatio = targetRatio }));
+
+        Assert.Contains("TargetRatio", exception.Message);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    public void Htj2k_rejects_unsupported_layer_count_before_reading_a_frame(int numLayers)
+    {
+        var source = DicomPixelDataFixtures.CreateEmptyMonochrome8PixelData(DicomTransferSyntax.ExplicitVRLittleEndian);
+        var compressed = DicomPixelData.Create(
+            CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.HTJ2KLossless),
+            true);
+        var codec = new DicomHtJpeg2000LosslessCodec();
+
+        var exception = Assert.Throws<DicomCodecException>(() => codec.Encode(
+            source,
+            compressed,
+            new PureHtJpeg2000Params { NumLayers = numLayers }));
+
+        Assert.Contains("NumLayers", exception.Message);
+    }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(2.0)]
+    public void Htj2k_accepts_supported_target_ratio(double targetRatio)
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 4, columns: 4);
+        var source = DicomPixelData.Create(dataset);
+        var compressed = DicomPixelData.Create(
+            CloneForTransferSyntax(dataset, DicomTransferSyntax.HTJ2K),
+            true);
+
+        new DicomHtJpeg2000LossyCodec().Encode(
+            source,
+            compressed,
+            new PureHtJpeg2000Params { TargetRatio = targetRatio });
+
+        Assert.Equal(1, compressed.NumberOfFrames);
+    }
+
     [Fact]
     public void Jpeg2000_accepts_fo_dicom_core_parameters()
     {
@@ -813,6 +874,73 @@ public sealed class Jpeg2000DicomIntegrationTests
     }
 
     [Fact]
+    public void Jpeg2000_classic_decode_rejects_16_bit_siz_for_12_bit_dicom_metadata()
+    {
+        var source = CreateMonochrome16PixelData(sample: 1000, PixelRepresentation.Unsigned);
+        var codec = new DicomJpeg2000LosslessCodec();
+        var encoded = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, codec.TransferSyntax), true);
+        codec.Encode(source, encoded, CreateSingleLayerLosslessParameters());
+        var compressed = CreateCompressedPixelDataWithStoredPrecision(
+            source,
+            codec.TransferSyntax,
+            encoded.GetFrame(0).Data,
+            bitsStored: 12);
+        var target = CreateTargetPixelDataWithStoredPrecision(source, bitsStored: 12);
+
+        var exception = Assert.Throws<DicomCodecException>(
+            () => codec.Decode(compressed, target, codec.GetDefaultParameters()));
+
+        Assert.Contains("precision", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(5000, PixelRepresentation.Unsigned)]
+    [InlineData(3000, PixelRepresentation.Signed)]
+    public void Htj2k_lossless_decode_rejects_samples_outside_dicom_stored_range(
+        int sample,
+        PixelRepresentation pixelRepresentation)
+    {
+        var source = CreateMonochrome16PixelData(sample, pixelRepresentation);
+        var codec = new DicomHtJpeg2000LosslessCodec();
+        var encoded = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, codec.TransferSyntax), true);
+        codec.Encode(source, encoded, codec.GetDefaultParameters());
+        var compressed = CreateCompressedPixelDataWithStoredPrecision(
+            source,
+            codec.TransferSyntax,
+            encoded.GetFrame(0).Data,
+            bitsStored: 12);
+        var target = CreateTargetPixelDataWithStoredPrecision(source, bitsStored: 12);
+
+        var exception = Assert.Throws<DicomCodecException>(
+            () => codec.Decode(compressed, target, codec.GetDefaultParameters()));
+
+        Assert.Contains("stored range", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Htj2k_lossy_decode_clamps_irreversible_overshoot_to_dicom_stored_range()
+    {
+        var source = CreateMonochrome16PixelData(sample: 5000, PixelRepresentation.Unsigned);
+        var codec = new DicomHtJpeg2000LossyCodec();
+        var encoded = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, codec.TransferSyntax), true);
+        codec.Encode(source, encoded, codec.GetDefaultParameters());
+        var compressed = CreateCompressedPixelDataWithStoredPrecision(
+            source,
+            codec.TransferSyntax,
+            encoded.GetFrame(0).Data,
+            bitsStored: 12);
+        var target = CreateTargetPixelDataWithStoredPrecision(source, bitsStored: 12);
+
+        codec.Decode(compressed, target, codec.GetDefaultParameters());
+
+        var decoded = target.GetFrame(0).Data;
+        for (var offset = 0; offset < decoded.Length; offset += 2)
+        {
+            Assert.InRange(decoded[offset] | (decoded[offset + 1] << 8), 0, 4095);
+        }
+    }
+
+    [Fact]
     public void Jpeg2000_decode_applies_main_header_coc_and_qcc_overrides()
     {
         var dataset = DicomPixelDataFixtures.CreateRgbInterleaved(rows: 32, columns: 32);
@@ -1149,6 +1277,60 @@ public sealed class Jpeg2000DicomIntegrationTests
         DicomPixelData.Create(dataset, true).AddFrame(new FellowOakDicom.IO.Buffer.MemoryByteBuffer(
             new byte[] { 0xFF, 0xFF, 0x01, 0x00 }));
         return dataset;
+    }
+
+    private static DicomPixelData CreateMonochrome16PixelData(
+        int sample,
+        PixelRepresentation pixelRepresentation)
+    {
+        const ushort rows = 32;
+        const ushort columns = 32;
+        var encodedSample = unchecked((ushort)sample);
+        var frame = new byte[rows * columns * 2];
+        for (var offset = 0; offset < frame.Length; offset += 2)
+        {
+            frame[offset] = (byte)encodedSample;
+            frame[offset + 1] = (byte)(encodedSample >> 8);
+        }
+
+        var dataset = DicomPixelDataFixtures.CreateBaseDataset(
+            rows,
+            columns,
+            samplesPerPixel: 1,
+            photometricInterpretation: PhotometricInterpretation.Monochrome2,
+            bitsAllocated: 16,
+            bitsStored: 16,
+            highBit: 15,
+            planarConfiguration: null,
+            numberOfFrames: 1,
+            transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
+            frame);
+        dataset.AddOrUpdate(DicomTag.PixelRepresentation, (ushort)pixelRepresentation);
+        return DicomPixelData.Create(dataset);
+    }
+
+    private static DicomPixelData CreateCompressedPixelDataWithStoredPrecision(
+        DicomPixelData source,
+        DicomTransferSyntax syntax,
+        byte[] frame,
+        ushort bitsStored)
+    {
+        var dataset = CloneForTransferSyntax(source.Dataset, syntax);
+        dataset.AddOrUpdate(DicomTag.BitsStored, bitsStored);
+        dataset.AddOrUpdate(DicomTag.HighBit, (ushort)(bitsStored - 1));
+        var pixelData = DicomPixelData.Create(dataset, true);
+        pixelData.AddFrame(new FellowOakDicom.IO.Buffer.MemoryByteBuffer(frame));
+        return pixelData;
+    }
+
+    private static DicomPixelData CreateTargetPixelDataWithStoredPrecision(
+        DicomPixelData source,
+        ushort bitsStored)
+    {
+        var dataset = CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian);
+        dataset.AddOrUpdate(DicomTag.BitsStored, bitsStored);
+        dataset.AddOrUpdate(DicomTag.HighBit, (ushort)(bitsStored - 1));
+        return DicomPixelData.Create(dataset, true);
     }
 
     private static DicomPixelData CreateCompressedPixelDataWithFrame(DicomTransferSyntax syntax, byte[] frame)

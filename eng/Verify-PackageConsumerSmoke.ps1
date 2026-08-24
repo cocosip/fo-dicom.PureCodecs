@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$packageId = "fo-dicom.PureCodecs"
+$packageId = "FoDicom.PureCodecs"
 $packageOutput = Join-Path $repoRoot "artifacts/packages"
 $mainProject = Join-Path $repoRoot "src/fo-dicom.PureCodecs/fo-dicom.PureCodecs.csproj"
 $net472Project = Join-Path $repoRoot "tests/ConsumerSmoke/Net472/ConsumerSmoke.Net472.csproj"
