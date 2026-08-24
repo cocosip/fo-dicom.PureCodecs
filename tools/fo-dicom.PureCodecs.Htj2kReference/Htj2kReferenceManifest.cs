@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 namespace FellowOakDicom.PureCodecs.Htj2kReference;
 
@@ -232,15 +233,58 @@ public static class Htj2kReferenceManifestBuilder
 
 public sealed record Htj2kReferenceProvenance(string PackageVersion, string ReleaseCommit);
 
+public static class Htj2kReferencePackageVersionReader
+{
+    public static string ReadResolvedVersion(string dependencyManifestPath, string packageId)
+    {
+        if (string.IsNullOrWhiteSpace(dependencyManifestPath))
+        {
+            throw new ArgumentException("Dependency manifest path is required.", nameof(dependencyManifestPath));
+        }
+
+        if (string.IsNullOrWhiteSpace(packageId))
+        {
+            throw new ArgumentException("Package id is required.", nameof(packageId));
+        }
+
+        using var document = JsonDocument.Parse(File.ReadAllText(dependencyManifestPath));
+        if (!document.RootElement.TryGetProperty("libraries", out var libraries)
+            || libraries.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidDataException("Dependency manifest does not contain a libraries object.");
+        }
+
+        var prefix = packageId + "/";
+        string? resolvedVersion = null;
+        foreach (var library in libraries.EnumerateObject())
+        {
+            if (!library.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var candidate = library.Name.Substring(prefix.Length);
+            if (candidate.Length == 0 || resolvedVersion is not null)
+            {
+                throw new InvalidDataException($"Dependency manifest does not identify exactly one {packageId} package version.");
+            }
+
+            resolvedVersion = candidate;
+        }
+
+        return resolvedVersion
+            ?? throw new InvalidDataException($"Dependency manifest does not contain package {packageId}.");
+    }
+}
+
 public static class Htj2kReferenceProvenanceReader
 {
-    public const string ExpectedPackageVersion = "5.16.7";
-    public const string ExpectedReleaseCommit = "1d05c6cca14883d06b835f8dadca5dae7d97577c";
+    public const string MinimumPackageVersion = "6.0.0-beta1";
 
     public static Htj2kReferenceProvenance ReadAndValidate(
         Assembly assembly,
-        string expectedPackageVersion = ExpectedPackageVersion,
-        string expectedReleaseCommit = ExpectedReleaseCommit)
+        string? resolvedPackageVersion = null,
+        string minimumPackageVersion = MinimumPackageVersion)
     {
         var informationalVersion = assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
@@ -251,19 +295,52 @@ public static class Htj2kReferenceProvenanceReader
         }
 
         var parts = informationalVersion.Split(new[] { '+' }, 2);
-        var packageVersion = parts[0];
+        var packageVersion = resolvedPackageVersion ?? parts[0];
         var releaseCommit = parts.Length == 2 ? parts[1] : string.Empty;
-        if (!string.Equals(packageVersion, expectedPackageVersion, StringComparison.Ordinal))
+        var comparablePackageVersion = ParseComparableVersion(packageVersion, "reference package");
+        var comparableMinimumVersion = ParseComparableVersion(minimumPackageVersion, "minimum package");
+        if (CompareVersions(comparablePackageVersion, comparableMinimumVersion) < 0)
         {
             throw new InvalidDataException(
-                $"HTJ2K reference package version is {packageVersion}; expected {expectedPackageVersion}.");
-        }
-
-        if (!string.Equals(releaseCommit, expectedReleaseCommit, StringComparison.Ordinal))
-        {
-            throw new InvalidDataException("HTJ2K reference release commit does not match the expected baseline.");
+                $"HTJ2K reference package version is {packageVersion}; minimum supported version is {minimumPackageVersion}.");
         }
 
         return new Htj2kReferenceProvenance(packageVersion, releaseCommit);
     }
+
+    private static ComparablePackageVersion ParseComparableVersion(string packageVersion, string description)
+    {
+        var versionWithoutBuildMetadata = packageVersion.Split(new[] { '+' }, 2)[0];
+        var parts = versionWithoutBuildMetadata.Split(new[] { '-' }, 2);
+        var numericVersion = parts[0];
+        if (!Version.TryParse(numericVersion, out var version))
+        {
+            throw new InvalidDataException($"HTJ2K {description} version '{packageVersion}' is invalid.");
+        }
+
+        return new ComparablePackageVersion(version, parts.Length == 2 ? parts[1] : string.Empty);
+    }
+
+    private static int CompareVersions(ComparablePackageVersion left, ComparablePackageVersion right)
+    {
+        var coreComparison = left.Core.CompareTo(right.Core);
+        if (coreComparison != 0)
+        {
+            return coreComparison;
+        }
+
+        if (left.Prerelease.Length == 0)
+        {
+            return right.Prerelease.Length == 0 ? 0 : 1;
+        }
+
+        if (right.Prerelease.Length == 0)
+        {
+            return -1;
+        }
+
+        return StringComparer.OrdinalIgnoreCase.Compare(left.Prerelease, right.Prerelease);
+    }
+
+    private sealed record ComparablePackageVersion(Version Core, string Prerelease);
 }

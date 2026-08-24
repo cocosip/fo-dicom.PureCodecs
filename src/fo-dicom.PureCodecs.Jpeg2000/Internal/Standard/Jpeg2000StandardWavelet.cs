@@ -4,7 +4,27 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 {
     internal static class Jpeg2000StandardWavelet
     {
-        public static int[] Forward53(int[] samples, int width, int height, int levels, int x0, int y0)
+        public static int[] Forward53Classic(int[] samples, int width, int height, int levels, int x0, int y0)
+        {
+            return Forward53Core(samples, width, height, levels, x0, y0);
+        }
+
+        public static int[] Forward53HighThroughput(int[] samples, int width, int height, int levels, int x0, int y0)
+        {
+            return Forward53Core(samples, width, height, levels, x0, y0);
+        }
+
+        public static void Inverse53Classic(int[] data, int width, int height, int levels, int x0, int y0)
+        {
+            Inverse53Core(data, width, height, levels, x0, y0);
+        }
+
+        public static void Inverse53HighThroughput(int[] data, int width, int height, int levels, int x0, int y0)
+        {
+            Inverse53Core(data, width, height, levels, x0, y0);
+        }
+
+        private static int[] Forward53Core(int[] samples, int width, int height, int levels, int x0, int y0)
         {
             if (samples == null || samples.Length != width * height)
             {
@@ -44,7 +64,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             return data;
         }
 
-        public static void Inverse53(int[] data, int width, int height, int levels, int x0, int y0)
+        private static void Inverse53Core(int[] data, int width, int height, int levels, int x0, int y0)
         {
             var levelWidths = new int[levels + 1];
             var levelHeights = new int[levels + 1];

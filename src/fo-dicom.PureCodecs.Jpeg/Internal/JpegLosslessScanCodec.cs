@@ -90,7 +90,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                         var difference = NormalizeDifferenceForEntropy(sample - prediction, samplePrecision);
                         var category = GetCategory(difference);
                         _table.Encode(writer, category);
-                        if (category > 0)
+                        // JPEG Lossless category 16 represents the sole magnitude
+                        // value 32768 and has no following amplitude bits.
+                        if (category > 0 && category != 16)
                         {
                             writer.WriteBits(EncodeMagnitude(difference, category), category);
                         }

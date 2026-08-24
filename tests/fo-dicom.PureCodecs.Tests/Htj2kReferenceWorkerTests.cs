@@ -28,9 +28,9 @@ public sealed class Htj2kReferenceWorkerTests
             Assert.True(result.ExitCode == 0, result.StandardError);
             var manifest = JsonSerializer.Deserialize<Htj2kReferenceManifest>(File.ReadAllText(manifestPath));
             Assert.NotNull(manifest);
-            Assert.Equal("5.16.7", manifest.ReferencePackageVersion);
-            Assert.Equal("1d05c6cca14883d06b835f8dadca5dae7d97577c", manifest.ReferenceReleaseCommit);
-            Assert.Equal("0.21.2", manifest.CodestreamReportedOpenJphVersion);
+            Assert.Equal("6.0.0-beta1", manifest.ReferencePackageVersion);
+            Assert.Equal("fc2df0efaa9acdee7b3640f821665107630933e8", manifest.ReferenceReleaseCommit);
+            Assert.Equal("0.30.1", manifest.CodestreamReportedOpenJphVersion);
             Assert.Equal(DicomTransferSyntax.HTJ2KLossless.UID.UID, manifest.TransferSyntaxUid);
             Assert.Equal(1, manifest.FrameCount);
             Assert.Equal(new Htj2kReferenceParameters("RPCL", true, true, 8), manifest.EffectiveParameters);
@@ -52,16 +52,37 @@ public sealed class Htj2kReferenceWorkerTests
     }
 
     [Fact]
-    public void Reference_provenance_rejects_an_unexpected_loaded_package_version()
+    public void Reference_provenance_accepts_a_newer_package_and_records_its_actual_commit()
+    {
+        var provenance = Htj2kReferenceProvenanceReader.ReadAndValidate(
+            CreateAssemblyWithInformationalVersion("6.1.0+newer-commit"),
+            minimumPackageVersion: "6.0.0");
+
+        Assert.Equal("6.1.0", provenance.PackageVersion);
+        Assert.Equal("newer-commit", provenance.ReleaseCommit);
+    }
+
+    [Fact]
+    public void Reference_provenance_rejects_a_package_below_the_supported_range()
     {
         var exception = Assert.Throws<InvalidDataException>(() =>
             Htj2kReferenceProvenanceReader.ReadAndValidate(
                 CreateAssemblyWithInformationalVersion(
-                    "1.0.0+1d05c6cca14883d06b835f8dadca5dae7d97577c"),
-                expectedPackageVersion: "0.0.0",
-                expectedReleaseCommit: "1d05c6cca14883d06b835f8dadca5dae7d97577c"));
+                    "5.16.7+older-commit"),
+                minimumPackageVersion: "6.0.0"));
 
-        Assert.Contains("package version", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("minimum", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Reference_provenance_rejects_an_earlier_prerelease_of_the_same_version()
+    {
+        var exception = Assert.Throws<InvalidDataException>(() =>
+            Htj2kReferenceProvenanceReader.ReadAndValidate(
+                CreateAssemblyWithInformationalVersion("6.0.0-alpha1+older-prerelease"),
+                minimumPackageVersion: "6.0.0-beta1"));
+
+        Assert.Contains("minimum", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

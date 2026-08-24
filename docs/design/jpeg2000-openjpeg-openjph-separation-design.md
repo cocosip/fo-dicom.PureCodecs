@@ -38,6 +38,14 @@ The production implementation remains pure C#, targets `netstandard2.0`, and
 must not load or call either native library. Reference-family names describe
 compatibility behavior, not runtime dependencies.
 
+OpenJPEG/OpenJPH C/C++ source is a read-only research reference. Executable
+interoperability and encoded-image comparison must be implemented in C# and
+must reach the reference implementation only through normally restored
+`fo-dicom`/`fo-dicom.Codecs` NuGet package APIs. Local DLL paths, binary
+replacement, `HintPath`, and source/project references to upstream checkouts
+are prohibited. A local upstream change must first be published as a complete
+NuGet package to a package source and then consumed through `PackageReference`.
+
 ## Compatibility Principle
 
 Share representation and bounded parsing where the standard contract is truly
@@ -75,7 +83,7 @@ The 2026-08-24 review established the following baseline before repair:
 
 The alignment work after that baseline now verifies:
 
-- Default RGB `.203` output matches the 3369-byte `fo-dicom.Codecs 5.16.7`
+- Default RGB `.203` output matches the current `fo-dicom.Codecs 6.0.0-beta1`
   logical codestream exactly. The repair is confined to HT normalized float
   sample import and OpenJPH-compatible ICT operation order.
 - Classic `.90/.91` encoding remains on the existing OpenJPEG-compatible path;
@@ -92,11 +100,18 @@ The alignment work after that baseline now verifies:
 - Reference and Native HTJ2K operations run in bounded child processes with
   redirected output, a 120-second timeout, nonzero propagation, and process-tree
   termination.
-- Complete `.201/.202` multi-frame native-to-Pure calls are byte-exact. The
-  reverse complete-dataset call in `fo-dicom.Codecs 5.16.7` first differs at
-  frame 1 byte 32400, while decoding the same Pure codestreams one frame per
-  native call is byte-exact. This is retained as a process-isolated reference
-  wrapper limitation, not copied into the Pure codec.
+- Complete `.201/.202/.203` multi-frame calls are covered in both directions.
+  Native-to-Pure decoding is byte-exact for `.201/.202` and within tolerance 8
+  for `.203`. With the current `fo-dicom.Codecs 6.0.0-beta1`, Pure-to-native
+  complete decoding
+  first differs at frame 1 byte 32400 for `.201/.202` and byte 31312 for
+  `.203`, while the same Pure codestreams decode correctly one frame per native
+  call. This is an upstream `ArrayPool<byte>` ownership defect retained by the
+  beta package: the wrapper returns
+  an array to the pool after handing it to the output buffer. Upstream commit
+  `56a2da0155fa5c1123761b6c0520279baa811183` copies each frame before return.
+  The defect is retained only as a process-isolated characterization of the
+  old wrapper and is not copied into PureCodecs.
 
 The investigation then confirmed these separate defects:
 
@@ -143,26 +158,39 @@ codestream exactly; classic JPEG 2000 color handling is unchanged.
 
 ## Current Verification (2026-08-24)
 
-- Focused HTJ2K tests: 100 passed, 0 failed.
-- Focused classic JPEG 2000 tests: 187 passed, 0 failed.
-- Full Release suite: 811 passed, 0 failed.
+- Focused HTJ2K tests: 103 passed, 0 failed.
+- Focused classic JPEG 2000 tests: 78 passed, 0 failed, using the documented
+  classic, external-acceptance, and standard-internal class filters.
+- Full Release suite: 814 passed, 0 failed.
 - Release build: 0 warnings and 0 errors.
 - `.201`, `.202`, and `.203` workers each passed five fixtures in both reported
-  directions, including the seven-frame fixture through the documented
-  frame-scoped reference path.
+  directions. The seven-frame fixture is covered in both complete-call
+  directions; the current beta package's reverse wrapper characterization is
+  isolated to the known pooled-buffer defect above.
 - The complete 12-format interoperability matrix passed with 0 failed workers.
 - Modern and .NET Framework 4.7.2 smoke applications passed using direct
   project references.
 - `FoDicom.PureCodecs.0.4.0.nupkg` contains only the five managed production
   assemblies under `lib/netstandard2.0` and no runtime or native codec payload.
 
-### Remaining External Gate
+### Upstream package caveat
 
-The complete `.201/.202` native-to-Pure multi-frame call is byte-exact. The
-reverse complete-dataset call still reproduces the `fo-dicom.Codecs 5.16.7`
-frame 1 byte 32400 difference, while every identical Pure codestream decodes
-byte-exact in an individual native call. The complete reverse multi-frame gate
-therefore remains open; the managed codec must not copy this wrapper behavior.
+The repository restores `fo-dicom 5.2.6` and the minimum package range
+`fo-dicom.Codecs [6.0.0-beta1,)`; the version resolved for this snapshot is
+`6.0.0-beta1`, release commit `fc2df0efaa9acdee7b3640f821665107630933e8`,
+with codestream-reported OpenJPH `0.30.1`. This beta still exhibits the
+pooled-buffer defect associated with upstream fix commit `56a2da0`. The
+reproducible gate
+`eng/Verify-Htj2kUpstreamMultiframe.ps1` restores a minimum package range
+through normal NuGet `PackageReference`, enables the strict behavior flag, and
+requires all three Pure-to-native complete decode cases. The default minimum is
+`6.0.0-beta1`; exact DLL paths, source references, and exact commit locks are not
+accepted. Passing the version check is insufficient without passing the
+behavioral gate. The package-based strict gate remains pending because the
+currently resolved beta does not pass it. The other direction is covered by
+three complete native-encode-to-Pure-decode cases, which pass 3/3. The current
+package's known decode-wrapper failure must remain
+documented rather than treated as a Pure codec failure.
 
 ## Required Separation Matrix
 
@@ -398,6 +426,10 @@ dotnet run --project tools/fo-dicom.PureCodecs.InteropValidation `
 dotnet run --project tools/fo-dicom.PureCodecs.InteropValidation `
   -c Release --no-build -- --parallel 4 --worker-timeout-seconds 300
 
+.\eng\Verify-Htj2kUpstreamMultiframe.ps1 `
+  -MinimumFoDicomCodecsVersion 6.0.0-beta1 `
+  -PackageSource <NUGET_PACKAGE_SOURCE>
+
 .\eng\Verify-PackageConsumerSmoke.ps1 -RequireNet472
 ```
 
@@ -434,12 +466,13 @@ widen tolerances, patch output bytes, or rely on Pure self-roundtrip as external
 compatibility evidence.
 
 Continue only the unchecked checklist and final gates. Keep the documented
-`fo-dicom.Codecs 5.16.7` complete multi-frame decode difference separate from
-Pure codec correctness: the same Pure frames decode byte-exact when passed to
-the native decoder individually, while native-to-Pure complete multi-frame
-decode is byte-exact. Report exact commands, counts, failures, and any gate that
-could not run. Do not claim completion while a required gate is failing or
-unexecuted.
+`fo-dicom.Codecs 6.0.0-beta1` pooled-buffer difference separate from Pure codec
+correctness. Use `eng/Verify-Htj2kUpstreamMultiframe.ps1` with a complete NuGet
+package containing upstream fix `56a2da0` for the strict three-case
+native-decode gate, and run the three native-encode-to-Pure-decode
+complete-call cases separately.
+Report exact commands, counts, failures, and any gate that could not run. Do
+not claim completion while a required gate is failing or unexecuted.
 ```
 
 ## Prohibited Shortcuts

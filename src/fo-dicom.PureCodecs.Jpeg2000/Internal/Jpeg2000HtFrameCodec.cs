@@ -168,7 +168,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         private static byte[] CreateOpenJphCommentPayload()
         {
-            var text = Encoding.ASCII.GetBytes("OpenJPH Ver 0.21.2.");
+            var text = Encoding.ASCII.GetBytes("OpenJPH Ver 0.30.1.");
             var payload = new byte[text.Length + 2];
             payload[1] = 1;
             Buffer.BlockCopy(text, 0, payload, 2, text.Length);

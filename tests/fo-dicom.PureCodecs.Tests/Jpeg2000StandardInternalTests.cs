@@ -704,7 +704,7 @@ public sealed class Jpeg2000StandardInternalTests
         var source = Enumerable.Range(0, 30).Select(i => (i * 13) - 91).ToArray();
         var coefficients = (int[])InvokeStatic(
             "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
-            "Forward53",
+            "Forward53Classic",
             source,
             5,
             6,
@@ -714,7 +714,7 @@ public sealed class Jpeg2000StandardInternalTests
 
         InvokeStatic(
             "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
-            "Inverse53",
+            "Inverse53Classic",
             coefficients,
             5,
             6,
@@ -726,12 +726,24 @@ public sealed class Jpeg2000StandardInternalTests
     }
 
     [Fact]
+    public void Reversible_wavelet_classic_entry_points_preserve_odd_origin_fixture()
+    {
+        AssertReversibleWaveletEntryPoints("Forward53Classic", "Inverse53Classic");
+    }
+
+    [Fact]
+    public void Reversible_wavelet_high_throughput_entry_points_preserve_odd_origin_fixture()
+    {
+        AssertReversibleWaveletEntryPoints("Forward53HighThroughput", "Inverse53HighThroughput");
+    }
+
+    [Fact]
     public void Standard_reversible_wavelet_inverse_restores_small_codec_fixture_shape()
     {
         var source = Enumerable.Range(0, 30).Select(i => ((i * 13) + 11) - 128).ToArray();
         var coefficients = (int[])InvokeStatic(
             "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
-            "Forward53",
+            "Forward53Classic",
             source,
             6,
             5,
@@ -741,7 +753,7 @@ public sealed class Jpeg2000StandardInternalTests
 
         InvokeStatic(
             "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
-            "Inverse53",
+            "Inverse53Classic",
             coefficients,
             6,
             5,
@@ -758,7 +770,7 @@ public sealed class Jpeg2000StandardInternalTests
         var source = Enumerable.Range(0, 30).Select(i => ((i * 13) + 11) - 128).ToArray();
         var expected = (int[])InvokeStatic(
             "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
-            "Forward53",
+            "Forward53Classic",
             source,
             6,
             5,
@@ -812,6 +824,39 @@ public sealed class Jpeg2000StandardInternalTests
 
         var tileData = ExtractTileData(compressed.GetFrame(0).Data);
         Assert.Contains(tileData.Take(6), value => value != 0);
+    }
+
+    [Fact]
+    public void Standard_layer_truncated_codestream_decodes_early_quality_layer_at_lower_quality()
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 64, columns: 64);
+        var pixelData = DicomPixelData.Create(dataset);
+        var source = pixelData.GetFrame(0).Data;
+        var codec = new Jpeg2000ClassicFrameCodec();
+        var fullCodestream = codec.EncodeFrame(
+            pixelData,
+            source,
+            irreversible: false,
+            qualityTolerance: 1,
+            Jpeg2000ProgressionOrder.LRCP,
+            layerCount: 3,
+            usesMultipleComponentTransform: false,
+            encodeSignedPixelValuesAsUnsigned: false,
+            rate: 0,
+            layerRates: new[] { 16d, 4d, 0d });
+
+        var firstLayerCodestream = TruncateLrcpCodestreamAfterLayer(fullCodestream, layerCount: 1);
+        var firstLayer = codec.DecodeFrame(pixelData, firstLayerCodestream);
+        var full = codec.DecodeFrame(pixelData, fullCodestream);
+        var firstLayerError = SumAbsoluteByteError(source, firstLayer);
+        var fullError = SumAbsoluteByteError(source, full);
+
+        Assert.Equal(1, ReadCoding(firstLayerCodestream).LayerCount);
+        Assert.True(firstLayerCodestream.Length < fullCodestream.Length);
+        Assert.True(firstLayer.Distinct().Count() > 1, "The first quality layer decoded to a flat placeholder image.");
+        Assert.True(firstLayerError > fullError, $"first-layer error={firstLayerError}, full error={fullError}");
+        Assert.Equal(0, fullError);
+        Assert.Equal(source, full);
     }
 
     [Theory]
@@ -952,7 +997,7 @@ public sealed class Jpeg2000StandardInternalTests
             false);
         var expected = (int[])InvokeStatic(
             "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
-            "Forward53",
+            "Forward53Classic",
             samples,
             pixelData.Width,
             pixelData.Height,
@@ -996,7 +1041,7 @@ public sealed class Jpeg2000StandardInternalTests
             false);
         var coefficients = (int[])InvokeStatic(
             "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
-            "Forward53",
+            "Forward53Classic",
             samples,
             pixelData.Width,
             pixelData.Height,
@@ -1055,7 +1100,7 @@ public sealed class Jpeg2000StandardInternalTests
             false);
         var coefficients = (int[])InvokeStatic(
             "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
-            "Forward53",
+            "Forward53Classic",
             samples,
             pixelData.Width,
             pixelData.Height,
@@ -1551,7 +1596,7 @@ public sealed class Jpeg2000StandardInternalTests
         var coefficients = DecodeTileCoefficients(tileData, width: 6, height: 5, levels: 5, precision: 8);
         var expectedCoefficients = (int[])InvokeStatic(
             "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
-            "Forward53",
+            "Forward53Classic",
             shifted,
             6,
             5,
@@ -1563,7 +1608,7 @@ public sealed class Jpeg2000StandardInternalTests
 
         InvokeStatic(
             "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
-            "Inverse53",
+            "Inverse53Classic",
             coefficients,
             6,
             5,
@@ -1638,6 +1683,39 @@ public sealed class Jpeg2000StandardInternalTests
     private static T Property<T>(object instance, string property)
     {
         return (T)instance.GetType().GetProperty(property)!.GetValue(instance)!;
+    }
+
+    private static void AssertReversibleWaveletEntryPoints(string forwardMethod, string inverseMethod)
+    {
+        var source = Enumerable.Range(0, 35).Select(index => ((index * 29) % 257) - 128).ToArray();
+        var coefficients = (int[])InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
+            forwardMethod,
+            source,
+            7,
+            5,
+            3,
+            1,
+            1);
+
+        InvokeStatic(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
+            inverseMethod,
+            coefficients,
+            7,
+            5,
+            3,
+            1,
+            1);
+
+        Assert.Equal(source, coefficients);
+    }
+
+    private static T Field<T>(object instance, string field)
+    {
+        return (T)instance.GetType().GetField(
+            field,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(instance)!;
     }
 
     private static Array ToArray(string elementTypeName, object value)
@@ -1958,6 +2036,71 @@ public sealed class Jpeg2000StandardInternalTests
         throw new InvalidOperationException("SOD marker was not found.");
     }
 
+    private static byte[] TruncateLrcpCodestreamAfterLayer(byte[] codestream, int layerCount)
+    {
+        var size = ReadSize(codestream);
+        var coding = ReadCoding(codestream);
+        Assert.Equal(Jpeg2000ProgressionOrder.LRCP, coding.ProgressionOrder);
+        Assert.InRange(layerCount, 1, coding.LayerCount - 1);
+
+        var decoder = Create(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardPacketDecoder",
+            ExtractTileData(codestream),
+            size.Components.Count,
+            layerCount,
+            coding.DecompositionLevels + 1,
+            coding.ProgressionOrder,
+            CreateComponents(size, coding),
+            coding.CodeBlockWidth,
+            coding.CodeBlockHeight,
+            coding.CodeBlockStyle);
+        Invoke(decoder, "Decode");
+        var firstLayersLength = Field<int>(decoder, "_offset");
+
+        var codOffset = FindMarkerOffset(codestream, Jpeg2000Marker.COD);
+        var sotOffset = FindMarkerOffset(codestream, Jpeg2000Marker.SOT);
+        var sodOffset = FindMarkerOffset(codestream, Jpeg2000Marker.SOD);
+        var logicalLength = sodOffset + 2 + firstLayersLength + 2;
+        var truncated = new byte[logicalLength + (logicalLength & 1)];
+        Buffer.BlockCopy(codestream, 0, truncated, 0, sodOffset + 2 + firstLayersLength);
+        truncated[sodOffset + 2 + firstLayersLength] = 0xFF;
+        truncated[sodOffset + 3 + firstLayersLength] = Jpeg2000Marker.EOC;
+
+        truncated[codOffset + 6] = (byte)(layerCount >> 8);
+        truncated[codOffset + 7] = (byte)layerCount;
+        var psot = 14 + firstLayersLength;
+        truncated[sotOffset + 6] = (byte)(psot >> 24);
+        truncated[sotOffset + 7] = (byte)(psot >> 16);
+        truncated[sotOffset + 8] = (byte)(psot >> 8);
+        truncated[sotOffset + 9] = (byte)psot;
+        return truncated;
+    }
+
+    private static int FindMarkerOffset(byte[] codestream, byte marker)
+    {
+        for (var offset = 0; offset + 1 < codestream.Length; offset++)
+        {
+            if (codestream[offset] == 0xFF && codestream[offset + 1] == marker)
+            {
+                return offset;
+            }
+        }
+
+        throw new InvalidOperationException($"JPEG 2000 marker 0xFF{marker:X2} was not found.");
+    }
+
+    private static long SumAbsoluteByteError(byte[] expected, byte[] actual)
+    {
+        Assert.Equal(expected.Length, actual.Length);
+        long error = 0;
+        for (var index = 0; index < expected.Length; index++)
+        {
+            error += Math.Abs(expected[index] - actual[index]);
+        }
+
+        return error;
+    }
+
     private static string[] DescribePacketLayers(byte[] codestream)
     {
         var size = ReadSize(codestream);
@@ -2094,7 +2237,7 @@ public sealed class Jpeg2000StandardInternalTests
             isSigned);
         var coefficients = (int[])InvokeStatic(
             "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
-            "Forward53",
+            "Forward53Classic",
             samples,
             pixelData.Width,
             pixelData.Height,
@@ -2196,7 +2339,7 @@ public sealed class Jpeg2000StandardInternalTests
             isSigned);
         var coefficients = (int[])InvokeStatic(
             "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardWavelet",
-            "Forward53",
+            "Forward53Classic",
             samples,
             pixelData.Width,
             pixelData.Height,

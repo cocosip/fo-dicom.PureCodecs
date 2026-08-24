@@ -550,7 +550,7 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
         Assert.Equal(1, qcd.GuardBits);
         Assert.Equal(EncodeCcapMagnitudeBound(MaxMagnitudeBound(qcd)), ReadUInt16(cap.Payload, 4));
         Assert.Equal(Jpeg2000Marker.COM, com.Code);
-        Assert.Equal(new byte[] { 0x00, 0x01, (byte)'O', (byte)'p', (byte)'e', (byte)'n', (byte)'J', (byte)'P', (byte)'H', (byte)' ', (byte)'V', (byte)'e', (byte)'r', (byte)' ', (byte)'0', (byte)'.', (byte)'2', (byte)'1', (byte)'.', (byte)'2', (byte)'.' }, com.Payload);
+        Assert.Equal(new byte[] { 0x00, 0x01, (byte)'O', (byte)'p', (byte)'e', (byte)'n', (byte)'J', (byte)'P', (byte)'H', (byte)' ', (byte)'V', (byte)'e', (byte)'r', (byte)' ', (byte)'0', (byte)'.', (byte)'3', (byte)'0', (byte)'.', (byte)'1', (byte)'.' }, com.Payload);
         Assert.Equal(Jpeg2000Marker.TLM, tlm.Code);
         Assert.Equal(38, tlm.Payload.Length);
         Assert.Equal(0x60, tlm.Payload[1]);

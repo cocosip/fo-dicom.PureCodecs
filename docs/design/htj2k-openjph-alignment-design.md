@@ -17,21 +17,23 @@ reference library's arithmetic or policy on the other family.
 Complete the managed HTJ2K implementation for transfer syntaxes `.201`, `.202`,
 and `.203` by aligning its observable codec behavior with `fo-dicom.Codecs`.
 
-The current reference baseline is:
+The current deterministic reference baseline is:
 
-- Reference NuGet package: `fo-dicom.Codecs 5.16.7`
-- Reference release commit: `1d05c6cca14883d06b835f8dadca5dae7d97577c`
-- Codestream-reported OpenJPH version: `0.21.2`
+- Reference NuGet package: `fo-dicom.Codecs 6.0.0-beta1`
+- Reference release commit: `fc2df0efaa9acdee7b3640f821665107630933e8`
+- Codestream-reported OpenJPH version: `0.30.1`
 
 The package version, release commit, and codestream-reported OpenJPH version
-must be recorded in generated fixture manifests. If the package changes,
-baselines must be regenerated and reviewed explicitly rather than silently
-accepting new output.
+must be recorded in generated fixture manifests. Runtime reference generation
+accepts a supported version range (`fo-dicom.Codecs >= 6.0.0-beta1`) and records the
+actual provenance; it does not require one exact assembly version or commit.
+If a newer package changes deterministic output, frozen baselines must be
+regenerated and reviewed explicitly rather than silently accepting new output.
 
 ## Verified Alignment Status (2026-08-24)
 
 - Default `.201`, `.202`, and RGB/monochrome `.203` reference cases have exact
-  logical-codestream alignment with `fo-dicom.Codecs 5.16.7`.
+  logical-codestream alignment with `fo-dicom.Codecs 6.0.0-beta1`.
 - Runtime provenance is read from the loaded package informational version and
   the codestream COM marker, then checked against the frozen baseline.
 - Invalid HT extension parameters fail before frame access, and the 12-in-16
@@ -40,25 +42,38 @@ accepting new output.
   clipped to the DICOM stored range.
 - All HT native reference calls in the alignment, compatibility, and tool
   regression tests execute in bounded child processes.
-- Complete multi-frame `.201/.202` native-to-Pure decoding is byte-exact.
-  `fo-dicom.Codecs 5.16.7` complete-dataset decoding of Pure output has a
-  reproducible frame 1 difference at byte 32400; the identical Pure
-  codestreams decode byte-exact when passed to the same native decoder as
-  individual frames. This reference wrapper behavior remains an external
-  limitation and is not reproduced by the managed codec.
+- Complete multi-frame `.201/.202/.203` calls are covered in both directions.
+  Native-to-Pure is exact for lossless and within tolerance 8 for lossy. The
+  current 6.0.0-beta1 wrapper differs only in the Pure-to-native complete call:
+  frame 1 byte 32400 for `.201/.202`, and byte 31312 for `.203`; individual
+  native calls are correct. This is caused by returning pooled arrays after
+  exposing them to output buffers. Upstream commit `56a2da0` copies encoded
+  and decoded frames before returning the arrays. PureCodecs does not reproduce
+  this ownership bug.
 
 ## Hard Constraints
 
 - Production libraries continue to target `netstandard2.0` only.
 - Codec execution remains pure C#.
 - No P/Invoke, native codec DLL, native fallback, or runtime OpenJPH dependency.
-- Do not vendor, download, read, copy, translate, compile, link, or directly
-  load OpenJPH C/C++ source code or binaries. This prohibition includes using
-  OpenJPH source files as implementation templates for managed production code.
+- OpenJPH/OpenJPEG C/C++ source may be read only as a compatibility-research
+  reference. Do not vendor, copy, translate, compile, link, directly load, or
+  execute that source or its locally built binaries in production code, tests,
+  or tools, and do not use it as a source-level dependency or implementation
+  template.
 - Tests and reference tools may call only the public .NET codec API provided by
   the `fo-dicom.Codecs` NuGet package and rely on its normal NuGet runtime-asset
   resolution. They must not add a native resolver or inspect a local OpenJPH
   source/build tree.
+- Tests and tools must use `PackageReference` for `fo-dicom` and
+  `fo-dicom.Codecs`. Assembly paths, `HintPath`, DLL copying/replacement, and
+  source or project references to local upstream checkouts are prohibited.
+  A local upstream build is eligible only after it is packed as a complete
+  NuGet package and restored from a package source.
+- Supported upstream dependencies use a minimum version range and record the
+  actually resolved version. No exact package version or commit is a permanent
+  execution requirement; behavior gates remain mandatory for every resolved
+  version.
 - The existing JPEG 2000 family assembly remains the production boundary.
 - Classic JPEG 2000 `.90` and `.91` behavior must not regress.
 - Reference implementation names may appear in tests, tools, fixtures, and
@@ -68,7 +83,7 @@ accepting new output.
 
 ISO/IEC 15444-15 is authoritative for the HTJ2K algorithm and codestream
 requirements. The public .NET behavior and generated output of
-`fo-dicom.Codecs 5.16.7` are the compatibility baseline for DICOM integration,
+`fo-dicom.Codecs 6.0.0-beta1` are the compatibility baseline for DICOM integration,
 transfer-syntax selection, defaults, parameters, and deterministic reference
 codestreams. OpenJPH implementation details are not an implementation source.
 
@@ -363,6 +378,17 @@ Multi-frame interoperability passes the complete source through each encoder
 and decoder once. Per-frame extraction may diagnose a failure but does not
 satisfy the multi-frame gate. Lossy rows record maximum absolute error, MAE,
 PSNR, and compression ratio using the declared precision and signedness.
+
+The executable strict gate is `eng/Verify-Htj2kUpstreamMultiframe.ps1`. It
+restores `fo-dicom.Codecs` through `PackageReference` from the configured NuGet
+sources, with a configurable minimum version defaulting to `6.0.0-beta1`, and then
+requires the three Pure-to-native complete decode cases. Version eligibility
+does not replace the behavioral tests. A prior DLL-replacement probe is
+diagnostic evidence only and is not a valid release gate under this dependency
+boundary. The package-based strict gate remains pending because the current
+`6.0.0-beta1` package does not pass the Pure-to-native complete-call cases. The
+three native-encode-to-Pure-decode complete-call cases pass separately with
+`6.0.0-beta1`.
 
 ## CI and Isolation
 

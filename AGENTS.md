@@ -32,6 +32,30 @@ Future implementation work must follow that document unless the user explicitly 
 - Deliver one NuGet package.
 - The NuGet package may contain multiple DLLs, split by codec family.
 
+## Reference Dependency Boundary
+
+- OpenJPEG, OpenJPH, and all other C/C++ codec implementations are research
+  references only. Do not copy, translate, compile, link, directly load, or
+  directly call their source or locally built binaries from this repository's
+  production code, tests, or tools. Native runtime assets transitively supplied
+  and internally used by the official `fo-dicom.Codecs` NuGet package are
+  allowed only behind that package's public C# API.
+- Interoperability, encoded-image comparison, and reference fixture generation
+  must call the public C# APIs exposed by the `fo-dicom` and
+  `fo-dicom.Codecs` NuGet packages.
+- Reference projects must use normal NuGet `PackageReference`. Do not use
+  assembly `Reference`/`HintPath`, copy or replace `fo-dicom.Codecs.dll`, or add
+  a `ProjectReference`/source link to a local `fo-dicom` or
+  `fo-dicom.Codecs` checkout.
+- Local `fo-dicom` and `fo-dicom.Codecs` source checkouts may be read for
+  compatibility research only. To validate a local upstream change, first
+  produce a complete NuGet package and consume it from a package source through
+  normal restore.
+- Define supported `fo-dicom.Codecs` dependencies as a minimum version range,
+  not one exact version or commit. Record the actually resolved package version
+  and provenance in reference output, and require behavior tests to pass;
+  version eligibility alone is never compatibility evidence.
+
 ## Assembly Split
 
 The intended package shape is:

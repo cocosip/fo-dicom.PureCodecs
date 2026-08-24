@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="fo-dicom" />
     <PackageReference Include="fo-dicom.Codecs" />
   </ItemGroup>
 </Project>

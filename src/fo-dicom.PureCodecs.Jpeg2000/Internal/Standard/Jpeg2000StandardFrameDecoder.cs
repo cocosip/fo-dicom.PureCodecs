@@ -343,7 +343,14 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             {
                 var samples = new int[component.Coefficients.Length];
                 Buffer.BlockCopy(component.Coefficients, 0, samples, 0, samples.Length * sizeof(int));
-                Jpeg2000StandardWavelet.Inverse53(samples, component.Width, component.Height, component.Levels, component.X0, component.Y0);
+                if (IsHighThroughput(cod))
+                {
+                    Jpeg2000StandardWavelet.Inverse53HighThroughput(samples, component.Width, component.Height, component.Levels, component.X0, component.Y0);
+                }
+                else
+                {
+                    Jpeg2000StandardWavelet.Inverse53Classic(samples, component.Width, component.Height, component.Levels, component.X0, component.Y0);
+                }
                 component.Samples = samples;
                 return;
             }

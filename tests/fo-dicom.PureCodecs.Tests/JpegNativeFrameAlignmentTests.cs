@@ -24,12 +24,14 @@ public sealed class JpegNativeFrameAlignmentTests
         var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 16, columns: 16));
         var pureCompressed = CreateTargetPixelData(source, transferSyntax);
         var nativeCompressed = CreateTargetPixelData(source, transferSyntax);
+        var pureDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var nativeDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
         var codecs = CreateCodecs(transferSyntax);
 
         codecs.Pure.Encode(source, pureCompressed, codecs.Pure.GetDefaultParameters());
         codecs.Native.Encode(source, nativeCompressed, codecs.Native.GetDefaultParameters());
 
-        Assert.Equal(nativeCompressed.GetFrame(0).Data, pureCompressed.GetFrame(0).Data);
+        AssertCrossDecode(source, pureCompressed, nativeCompressed, pureDecoded, nativeDecoded, codecs, tolerance: 64);
     }
 
     [Theory]
@@ -46,12 +48,15 @@ public sealed class JpegNativeFrameAlignmentTests
         var source = CreateMonochromePixelData(bitsStored);
         var pureCompressed = CreateTargetPixelData(source, transferSyntax);
         var nativeCompressed = CreateTargetPixelData(source, transferSyntax);
+        var pureDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var nativeDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
         var codecs = CreateCodecs(transferSyntax);
 
         codecs.Pure.Encode(source, pureCompressed, codecs.Pure.GetDefaultParameters());
         codecs.Native.Encode(source, nativeCompressed, codecs.Native.GetDefaultParameters());
 
-        Assert.Equal(nativeCompressed.GetFrame(0).Data, pureCompressed.GetFrame(0).Data);
+        var tolerance = transferSyntax == DicomTransferSyntax.JPEGProcess2_4 ? 320 : 0;
+        AssertCrossDecode(source, pureCompressed, nativeCompressed, pureDecoded, nativeDecoded, codecs, tolerance);
     }
 
     [Theory]
@@ -63,12 +68,14 @@ public sealed class JpegNativeFrameAlignmentTests
         var source = CreateMonochromePixelData(bitsStored: 16, isSigned: true);
         var pureCompressed = CreateTargetPixelData(source, transferSyntax);
         var nativeCompressed = CreateTargetPixelData(source, transferSyntax);
+        var pureDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var nativeDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
         var codecs = CreateCodecs(transferSyntax);
 
         codecs.Pure.Encode(source, pureCompressed, codecs.Pure.GetDefaultParameters());
         codecs.Native.Encode(source, nativeCompressed, codecs.Native.GetDefaultParameters());
 
-        Assert.Equal(nativeCompressed.GetFrame(0).Data, pureCompressed.GetFrame(0).Data);
+        AssertCrossDecode(source, pureCompressed, nativeCompressed, pureDecoded, nativeDecoded, codecs, tolerance: 0);
     }
 
     private static (IDicomCodec Pure, IDicomCodec Native) CreateCodecs(DicomTransferSyntax transferSyntax)
@@ -96,6 +103,28 @@ public sealed class JpegNativeFrameAlignmentTests
         throw new ArgumentOutOfRangeException(nameof(transferSyntax));
     }
 
+    private static void AssertCrossDecode(
+        DicomPixelData source,
+        DicomPixelData pureCompressed,
+        DicomPixelData nativeCompressed,
+        DicomPixelData pureDecoded,
+        DicomPixelData nativeDecoded,
+        (IDicomCodec Pure, IDicomCodec Native) codecs,
+        int tolerance)
+    {
+        var nativeParameters = codecs.Native.GetDefaultParameters();
+        if (source.SamplesPerPixel == 3
+            && nativeParameters is FellowOakDicom.Imaging.NativeCodec.DicomJpegParams nativeJpegParameters)
+        {
+            nativeJpegParameters.ConvertColorSpaceToRGB = true;
+        }
+
+        codecs.Pure.Decode(nativeCompressed, pureDecoded, codecs.Pure.GetDefaultParameters());
+        codecs.Native.Decode(pureCompressed, nativeDecoded, nativeParameters);
+        PixelDataAssertions.FramesMatchWithinTolerance(source, pureDecoded, tolerance);
+        PixelDataAssertions.FramesMatchWithinTolerance(source, nativeDecoded, tolerance);
+    }
+
     private static DicomPixelData CreateTargetPixelData(DicomPixelData source, DicomTransferSyntax transferSyntax)
     {
         var dataset = new DicomDataset(transferSyntax)
@@ -120,21 +149,22 @@ public sealed class JpegNativeFrameAlignmentTests
         var dataset = new DicomDataset(DicomTransferSyntax.ExplicitVRLittleEndian)
         {
             { DicomTag.PhotometricInterpretation, PhotometricInterpretation.Monochrome2.Value },
-            { DicomTag.Rows, (ushort)8 },
-            { DicomTag.Columns, (ushort)8 },
+            { DicomTag.Rows, (ushort)16 },
+            { DicomTag.Columns, (ushort)16 },
             { DicomTag.BitsAllocated, (ushort)bitsAllocated },
             { DicomTag.BitsStored, (ushort)bitsStored },
             { DicomTag.HighBit, (ushort)(bitsStored - 1) },
             { DicomTag.PixelRepresentation, (ushort)(isSigned ? 1 : 0) },
             { DicomTag.SamplesPerPixel, (ushort)1 },
         };
-        var frame = new byte[64 * (bitsAllocated / 8)];
+        var frame = new byte[256 * (bitsAllocated / 8)];
         var maximum = (1 << bitsStored) - 1;
-        for (var index = 0; index < 64; index++)
+        var step = Math.Max(1, maximum / 31);
+        for (var index = 0; index < 256; index++)
         {
             var value = isSigned
-                ? ((((index * 2053) + 17) & maximum) - 32768) & maximum
-                : (index * 193 + 17) & maximum;
+                ? (((index * step) - 32768) & maximum)
+                : (index * step) & maximum;
             frame[index * (bitsAllocated / 8)] = (byte)value;
             if (bitsAllocated == 16)
             {

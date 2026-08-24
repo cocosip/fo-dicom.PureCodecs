@@ -30,6 +30,34 @@ public sealed class JpegLosslessScanCodecTests
     }
 
     [Fact]
+    public void Lossless_scan_category_16_omits_the_magnitude_bits()
+    {
+        var table = JpegHuffmanTable.Build(
+            new byte[] { 2 },
+            new byte[] { 0, 16 });
+        var codec = JpegLosslessScanCodec.Create(table);
+
+        var encoded = codec.EncodeInterleaved(
+            new[] { 32768, 0 },
+            width: 2,
+            height: 1,
+            componentCount: 1,
+            samplePrecision: 16,
+            selectionValue: 1);
+
+        Assert.Equal(new byte[] { 0b0111_1111 }, encoded);
+
+        var decoded = codec.DecodeInterleaved(
+            encoded,
+            width: 2,
+            height: 1,
+            componentCount: 1,
+            samplePrecision: 16,
+            selectionValue: 1);
+        Assert.Equal(new[] { 32768, 0 }, decoded);
+    }
+
+    [Fact]
     public void Lossless_scan_decode_populates_supplied_workspace()
     {
         var samples = new[] { 10, 12, 18, 21, 30, 31, 32, 40, 41, 55, 60, 63 };

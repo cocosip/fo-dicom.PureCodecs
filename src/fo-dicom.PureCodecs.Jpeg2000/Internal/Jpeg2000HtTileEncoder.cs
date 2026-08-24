@@ -33,7 +33,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var encodedComponents = new List<List<List<Jpeg2000EncodedBlock>>>(components.Length);
             foreach (var component in components)
             {
-                var coefficients = Jpeg2000StandardWavelet.Forward53(component, pixelData.Width, pixelData.Height, decompositionLevels, 0, 0);
+                var coefficients = Jpeg2000StandardWavelet.Forward53HighThroughput(component, pixelData.Width, pixelData.Height, decompositionLevels, 0, 0);
                 encodedComponents.Add(BuildHtCodeBlocksByResolution(coefficients, pixelData.Width, pixelData.Height, codingBitDepth, components.Length == 3, decompositionLevels));
             }
 

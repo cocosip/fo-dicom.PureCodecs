@@ -100,9 +100,9 @@ public sealed class Htj2kReferenceDiffTests
     private static Htj2kReferenceManifest CreateManifest(string codestreamHash)
     {
         return new Htj2kReferenceManifest(
-            "5.16.7",
-            "1d05c6cca14883d06b835f8dadca5dae7d97577c",
-            "0.21.2",
+            "6.0.0-beta1",
+            "fc2df0efaa9acdee7b3640f821665107630933e8",
+            "0.30.1",
             "1.2.840.10008.1.2.4.201",
             1,
             new Htj2kReferenceParameters("RPCL", true, true, 8),

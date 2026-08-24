@@ -72,7 +72,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         private static byte[] EncodeReversibleTileLayered(int[] samples, int width, int height, int precision, int layerCount, int sourceByteLength = 0, double[]? layerRates = null, int mainHeaderBytesBeforeSot = 0)
         {
-            var coefficients = Jpeg2000StandardWavelet.Forward53(samples, width, height, DefaultLevels, 0, 0);
+            var coefficients = Jpeg2000StandardWavelet.Forward53Classic(samples, width, height, DefaultLevels, 0, 0);
             return EncodePackets(coefficients, width, height, precision, reversible: true, layerCount: layerCount, sourceByteLength: sourceByteLength, layerRates: layerRates, mainHeaderBytesBeforeSot: mainHeaderBytesBeforeSot);
         }
 
@@ -99,7 +99,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             var encodedComponents = new List<List<List<Jpeg2000EncodedBlock>>>(components.Length);
             foreach (var component in components)
             {
-                var coefficients = Jpeg2000StandardWavelet.Forward53(component, width, height, DefaultLevels, 0, 0);
+                var coefficients = Jpeg2000StandardWavelet.Forward53Classic(component, width, height, DefaultLevels, 0, 0);
                 encodedComponents.Add(BuildCodeBlocksByResolution(
                     coefficients,
                     width,

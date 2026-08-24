@@ -380,7 +380,7 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Reject non-finite or non-positive nonzero `TargetRatio` values and layer counts that exceed the 16-bit COD limit.
 - [x] Ensure classic JPEG 2000 multi-layer encoding writes real packet contributions before the final layer, not only a COD layer count with empty early layers.
 - [x] Compare classic JPEG 2000 quality-layer packet distribution against `fo-dicom.Codecs`/OpenJPEG for `D:\1.dcm` and the RGB unit8 fixture.
-- [ ] Add a layer-truncated decode fixture proving early quality layers are independently decodable at lower quality.
+- [x] Add a layer-truncated decode fixture proving early quality layers are independently decodable at lower quality.
 - [x] Test optional final lossless layer behavior for lossless rate-controlled encoding.
 - [x] Implement JPEG 2000 Lossless decode.
 - [x] Implement JPEG 2000 Lossless encode.
@@ -423,22 +423,28 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 ### 6.5 OpenJPEG/OpenJPH Compatibility Separation
 
-- [ ] Keep explicit classic and high-throughput 5/3 and 9/7 transform entry points where arithmetic differs.
+- [x] Keep explicit classic and high-throughput 5/3 and 9/7 transform entry points where arithmetic differs.
 - [x] Prove classic `.90/.91` behavior is unchanged after every shared JPEG 2000 infrastructure change.
 - [x] Complete exact default `.203` RGB codestream alignment; do not widen pixel tolerance around the remaining difference.
 - [x] Scope 12-in-16 SIZ precision compatibility to HTJ2K, reject reversible out-of-range samples, and clip irreversible overshoot.
 - [x] Reject invalid HTJ2K `TargetRatio` and unsupported `NumLayers` values before frame processing.
 - [x] Compare every HTJ2K reference manifest field and build Pure manifests independently.
 - [x] Move all Native HTJ2K operations into bounded worker processes.
-- [ ] Validate HTJ2K multi-frame interoperability with one complete encode/decode call per direction.
-- [ ] Require `.201`, `.202`, and `.203` bidirectional interoperability as release gates.
+- [x] Validate HTJ2K multi-frame interoperability with one complete encode/decode call per direction.
+- [ ] Require `.201`, `.202`, and `.203` bidirectional interoperability as release gates through normally restored NuGet packages.
 
-Multi-frame status: complete `.201/.202` native-to-Pure calls are byte-exact.
-For Pure-to-native, `fo-dicom.Codecs 5.16.7` complete-dataset decode first
-differs at frame 1 byte 32400, while the same Pure codestreams decode byte-exact
-when submitted to the native decoder individually. Keep the complete-direction
-item open until the reference wrapper limitation is resolved or a second
-independent external decoder supplies the missing complete-dataset gate.
+Multi-frame status: the complete-call test covers all three syntaxes in both
+directions; lossless rows require exact bytes and `.203` uses tolerance 8.
+`fo-dicom.Codecs 6.0.0-beta1` has a known Pure-to-native wrapper defect (frame 1
+byte 32400 for `.201/.202`, byte 31312 for `.203`) caused by returning pooled
+arrays after exposing them to output buffers. Upstream commit `56a2da0` fixes
+the ownership. The strict package-based gate is executable with
+`eng/Verify-Htj2kUpstreamMultiframe.ps1`; it restores a complete NuGet package
+using a version range (default minimum `6.0.0-beta1`) and still requires behavioral
+success. The package-based strict native-decode gate is pending until such a
+package containing the upstream fix is available. The opposite three
+native-encode-to-Pure-decode cases pass with 6.0.0-beta1. Do not copy the beta
+behavior into PureCodecs.
 
 ### 6.6 JPEG 2000 DICOM Integration
 
@@ -491,7 +497,7 @@ independent external decoder supplies the missing complete-dataset gate.
 - [x] Compare lossless outputs with exact byte equality after decode.
 - [x] Compare lossy outputs with agreed tolerance after decode.
 - [x] Run isolated bidirectional `fo-dicom.Codecs` Native workers for RLE, four JPEG syntaxes, two JPEG-LS syntaxes, and two classic JPEG 2000 syntaxes.
-- [ ] Require process-isolated `fo-dicom.Codecs 5.16.7` reference generation, exact default-codestream verification, and both decode directions for HTJ2K `.201`, `.202`, and `.203` before release.
+- [ ] Require process-isolated `fo-dicom.Codecs` reference generation, exact default-codestream verification, and both decode directions for HTJ2K `.201`, `.202`, and `.203` before release; run the strict complete-multiframe gate through a NuGet package range containing upstream fix `56a2da0`.
 - [x] Verify invalid streams throw managed exceptions.
 - [x] Document unsupported edge cases before release.
 

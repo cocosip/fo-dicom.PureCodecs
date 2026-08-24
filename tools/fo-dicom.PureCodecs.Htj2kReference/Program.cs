@@ -106,7 +106,15 @@ public static class Htj2kReferenceWorkerProgram
                 encodedFrame.MarkerSummary));
         }
 
-        var provenance = Htj2kReferenceProvenanceReader.ReadAndValidate(codec.GetType().Assembly);
+        var dependencyManifestPath = Path.ChangeExtension(
+            typeof(Htj2kReferenceWorkerProgram).Assembly.Location,
+            ".deps.json");
+        var resolvedPackageVersion = Htj2kReferencePackageVersionReader.ReadResolvedVersion(
+            dependencyManifestPath,
+            "fo-dicom.Codecs");
+        var provenance = Htj2kReferenceProvenanceReader.ReadAndValidate(
+            codec.GetType().Assembly,
+            resolvedPackageVersion);
         var codestreamReportedVersion = Htj2kReferenceManifestBuilder.ReadCodestreamReportedOpenJphVersion(
             encodedFrames[0].LogicalCodestream);
         var effectiveParameters = Htj2kReferenceManifestBuilder.ReadEffectiveParameters(encodedFrames[0].LogicalCodestream);

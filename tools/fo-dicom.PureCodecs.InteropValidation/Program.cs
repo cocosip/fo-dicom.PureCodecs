@@ -23,6 +23,7 @@ using NativeJpegLossless14Sv1Codec = FellowOakDicom.Imaging.NativeCodec.DicomJpe
 using NativeJpegProcess1Codec = FellowOakDicom.Imaging.NativeCodec.DicomJpegProcess1Codec;
 using NativeJpegProcess4Codec = FellowOakDicom.Imaging.NativeCodec.DicomJpegProcess4Codec;
 using NativeRleCodec = FellowOakDicom.Imaging.NativeCodec.DicomRleNativeCodec;
+using NativeTranscoderManager = FellowOakDicom.Imaging.NativeCodec.NativeTranscoderManager;
 using PureJpeg2000Params = FellowOakDicom.PureCodecs.Jpeg2000.DicomJpeg2000Params;
 
 return await InteropValidationProgram.RunAsync(args);
@@ -172,6 +173,13 @@ internal static class InteropValidationProgram
 
     private static int RunWorker(string repositoryRoot, string format)
     {
+        new DicomSetupBuilder()
+            .RegisterServices(services => services
+                .AddFellowOakDicom()
+                .AddTranscoderManager<NativeTranscoderManager>())
+            .SkipValidation()
+            .Build();
+
         var definition = CodecDefinitions.SingleOrDefault(item => string.Equals(item.Key, format, StringComparison.OrdinalIgnoreCase))
             ?? throw new ArgumentException($"Unknown interop format '{format}'.", nameof(format));
         var executed = 0;
@@ -285,10 +293,13 @@ internal static class InteropValidationProgram
             throw new InvalidOperationException($"No Native source decoder is configured for {pixelData.Syntax.UID.Name} in {fixturePath}.");
         }
 
-        var nativeCodec = new NativeJpegLossless14Sv1Codec();
-        var decoded = CreateRawTargetPixelData(pixelData);
-        nativeCodec.Decode(pixelData, decoded, nativeCodec.GetDefaultParameters());
-        return decoded;
+        var decodedDataset = new DicomTranscoder(
+            pixelData.Syntax,
+            DicomTransferSyntax.ExplicitVRLittleEndian).Transcode(pixelData.Dataset);
+        using var stream = new MemoryStream();
+        new DicomFile(decodedDataset).Save(stream);
+        stream.Position = 0;
+        return DicomPixelData.Create(DicomFile.Open(stream, FileReadOption.ReadAll).Dataset);
     }
 
     private static DicomPixelData Encode(DicomPixelData source, DicomTransferSyntax syntax, IDicomCodec codec, DicomCodecParams parameters)
