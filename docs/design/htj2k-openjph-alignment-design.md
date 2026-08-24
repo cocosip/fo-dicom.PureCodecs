@@ -121,6 +121,15 @@ isolated .NET process. Isolation bounds package failures without requiring a
 local OpenJPH build, direct native invocation, custom DLL resolution, or any
 OpenJPH source checkout.
 
+Reference provenance is verified rather than copied from repository constants.
+The worker reads the loaded `fo-dicom.Codecs` assembly version and the OpenJPH
+version reported by the generated codestream. A manifest comparison includes
+the raw-frame hash, codestream hash and logical length, decoded-frame hash or
+lossy metrics, effective parameters, marker summary, and tile-part count.
+Pure manifests are constructed independently from Pure output; they are not
+created by copying reference fields. Deterministic reference artifacts are
+versioned, and regeneration never silently accepts new output.
+
 ### 3. Transform and Quantization
 
 Responsibilities:
@@ -235,6 +244,11 @@ Every public parameter is classified explicitly:
   native parity. Unsupported values are rejected until real multi-layer and
   rate behavior is implemented.
 
+`TargetRatio` accepts zero as unset or a finite value greater than one.
+`NumLayers` must remain one until real HT packet-layer contributions are
+implemented. Non-finite ratios, nonzero ratios less than or equal to one, and
+unsupported layer counts fail before frame processing.
+
 Resolved parameters are immutable for a frame. Silent fallback from invalid
 or unsupported extension values is not allowed.
 
@@ -283,6 +297,11 @@ Reject missing required markers, invalid segment lengths, conflicting SIZ/COD/
 CAP/QCD data, out-of-range Psot/TLM values, invalid tile-part indexes, invalid
 packet lengths, and DICOM/codestream metadata conflicts.
 
+The `fo-dicom.Codecs` 12-bit-in-16 HTJ2K compatibility case may use SIZ
+precision equal to `BitsAllocated`, but decoded samples must still fit the
+declared `BitsStored` range. This exception is HTJ2K-specific and must not relax
+classic JPEG 2000 precision validation.
+
 ### HT Block Errors
 
 Reject invalid `Scup`, MEL/VLC data, stuffing, pass counts, segment lengths,
@@ -316,6 +335,11 @@ hash or lossy metrics, and expected marker summaries.
 The existing external fixture assertion that only checks for non-zero output is
 replaced by an expected raw hash or bounded lossy metric comparison.
 
+Multi-frame interoperability passes the complete source through each encoder
+and decoder once. Per-frame extraction may diagnose a failure but does not
+satisfy the multi-frame gate. Lossy rows record maximum absolute error, MAE,
+PSNR, and compression ratio using the declared precision and signedness.
+
 ## CI and Isolation
 
 Ordinary xUnit execution covers pure managed units, self round-trips, committed
@@ -327,6 +351,10 @@ timeout, terminates its process tree on timeout, and reports structured output.
 A package failure or hang must fail only that matrix row and must not terminate
 or lock the managed test host. Workers use normal NuGet resolution and never
 compile, locate, or load OpenJPH directly.
+
+Ordinary xUnit tests do not instantiate Native codec classes or register the
+Native transcoder manager in the test host. They invoke bounded workers or use
+committed managed reference artifacts.
 
 The HTJ2K matrix becomes a required CI and release gate rather than a documented
 exclusion.
