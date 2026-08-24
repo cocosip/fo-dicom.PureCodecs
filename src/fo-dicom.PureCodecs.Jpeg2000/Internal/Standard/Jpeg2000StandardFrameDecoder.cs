@@ -882,7 +882,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             for (var component = 0; component < siz.Components.Count; component++)
             {
                 var sizeComponent = siz.Components[component];
-                if (sizeComponent.Precision != targetPixelData.BitsStored)
+                var usesAllocatedContainerPrecision = targetPixelData.BitsStored < targetPixelData.BitsAllocated
+                    && sizeComponent.Precision == targetPixelData.BitsAllocated;
+                if (sizeComponent.Precision != targetPixelData.BitsStored && !usesAllocatedContainerPrecision)
                 {
                     throw Jpeg2000Binary.CreateException(
                         $"JPEG 2000 SIZ component {component} precision conflicts with DICOM BitsStored.");

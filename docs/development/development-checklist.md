@@ -470,7 +470,7 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Compare lossless outputs with exact byte equality after decode.
 - [x] Compare lossy outputs with agreed tolerance after decode.
 - [x] Run isolated bidirectional `fo-dicom.Codecs` Native workers for RLE, four JPEG syntaxes, two JPEG-LS syntaxes, and two classic JPEG 2000 syntaxes.
-- [x] Keep HTJ2K outside the required Native interoperability gate; validate it with managed round-trips, standard vectors, and local fixtures.
+- [ ] Require process-isolated `fo-dicom.Codecs 5.16.7` reference generation, exact default-codestream verification, and both decode directions for HTJ2K `.201`, `.202`, and `.203` before release.
 - [x] Verify invalid streams throw managed exceptions.
 - [x] Document unsupported edge cases before release.
 

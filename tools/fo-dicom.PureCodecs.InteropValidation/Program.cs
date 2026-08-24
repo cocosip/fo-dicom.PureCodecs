@@ -12,6 +12,9 @@ using NativeJpegCodecParams = FellowOakDicom.Imaging.NativeCodec.DicomJpegParams
 using NativeJpeg2000Params = FellowOakDicom.Imaging.NativeCodec.DicomJpeg2000Params;
 using NativeJpeg2000LosslessCodec = FellowOakDicom.Imaging.NativeCodec.DicomJpeg2000LosslessCodec;
 using NativeJpeg2000LossyCodec = FellowOakDicom.Imaging.NativeCodec.DicomJpeg2000LossyCodec;
+using NativeHtJpeg2000LosslessCodec = FellowOakDicom.Imaging.NativeCodec.DicomHtJpeg2000LosslessCodec;
+using NativeHtJpeg2000LosslessRpclCodec = FellowOakDicom.Imaging.NativeCodec.DicomHtJpeg2000LosslessRPCLCodec;
+using NativeHtJpeg2000LossyCodec = FellowOakDicom.Imaging.NativeCodec.DicomHtJpeg2000LossyCodec;
 using NativeJpegLsLosslessCodec = FellowOakDicom.Imaging.NativeCodec.DicomJpegLsLosslessCodec;
 using NativeJpegLsNearLosslessCodec = FellowOakDicom.Imaging.NativeCodec.DicomJpegLsNearLosslessCodec;
 using NativeJpegLsParams = FellowOakDicom.Imaging.NativeCodec.DicomJpegLsCodec.DicomJpegLsParams;
@@ -30,6 +33,7 @@ internal static class InteropValidationProgram
     private const int DefaultWorkerTimeoutSeconds = 300;
     private const int Jpeg2000LossyRate = 16;
     private const int Jpeg2000LossyMaximumDifference = 58;
+    private const int Htj2kLossyMaximumDifference = 8;
 
     private static readonly CodecDefinition[] CodecDefinitions =
     {
@@ -42,6 +46,9 @@ internal static class InteropValidationProgram
         new("jpeg-ls-near-lossless", DicomTransferSyntax.JPEGLSNearLossless, () => new DicomJpegLsNearLosslessCodec(), () => new NativeJpegLsNearLosslessCodec(), 2, SupportsAny, SupportsNativeJpegLsDecoder),
         new("jpeg2000-lossless", DicomTransferSyntax.JPEG2000Lossless, () => new DicomJpeg2000LosslessCodec(), () => new NativeJpeg2000LosslessCodec(), null, SupportsJpeg2000),
         new("jpeg2000-lossy", DicomTransferSyntax.JPEG2000Lossy, () => new DicomJpeg2000LossyCodec(), () => new NativeJpeg2000LossyCodec(), Jpeg2000LossyMaximumDifference, SupportsJpeg2000),
+        new("htj2k-lossless", DicomTransferSyntax.HTJ2KLossless, () => new DicomHtJpeg2000LosslessCodec(), () => new NativeHtJpeg2000LosslessCodec(), null, SupportsJpeg2000),
+        new("htj2k-lossless-rpcl", DicomTransferSyntax.HTJ2KLosslessRPCL, () => new DicomHtJpeg2000LosslessRpclCodec(), () => new NativeHtJpeg2000LosslessRpclCodec(), null, SupportsJpeg2000),
+        new("htj2k-lossy", DicomTransferSyntax.HTJ2K, () => new DicomHtJpeg2000LossyCodec(), () => new NativeHtJpeg2000LossyCodec(), Htj2kLossyMaximumDifference, SupportsJpeg2000),
     };
 
     public static async Task<int> RunAsync(string[] args)
@@ -176,7 +183,7 @@ internal static class InteropValidationProgram
                 continue;
             }
 
-            Console.WriteLine($"INTEROP|case|fixture={Path.GetFileName(fixturePath)}|format={definition.Key}|bitsAllocated={source.BitsAllocated}|bitsStored={source.BitsStored}|samplesPerPixel={source.SamplesPerPixel}|frames={source.NumberOfFrames}");
+            Console.WriteLine($"INTEROP|case|fixture={Path.GetFileName(fixturePath)}|format={definition.Key}|bitsAllocated={source.BitsAllocated}|bitsStored={source.BitsStored}|pixelRepresentation={source.PixelRepresentation}|photometric={source.PhotometricInterpretation.Value}|samplesPerPixel={source.SamplesPerPixel}|frames={source.NumberOfFrames}");
             ValidatePureEncodeNativeDecode(source, fixturePath, definition, definition.SupportsNativeDecoder(source));
             ValidateNativeEncodePureDecode(source, fixturePath, definition);
             executed++;
@@ -196,6 +203,21 @@ internal static class InteropValidationProgram
 
         var pureCodec = definition.CreatePureCodec();
         var nativeCodec = definition.CreateNativeCodec();
+        Console.WriteLine($"INTEROP|direction|fixture={Path.GetFileName(fixturePath)}|format={definition.Key}|direction=pure-to-native");
+        if (IsHighThroughputJpeg2000(definition.Syntax) && source.NumberOfFrames > 1)
+        {
+            ValidateFrameScoped(
+                source,
+                fixturePath,
+                definition,
+                "pure-to-native",
+                pureCodec,
+                CreatePureEncodeParameters(definition, pureCodec),
+                nativeCodec,
+                CreateNativeParameters(definition, nativeCodec));
+            return;
+        }
+
         var compressed = Encode(source, definition.Syntax, pureCodec, CreatePureEncodeParameters(definition, pureCodec));
         var decoded = Decode(compressed, nativeCodec, CreateNativeParameters(definition, nativeCodec));
         AssertDecoded(source, compressed, decoded, definition, "pure-to-native", fixturePath);
@@ -205,9 +227,49 @@ internal static class InteropValidationProgram
     {
         var nativeCodec = definition.CreateNativeCodec();
         var pureCodec = definition.CreatePureCodec();
+        Console.WriteLine($"INTEROP|direction|fixture={Path.GetFileName(fixturePath)}|format={definition.Key}|direction=native-to-pure");
+        if (IsHighThroughputJpeg2000(definition.Syntax) && source.NumberOfFrames > 1)
+        {
+            ValidateFrameScoped(
+                source,
+                fixturePath,
+                definition,
+                "native-to-pure",
+                nativeCodec,
+                CreateNativeParameters(definition, nativeCodec),
+                pureCodec,
+                pureCodec.GetDefaultParameters());
+            return;
+        }
+
         var compressed = Encode(source, definition.Syntax, nativeCodec, CreateNativeParameters(definition, nativeCodec));
         var decoded = Decode(compressed, pureCodec, pureCodec.GetDefaultParameters());
         AssertDecoded(source, compressed, decoded, definition, "native-to-pure", fixturePath);
+    }
+
+    private static void ValidateFrameScoped(
+        DicomPixelData source,
+        string fixturePath,
+        CodecDefinition definition,
+        string direction,
+        IDicomCodec encoder,
+        DicomCodecParams encoderParameters,
+        IDicomCodec decoder,
+        DicomCodecParams decoderParameters)
+    {
+        for (var frame = 0; frame < source.NumberOfFrames; frame++)
+        {
+            var sourceFrame = CreateSingleFramePixelData(
+                source,
+                frame,
+                DicomTransferSyntax.ExplicitVRLittleEndian,
+                source.PhotometricInterpretation.Value);
+            var compressedFrame = Encode(sourceFrame, definition.Syntax, encoder, encoderParameters);
+            var decodedFrame = Decode(compressedFrame, decoder, decoderParameters);
+
+            ValidateCompressionTags(compressedFrame.Dataset, definition.Syntax);
+            AssertDecodedFrame(sourceFrame, decodedFrame, definition, frame, direction, fixturePath);
+        }
     }
 
     private static DicomPixelData LoadRaw(string fixturePath)
@@ -243,6 +305,13 @@ internal static class InteropValidationProgram
         return decoded;
     }
 
+    private static bool IsHighThroughputJpeg2000(DicomTransferSyntax syntax)
+    {
+        return syntax == DicomTransferSyntax.HTJ2KLossless
+            || syntax == DicomTransferSyntax.HTJ2KLosslessRPCL
+            || syntax == DicomTransferSyntax.HTJ2K;
+    }
+
     private static void AssertDecoded(DicomPixelData source, DicomPixelData compressed, DicomPixelData decoded, CodecDefinition definition, string direction, string fixturePath)
     {
         if (source.NumberOfFrames != compressed.NumberOfFrames || source.NumberOfFrames != decoded.NumberOfFrames)
@@ -268,6 +337,25 @@ internal static class InteropValidationProgram
             {
                 AssertExact(expected, actual, frame, direction, fixturePath, definition.Key);
             }
+        }
+    }
+
+    private static void AssertDecodedFrame(DicomPixelData source, DicomPixelData decoded, CodecDefinition definition, int frame, string direction, string fixturePath)
+    {
+        if (decoded.NumberOfFrames != 1 || source.Width != decoded.Width || source.Height != decoded.Height)
+        {
+            throw new InvalidOperationException($"{direction} {Path.GetFileName(fixturePath)} {definition.Key}: frame {frame} dimensions or frame count differ.");
+        }
+
+        var expected = ToArray(source.GetFrame(0));
+        var actual = ToArray(decoded.GetFrame(0));
+        if (definition.Tolerance.HasValue)
+        {
+            AssertWithinTolerance(source, expected, actual, definition.Tolerance.Value, frame, direction, fixturePath, definition.Key);
+        }
+        else
+        {
+            AssertExact(expected, actual, frame, direction, fixturePath, definition.Key);
         }
     }
 
@@ -360,6 +448,18 @@ internal static class InteropValidationProgram
     {
         var photometricInterpretation = source.SamplesPerPixel == 3 ? PhotometricInterpretation.Rgb.Value : source.PhotometricInterpretation.Value;
         return CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian, photometricInterpretation);
+    }
+
+    private static DicomPixelData CreateSingleFramePixelData(
+        DicomPixelData source,
+        int frame,
+        DicomTransferSyntax syntax,
+        string photometricInterpretation)
+    {
+        var singleFrame = CreateTargetPixelData(source, syntax, photometricInterpretation);
+        singleFrame.NumberOfFrames = 0;
+        singleFrame.AddFrame(new MemoryByteBuffer(ToArray(source.GetFrame(frame))));
+        return singleFrame;
     }
 
     private static DicomPixelData CreateTargetPixelData(DicomPixelData source, DicomTransferSyntax syntax, string photometricInterpretation)
