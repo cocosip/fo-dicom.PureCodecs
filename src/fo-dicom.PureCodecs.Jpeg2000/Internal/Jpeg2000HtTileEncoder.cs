@@ -66,7 +66,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             var encodedComponents = new List<List<List<Jpeg2000EncodedBlock>>>(values.Length);
             foreach (var component in values)
             {
-                Jpeg2000StandardIrreversibleWavelet.Forward97(component, pixelData.Width, pixelData.Height, decompositionLevels);
+                Jpeg2000StandardIrreversibleWavelet.Forward97HighThroughput(
+                    component,
+                    pixelData.Width,
+                    pixelData.Height,
+                    decompositionLevels);
                 encodedComponents.Add(BuildHtIrreversibleCodeBlocksByResolution(component, pixelData.Width, pixelData.Height, codingBitDepth, decompositionLevels, encodedSteps));
             }
 
@@ -471,7 +475,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
                         var scaled = Jpeg2000HtIrreversibleQuantization.ToSignMagnitude(blockCoefficients, delta);
                         var missingMostSignificantBits = Math.Max(0, kMax - 1);
-                        var data = HasNonZeroSignMagnitude(scaled)
+                        var data = HasSignificantSignMagnitude(scaled, missingMostSignificantBits)
                             ? Jpeg2000HtCodeBlockEncoder.EncodeStandardCleanupPass(
                                 new Jpeg2000ClassicCodeBlock(block.Width, block.Height, scaled),
                                 missingMostSignificantBits)
@@ -524,11 +528,13 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             return false;
         }
 
-        private static bool HasNonZeroSignMagnitude(int[] values)
+        private static bool HasSignificantSignMagnitude(int[] values, int missingMostSignificantBits)
         {
+            var bitPlane = 30 - missingMostSignificantBits;
+            var threshold = 1u << bitPlane;
             foreach (var value in values)
             {
-                if ((value & 0x7FFFFFFF) != 0)
+                if ((unchecked((uint)value) & 0x7FFFFFFFu) >= threshold)
                 {
                     return true;
                 }

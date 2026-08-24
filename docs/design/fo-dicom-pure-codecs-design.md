@@ -18,6 +18,8 @@ Development must use this document together with the focused design documents be
 - `docs/design/jpeg-codec-design.md`: JPEG Process 1, Process 2/4, Process 14, and Process 14 SV1 design.
 - `docs/design/jpegls-codec-design.md`: JPEG-LS Lossless and JPEG-LS Near-Lossless design.
 - `docs/design/jpeg2000-codec-design.md`: JPEG 2000 Lossless, JPEG 2000 Lossy, and HTJ2K design.
+- `docs/design/jpeg2000-openjpeg-openjph-separation-design.md`: authoritative classic OpenJPEG versus HTJ2K OpenJPH compatibility boundary.
+- `docs/design/htj2k-openjph-alignment-design.md`: HTJ2K reference alignment and release gates.
 
 ## Hard Requirements
 

@@ -5,6 +5,7 @@ using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 using FellowOakDicom.PureCodecs.Htj2kReference;
 using FellowOakDicom.PureCodecs.Jpeg2000;
+using FellowOakDicom.PureCodecs.Jpeg2000.Internal;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
 
@@ -61,10 +62,25 @@ public sealed class Htj2kReferenceAlignmentTests
                 }
             };
 
-            Assert.Equal(HeaderThroughSod(expectedBytes[0]), HeaderThroughSod(actualBytes));
+            var expectedHeader = HeaderThroughSod(expectedBytes[0]);
+            var actualHeader = HeaderThroughSod(actualBytes);
+            Assert.True(
+                expectedHeader.SequenceEqual(actualHeader),
+                $"HTJ2K headers differ. ExpectedLength={expectedHeader.Length}, ActualLength={actualHeader.Length}, " +
+                DescribeFirstDifference(expectedHeader, actualHeader) + ", " +
+                $"expectedMarkers={DescribeMarkers(expectedHeader)}, actualMarkers={DescribeMarkers(actualHeader)}");
             var diff = Htj2kReferenceDiffComparer.Compare(expected, expectedBytes, actual, new[] { actualBytes });
+            var expectedDecoded = DecodeFrame(sourceDataset, expectedBytes[0]);
+            var actualDecoded = DecodeFrame(sourceDataset, actualBytes);
 
-            Assert.True(diff.IsMatch, diff.Summary + " " + Describe(diff.FirstDifference));
+            Assert.True(
+                diff.IsMatch,
+                diff.Summary + " " + Describe(diff.FirstDifference) + ", " +
+                $"ExpectedLength={expectedBytes[0].Length}, ActualLength={actualBytes.Length}, " +
+                DescribeFirstDifference(expectedBytes[0], actualBytes) + ", " +
+                DescribeDifferenceCount(expectedBytes[0], actualBytes) + ", " +
+                DescribeTilePart(expectedBytes[0], diff.FirstDifference?.ByteOffset ?? -1) + ", " +
+                "Decoded" + DescribeDifferenceCount(expectedDecoded, actualDecoded));
         }
         finally
         {
@@ -133,11 +149,107 @@ public sealed class Htj2kReferenceAlignmentTests
         };
     }
 
+    private static byte[] DecodeFrame(DicomDataset sourceDataset, byte[] codestream)
+    {
+        var targetDataset = CloneForTransferSyntax(sourceDataset, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var target = DicomPixelData.Create(targetDataset, true);
+        return new Jpeg2000HtFrameCodec().DecodeFrame(target, codestream);
+    }
+
     private static string Describe(Htj2kReferenceByteDifference? difference)
     {
         return difference is null
             ? string.Empty
             : $"frame={difference.FrameIndex}, offset={difference.ByteOffset}, expected={difference.ExpectedByte}, actual={difference.ActualByte}";
+    }
+
+    private static string DescribeFirstDifference(byte[] expected, byte[] actual)
+    {
+        var length = Math.Min(expected.Length, actual.Length);
+        for (var index = 0; index < length; index++)
+        {
+            if (expected[index] != actual[index])
+            {
+                var start = Math.Max(0, index - 8);
+                var count = Math.Min(length - start, 17);
+                return $"offset={index}, expected={expected[index]}, actual={actual[index]}, " +
+                    $"expectedContext={Convert.ToHexString(expected, start, count)}, " +
+                    $"actualContext={Convert.ToHexString(actual, start, count)}";
+            }
+        }
+
+        return expected.Length == actual.Length
+            ? "no byte difference"
+            : $"length differs after offset {length}";
+    }
+
+    private static string DescribeMarkers(byte[] codestream)
+    {
+        var markers = new List<string>();
+        for (var offset = 0; offset < codestream.Length - 1;)
+        {
+            if (codestream[offset] != 0xFF)
+            {
+                return string.Join(";", markers) + $";data@{offset}";
+            }
+
+            var code = codestream[offset + 1];
+            if (code is 0x4F or 0x93)
+            {
+                markers.Add($"FF{code:X2}@{offset}:2");
+                offset += 2;
+                continue;
+            }
+
+            var length = (codestream[offset + 2] << 8) | codestream[offset + 3];
+            markers.Add($"FF{code:X2}@{offset}:{length + 2}");
+            offset += length + 2;
+        }
+
+        return string.Join(";", markers);
+    }
+
+    private static string DescribeDifferenceCount(byte[] expected, byte[] actual)
+    {
+        var length = Math.Min(expected.Length, actual.Length);
+        var count = Math.Abs(expected.Length - actual.Length);
+        var last = -1;
+        for (var index = 0; index < length; index++)
+        {
+            if (expected[index] != actual[index])
+            {
+                count++;
+                last = index;
+            }
+        }
+
+        return $"DifferentBytes={count}, LastDifference={last}";
+    }
+
+    private static string DescribeTilePart(byte[] codestream, int byteOffset)
+    {
+        var tilePart = 0;
+        for (var offset = 0; offset < codestream.Length - 13; offset++)
+        {
+            if (codestream[offset] != 0xFF || codestream[offset + 1] != 0x90)
+            {
+                continue;
+            }
+
+            var length = (int)(((uint)codestream[offset + 6] << 24)
+                | ((uint)codestream[offset + 7] << 16)
+                | ((uint)codestream[offset + 8] << 8)
+                | codestream[offset + 9]);
+            if (byteOffset >= offset && byteOffset < offset + length)
+            {
+                return $"TilePart={tilePart}, TileStart={offset}, TileLength={length}, TileRelativeOffset={byteOffset - offset}";
+            }
+
+            tilePart++;
+            offset += Math.Max(1, length) - 1;
+        }
+
+        return "TilePart=not-found";
     }
 
     private static byte[] HeaderThroughSod(byte[] codestream)

@@ -22,6 +22,8 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [JPEG design](../design/jpeg-codec-design.md)
 - [JPEG-LS design](../design/jpegls-codec-design.md)
 - [JPEG 2000 and HTJ2K design](../design/jpeg2000-codec-design.md)
+- [JPEG 2000 OpenJPEG/OpenJPH separation design](../design/jpeg2000-openjpeg-openjph-separation-design.md)
+- [HTJ2K fo-dicom.Codecs alignment design](../design/htj2k-openjph-alignment-design.md)
 
 ## 0. Repository Foundation
 
@@ -419,7 +421,19 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Document any HTJ2K reference-library mismatch before marking support complete.
 - [x] Enable public HTJ2K tool/manager output after standard codestream compatibility tests pass.
 
-### 6.5 JPEG 2000 DICOM Integration
+### 6.5 OpenJPEG/OpenJPH Compatibility Separation
+
+- [ ] Keep explicit classic and high-throughput 5/3 and 9/7 transform entry points where arithmetic differs.
+- [ ] Prove classic `.90/.91` behavior is unchanged after every shared JPEG 2000 infrastructure change.
+- [ ] Complete exact default `.203` RGB codestream alignment; do not widen pixel tolerance around the remaining difference.
+- [ ] Scope 12-in-16 SIZ precision compatibility to HTJ2K and reject out-of-range decoded values.
+- [ ] Reject invalid HTJ2K `TargetRatio` and unsupported `NumLayers` values before frame processing.
+- [ ] Compare every HTJ2K reference manifest field and build Pure manifests independently.
+- [ ] Move all Native HTJ2K operations into bounded worker processes.
+- [ ] Validate HTJ2K multi-frame interoperability with one complete encode/decode call per direction.
+- [ ] Require `.201`, `.202`, and `.203` bidirectional interoperability as release gates.
+
+### 6.6 JPEG 2000 DICOM Integration
 
 - [x] Implement JPEG 2000 codec parameter type.
 - [x] Match `DicomJpeg2000Params.Irreversible` behavior.

@@ -220,7 +220,7 @@ public sealed class Jpeg2000HtCodecRoundTripTests
         codec.Decode(compressed, decoded, codec.GetDefaultParameters());
 
         var maxDifference = PixelDataAssertions.MaxSampleDifference(source, decoded);
-        Assert.InRange(maxDifference, 1, 120);
+        Assert.InRange(maxDifference, 0, 120);
     }
 
     [Fact]

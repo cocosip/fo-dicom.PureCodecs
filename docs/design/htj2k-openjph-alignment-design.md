@@ -7,6 +7,11 @@ for ongoing HTJ2K alignment with the observable .NET behavior of
 `fo-dicom.Codecs`. OpenJPH is reached only through that package's .NET codec
 API; it is not a source or build dependency of this repository.
 
+The classic OpenJPEG versus HTJ2K OpenJPH implementation boundary is defined in
+[`jpeg2000-openjpeg-openjph-separation-design.md`](jpeg2000-openjpeg-openjph-separation-design.md).
+That document is authoritative whenever shared family code could impose one
+reference library's arithmetic or policy on the other family.
+
 ## Purpose
 
 Complete the managed HTJ2K implementation for transfer syntaxes `.201`, `.202`,

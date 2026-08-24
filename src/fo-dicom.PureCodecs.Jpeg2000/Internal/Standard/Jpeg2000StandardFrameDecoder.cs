@@ -333,7 +333,22 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             if (cod.Transformation == 0)
             {
                 var samples = component.IrreversibleCoefficients ?? DequantizeIrreversible(component, cod, qcd);
-                Jpeg2000StandardIrreversibleWavelet.Inverse97(samples, component.Width, component.Height, component.Levels);
+                if (IsHighThroughput(cod))
+                {
+                    Jpeg2000StandardIrreversibleWavelet.Inverse97HighThroughput(
+                        samples,
+                        component.Width,
+                        component.Height,
+                        component.Levels);
+                }
+                else
+                {
+                    Jpeg2000StandardIrreversibleWavelet.Inverse97(
+                        samples,
+                        component.Width,
+                        component.Height,
+                        component.Levels);
+                }
                 component.FloatSamples = samples;
                 component.Samples = Round(samples);
                 return;
@@ -521,7 +536,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 index = qcd.StepSizes.Count - 1;
             }
 
-            var delta = Jpeg2000HtIrreversibleQuantization.DecodeDelta(qcd.StepSizes[index], block.Orientation, kMax);
+            var delta = Jpeg2000HtIrreversibleQuantization.DecodeDelta(qcd.StepSizes[index], block.Orientation, kMax)
+                * Math.Pow(2.0, component.Precision);
             return Jpeg2000HtIrreversibleQuantization.FromSignMagnitude(coefficients, delta);
         }
 

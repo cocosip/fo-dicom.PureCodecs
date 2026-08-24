@@ -19,6 +19,16 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         public static void Forward97(double[] data, int width, int height, int levels)
         {
+            Forward97Core(data, width, height, levels);
+        }
+
+        public static void Forward97HighThroughput(double[] data, int width, int height, int levels)
+        {
+            Forward97Core(data, width, height, levels);
+        }
+
+        private static void Forward97Core(double[] data, int width, int height, int levels)
+        {
             var single = new float[data.Length];
             for (var i = 0; i < data.Length; i++)
             {
@@ -47,6 +57,21 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
         public static void Inverse97(double[] data, int width, int height, int levels)
         {
+            Inverse97Core(data, width, height, levels, useOpenJphNormalization: false);
+        }
+
+        public static void Inverse97HighThroughput(double[] data, int width, int height, int levels)
+        {
+            Inverse97Core(data, width, height, levels, useOpenJphNormalization: true);
+        }
+
+        private static void Inverse97Core(
+            double[] data,
+            int width,
+            int height,
+            int levels,
+            bool useOpenJphNormalization)
+        {
             var widths = new int[levels + 1];
             var heights = new int[levels + 1];
             widths[0] = width;
@@ -59,7 +84,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
 
             for (var level = levels - 1; level >= 0; level--)
             {
-                Inverse97_2D(data, widths[level], heights[level], width);
+                Inverse97_2D(data, widths[level], heights[level], width, useOpenJphNormalization);
             }
         }
 
@@ -141,7 +166,12 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             Array.Copy(workspace, data, width);
         }
 
-        private static void Inverse97_2D(double[] data, int width, int height, int stride)
+        private static void Inverse97_2D(
+            double[] data,
+            int width,
+            int height,
+            int stride,
+            bool useOpenJphNormalization)
         {
             if (width > 1)
             {
@@ -149,7 +179,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 for (var y = 0; y < height; y++)
                 {
                     Array.Copy(data, y * stride, row, 0, width);
-                    Inverse97_1D(row);
+                    Inverse97_1D(row, useOpenJphNormalization);
                     Array.Copy(row, 0, data, y * stride, width);
                 }
             }
@@ -164,7 +194,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                         column[y] = data[(y * stride) + x];
                     }
 
-                    Inverse97_1D(column);
+                    Inverse97_1D(column, useOpenJphNormalization);
                     for (var y = 0; y < height; y++)
                     {
                         data[(y * stride) + x] = column[y];
@@ -173,7 +203,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             }
         }
 
-        private static void Inverse97_1D(double[] data)
+        private static void Inverse97_1D(double[] data, bool useOpenJphNormalization)
         {
             var width = data.Length;
             if (width <= 1)
@@ -198,7 +228,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             for (var i = 0; i < Math.Min(lowCount, highCount); i++)
             {
                 data[2 * i] /= InvK97Inverse;
-                data[(2 * i) + 1] *= OpenJpegTwoInvK97;
+                data[(2 * i) + 1] *= useOpenJphNormalization
+                    ? InvK97Inverse
+                    : OpenJpegTwoInvK97;
             }
 
             if (lowCount > highCount)
