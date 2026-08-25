@@ -5,6 +5,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         private Jpeg2000CodingStyleDefault(Jpeg2000CodingStyle style)
             : base(
                 style.HasPrecinctSizes,
+                style.HasStartOfPacketMarkers,
+                style.HasEndOfPacketHeaderMarkers,
                 style.ProgressionOrder,
                 style.LayerCount,
                 style.UsesMultipleComponentTransform,

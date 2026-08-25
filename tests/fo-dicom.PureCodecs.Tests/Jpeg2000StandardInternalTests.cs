@@ -73,6 +73,43 @@ public sealed class Jpeg2000StandardInternalTests
     }
 
     [Fact]
+    public void Mq_context_reset_preserves_the_arithmetic_stream_position()
+    {
+        var bits = new[]
+        {
+            1, 0, 1, 1, 0, 0, 1, 0, 1, 0,
+            0, 1, 1, 1, 0, 1, 0, 0, 1, 1,
+            1, 1, 0, 0, 1, 0, 1, 1, 0, 1,
+            0, 0, 1, 0, 0, 1, 1, 0, 1, 0,
+        };
+        var encoder = Create("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardMqEncoder", 2);
+        for (var index = 0; index < bits.Length; index++)
+        {
+            if (index == 20)
+            {
+                Invoke(encoder, "ResetContexts");
+            }
+
+            Invoke(encoder, "Encode", bits[index], index & 1);
+        }
+
+        var encoded = (byte[])Invoke(encoder, "Flush");
+        var decoder = Create("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardMqDecoder", encoded, 2);
+        var actual = new int[bits.Length];
+        for (var index = 0; index < actual.Length; index++)
+        {
+            if (index == 20)
+            {
+                Invoke(decoder, "ResetContexts");
+            }
+
+            actual[index] = (int)Invoke(decoder, "Decode", index & 1);
+        }
+
+        Assert.Equal(bits, actual);
+    }
+
+    [Fact]
     public void Packet_bit_writer_flushes_stuffing_byte_after_ff_header_byte()
     {
         var writer = Create("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000PacketBitWriter");
@@ -433,6 +470,153 @@ public sealed class Jpeg2000StandardInternalTests
         Assert.Equal(2, Property<int>(block, "ZeroBitPlanes"));
         Assert.Equal(4, Property<int>(block, "TotalPasses"));
         Assert.Equal(data, Property<byte[]>(block, "Data"));
+    }
+
+    [Fact]
+    public void Packet_decoder_consumes_inline_SOP_before_packet_header()
+    {
+        var fixture = CreateSingleBlockPacketFixture();
+        var tileData = StartOfPacket(0).Concat(fixture.Encoded).ToArray();
+
+        var block = DecodeSingleBlockPacket(tileData, codingStyleFlags: 0x02);
+
+        Assert.Equal(fixture.BlockData, Property<byte[]>(block, "Data"));
+    }
+
+    [Fact]
+    public void Packet_decoder_consumes_inline_EPH_before_packet_body()
+    {
+        var fixture = CreateSingleBlockPacketFixture();
+        var tileData = fixture.Header
+            .Concat(new byte[] { 0xFF, Jpeg2000Marker.EPH })
+            .Concat(fixture.BlockData)
+            .ToArray();
+
+        var block = DecodeSingleBlockPacket(tileData, codingStyleFlags: 0x04);
+
+        Assert.Equal(fixture.BlockData, Property<byte[]>(block, "Data"));
+    }
+
+    [Fact]
+    public void Packet_decoder_keeps_SOP_in_tile_body_and_EPH_in_packed_header()
+    {
+        var fixture = CreateSingleBlockPacketFixture();
+        var tileData = StartOfPacket(0).Concat(fixture.BlockData).ToArray();
+        var packedHeader = fixture.Header.Concat(new byte[] { 0xFF, Jpeg2000Marker.EPH }).ToArray();
+
+        var block = DecodeSingleBlockPacket(tileData, codingStyleFlags: 0x06, packedHeader: packedHeader);
+
+        Assert.Equal(fixture.BlockData, Property<byte[]>(block, "Data"));
+    }
+
+    [Fact]
+    public void Packet_decoder_requires_EPH_after_empty_packet_headers()
+    {
+        var coding = CreateCodingStyle(0x04, layerCount: 2);
+        var component = Create("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardComponent", 0, 0, 0, 1, 1, 0, 8, true);
+        var decoder = Create(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardPacketDecoder",
+            new byte[] { 0x00, 0xFF, Jpeg2000Marker.EPH, 0x00, 0xFF, Jpeg2000Marker.EPH },
+            1,
+            2,
+            1,
+            Jpeg2000ProgressionOrder.LRCP,
+            ToArray("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardComponent", component),
+            64,
+            64,
+            (byte)0,
+            coding);
+
+        var packets = ((IEnumerable)Invoke(decoder, "Decode")).Cast<object>().ToArray();
+
+        Assert.Equal(2, packets.Length);
+        Assert.All(packets, packet => Assert.Empty(((IEnumerable)Property<object>(packet, "Contributions")).Cast<object>()));
+    }
+
+    [Theory]
+    [InlineData(new byte[] { 0xFF, Jpeg2000Marker.SOP, 0x00, 0x05, 0x00, 0x00 }, "length")]
+    [InlineData(new byte[] { 0xFF, Jpeg2000Marker.SOP, 0x00, 0x04, 0x00, 0x01 }, "sequence")]
+    public void Packet_decoder_rejects_malformed_inline_SOP(byte[] marker, string expectedMessage)
+    {
+        var fixture = CreateSingleBlockPacketFixture();
+        var decoder = CreateSingleBlockPacketDecoder(marker.Concat(fixture.Encoded).ToArray(), codingStyleFlags: 0x02);
+
+        var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() => Invoke(decoder.Decoder, "Decode"));
+
+        var codecException = Assert.IsType<FellowOakDicom.Imaging.Codec.DicomCodecException>(exception.InnerException);
+        Assert.Contains(expectedMessage, codecException.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("layer=0", codecException.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Packet_decoder_rejects_truncated_inline_SOP()
+    {
+        var decoder = CreateSingleBlockPacketDecoder(
+            new byte[] { 0xFF, Jpeg2000Marker.SOP, 0x00 },
+            codingStyleFlags: 0x02);
+
+        var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() => Invoke(decoder.Decoder, "Decode"));
+
+        var codecException = Assert.IsType<FellowOakDicom.Imaging.Codec.DicomCodecException>(exception.InnerException);
+        Assert.Contains("truncated", codecException.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("layer=0", codecException.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(new byte[] { })]
+    [InlineData(new byte[] { 0xFF })]
+    public void Packet_decoder_rejects_missing_or_truncated_inline_EPH(byte[] eph)
+    {
+        var fixture = CreateSingleBlockPacketFixture();
+        var tileData = fixture.Header.Concat(eph).Concat(fixture.BlockData).ToArray();
+        var decoder = CreateSingleBlockPacketDecoder(tileData, codingStyleFlags: 0x04);
+
+        var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() => Invoke(decoder.Decoder, "Decode"));
+
+        var codecException = Assert.IsType<FellowOakDicom.Imaging.Codec.DicomCodecException>(exception.InnerException);
+        Assert.Contains("EPH", codecException.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("layer=0", codecException.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Packet_decoder_validates_SOP_sequence_modulo_65536()
+    {
+        const int packetCount = 65537;
+        var tileData = new byte[packetCount * 7];
+        for (var packet = 0; packet < packetCount; packet++)
+        {
+            var sequence = packet == packetCount - 1 ? 1 : (ushort)packet;
+            var offset = packet * 7;
+            tileData[offset] = 0xFF;
+            tileData[offset + 1] = Jpeg2000Marker.SOP;
+            tileData[offset + 2] = 0x00;
+            tileData[offset + 3] = 0x04;
+            tileData[offset + 4] = (byte)(sequence >> 8);
+            tileData[offset + 5] = (byte)sequence;
+            tileData[offset + 6] = 0x00;
+        }
+
+        var coding = CreateCodingStyle(0x02, layerCount: 1);
+        var component = Create("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardComponent", 0, 0, 0, 1, 1, 0, 8, true);
+        var decoder = Create(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardPacketDecoder",
+            tileData,
+            1,
+            packetCount,
+            1,
+            Jpeg2000ProgressionOrder.LRCP,
+            ToArray("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardComponent", component),
+            64,
+            64,
+            (byte)0,
+            coding);
+
+        var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() => Invoke(decoder, "Decode"));
+
+        var codecException = Assert.IsType<FellowOakDicom.Imaging.Codec.DicomCodecException>(exception.InnerException);
+        Assert.Contains("expected=0", codecException.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("actual=1", codecException.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("layer=65536", codecException.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1642,6 +1826,81 @@ public sealed class Jpeg2000StandardInternalTests
     }
 
     private static System.Reflection.Assembly Jpeg2000Assembly => typeof(DicomJpeg2000LosslessCodec).Assembly;
+
+    private static (byte[] Encoded, byte[] Header, byte[] BlockData) CreateSingleBlockPacketFixture()
+    {
+        var blockData = new byte[] { 0x12, 0x34, 0x56 };
+        var blockType = Jpeg2000Assembly.GetType("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000EncodedBlock", throwOnError: true)!;
+        var blocks = Array.CreateInstance(blockType, 1);
+        blocks.SetValue(Create(blockType, 0, 0, 1, 1, 2, 4, blockData), 0);
+        var packetEncoder = Jpeg2000Assembly.GetType("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardPacketEncoder", throwOnError: true)!;
+        var encoded = (byte[])packetEncoder.GetMethod("EncodeSingleLayerPacket")!.Invoke(null, new object[] { blocks })!;
+        var header = encoded.Take(encoded.Length - blockData.Length).ToArray();
+        return (encoded, header, blockData);
+    }
+
+    private static byte[] StartOfPacket(ushort sequence)
+    {
+        return new byte[]
+        {
+            0xFF,
+            Jpeg2000Marker.SOP,
+            0x00,
+            0x04,
+            (byte)(sequence >> 8),
+            (byte)sequence
+        };
+    }
+
+    private static Jpeg2000CodingStyleDefault CreateCodingStyle(byte flags, int layerCount)
+    {
+        return Jpeg2000CodingStyleDefault.Parse(new Jpeg2000MarkerSegment(
+            Jpeg2000Marker.COD,
+            new byte[]
+            {
+                flags,
+                (byte)Jpeg2000ProgressionOrder.LRCP,
+                (byte)(layerCount >> 8),
+                (byte)layerCount,
+                0x00,
+                0x00,
+                0x04,
+                0x04,
+                0x00,
+                0x01
+            }));
+    }
+
+    private static (object Decoder, object Component) CreateSingleBlockPacketDecoder(
+        byte[] tileData,
+        byte codingStyleFlags,
+        byte[]? packedHeader = null)
+    {
+        var component = Create("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardComponent", 0, 0, 0, 1, 1, 0, 8, true);
+        var decoder = Create(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardPacketDecoder",
+            tileData,
+            1,
+            1,
+            1,
+            Jpeg2000ProgressionOrder.LRCP,
+            ToArray("FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardComponent", component),
+            64,
+            64,
+            (byte)0,
+            CreateCodingStyle(codingStyleFlags, layerCount: 1),
+            null!,
+            null!,
+            packedHeader!);
+        return (decoder, component);
+    }
+
+    private static object DecodeSingleBlockPacket(byte[] tileData, byte codingStyleFlags, byte[]? packedHeader = null)
+    {
+        var fixture = CreateSingleBlockPacketDecoder(tileData, codingStyleFlags, packedHeader);
+        Invoke(fixture.Decoder, "Decode");
+        return ((IEnumerable)Invoke(fixture.Component, "AllCodeBlocks")).Cast<object>().Single();
+    }
 
     private static object Create(string typeName, params object[] args)
     {

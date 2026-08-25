@@ -63,9 +63,11 @@ Decoder must handle at least:
 - SOF55.
 - SOS.
 - LSE preset coding parameters.
-- DRI and RST restart structures are recognized and rejected explicitly until
-  JPEG-LS restart-state decoding is implemented.
+- DRI supports the JPEG-LS 2-, 3-, and 4-byte restart interval forms, and RST0
+  through RST7 are consumed with modulo-eight order and scan-state reset.
 - APPn markers by skipping them safely.
+- APP8 `mrfx` HP1/HP2/HP3 color-transform metadata is parsed separately from
+  SPIFF and unrelated APP8 data.
 - COM markers by skipping them safely.
 
 Unsupported marker combinations must fail with a managed codec exception.
@@ -192,7 +194,10 @@ Error messages should include:
 - Run mode encode/decode.
 - Near-lossless sample tolerance checks.
 - Invalid marker length handling.
-- Explicit managed rejection of DRI and RST restart structures.
+- Legal DRI/RST restart decoding and managed rejection of missing, duplicate,
+  truncated, or out-of-sequence restart markers.
+- APP8 `mrfx` HP1/HP2/HP3 inverse-transform coverage for exact 8-bit and 16-bit
+  wraparound samples, including invalid declarations.
 
 ### Codec Tests
 
@@ -234,7 +239,14 @@ The current implementation is fully managed and lives in `fo-dicom.PureCodecs.Jp
 - The encoder emits non-interleaved monochrome scans, sample-interleaved RGB scans, or line-interleaved scans according to the DICOM component layout. The decoder also accepts standard non-interleaved color codestreams containing one SOS scan per component, snapshots the effective LSE preset for each scan, and places decoded samples according to component selectors and the target planar layout; this path is validated with `fo-dicom.Codecs`/CharLS.
 - Before encoding, planar RGB is normalized through fo-dicom's planar-to-interleaved converter, then `YBR_FULL` is independently normalized to RGB. Interleaved `YBR_FULL_422` is normalized to RGB; planar `YBR_FULL_422` is rejected explicitly. Compressed metadata is updated to interleaved RGB, including exact frame-length handling for odd-width `YBR_FULL_422` input. These paths are validated by decoding the Pure codestream with `fo-dicom.Codecs`/CharLS.
 - Line interleave follows the CharLS state model: regular contexts and run interruption contexts are shared for the scan, while run index and left-edge line state are maintained per component.
+- Restart decoding resets regular/run contexts, run indices, and line-neighbor
+  state at each interval; 2-, 3-, and 4-byte DRI values and RST7-to-RST0
+  rollover are covered by public Native/Pure tests.
+- Decoder-side APP8 `mrfx` compatibility applies the exact CharLS inverse HP1,
+  HP2, or HP3 transform after scan reconstruction and before target planar
+  conversion. It accepts only three-component 8-bit or 16-bit transformed
+  frames. The DICOM encoder continues to emit no HP transform, matching the
+  Native DICOM entry point.
 - Unsupported photometric interpretations, unsupported bit depths, invalid NEAR values, and malformed marker streams fail with managed `DicomCodecException`.
-- DRI and RST restart structures fail with explicit managed exceptions; legal
-  multi-scan color streams containing one non-interleaved SOS per component
-  remain supported.
+- Legal multi-scan color streams containing one non-interleaved SOS per
+  component remain supported.

@@ -8,6 +8,8 @@ using Xunit;
 using CoreHtJpeg2000Params = FellowOakDicom.Imaging.Codec.DicomHtJpeg2000Params;
 using CoreJpeg2000Params = FellowOakDicom.Imaging.Codec.DicomJpeg2000Params;
 using NativeJpeg2000LosslessCodec = FellowOakDicom.Imaging.NativeCodec.DicomJpeg2000LosslessCodec;
+using NativeJpeg2000Params = FellowOakDicom.Imaging.NativeCodec.DicomJpeg2000Params;
+using NativeProgressionOrder = FellowOakDicom.Imaging.NativeCodec.OPJ_PROG_ORDER;
 using PureHtJpeg2000Params = FellowOakDicom.PureCodecs.Jpeg2000.DicomHtJpeg2000Params;
 using PureJpeg2000Params = FellowOakDicom.PureCodecs.Jpeg2000.DicomJpeg2000Params;
 
@@ -126,23 +128,142 @@ public sealed class Jpeg2000DicomIntegrationTests
         Assert.Equal(Jpeg2000ProgressionOrder.LRCP, ReadProgressionOrder(compressed.GetFrame(0).Data));
     }
 
-    [Fact]
-    public void Jpeg2000_pure_parameters_reject_unsupported_progression_order()
+    [Theory]
+    [InlineData(Jpeg2000ProgressionOrder.LRCP)]
+    [InlineData(Jpeg2000ProgressionOrder.RLCP)]
+    [InlineData(Jpeg2000ProgressionOrder.RPCL)]
+    [InlineData(Jpeg2000ProgressionOrder.PCRL)]
+    [InlineData(Jpeg2000ProgressionOrder.CPRL)]
+    public void Jpeg2000_lossless_encodes_requested_progression_order_for_pure_and_native_decode(
+        Jpeg2000ProgressionOrder progressionOrder)
     {
-        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 4, columns: 4);
+        var frame = Enumerable.Range(0, 64 * 64).Select(index => (byte)((index * 17) % 251)).ToArray();
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 64, columns: 64, frame: frame);
         var source = DicomPixelData.Create(dataset);
         var compressedDataset = CloneForTransferSyntax(dataset, DicomTransferSyntax.JPEG2000Lossless);
         var compressed = DicomPixelData.Create(compressedDataset, true);
+        var pureDecoded = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
+        var nativeDecoded = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
         var codec = new DicomJpeg2000LosslessCodec();
         var parameters = new PureJpeg2000Params
         {
             Irreversible = false,
-            ProgressionOrder = Jpeg2000ProgressionOrder.RPCL
+            ProgressionOrder = progressionOrder,
+            RateLevels = Array.Empty<int>(),
+            NumLayers = 2,
+            IncludeFinalLosslessLayer = true
         };
 
-        var exception = Assert.Throws<DicomCodecException>(() => codec.Encode(source, compressed, parameters));
+        codec.Encode(source, compressed, parameters);
+        codec.Decode(compressed, pureDecoded, codec.GetDefaultParameters());
+        var nativeCodec = new NativeJpeg2000LosslessCodec();
+        nativeCodec.Decode(compressed, nativeDecoded, nativeCodec.GetDefaultParameters());
 
-        Assert.Contains("LRCP", exception.Message);
+        Assert.Equal(progressionOrder, ReadProgressionOrder(compressed.GetFrame(0).Data));
+        Assert.Equal(2, ReadLayerCount(compressed.GetFrame(0).Data));
+        PixelDataAssertions.FramesMatchExactly(source, pureDecoded);
+        PixelDataAssertions.FramesMatchExactly(source, nativeDecoded);
+    }
+
+    [Theory]
+    [InlineData(Jpeg2000ProgressionOrder.LRCP)]
+    [InlineData(Jpeg2000ProgressionOrder.RLCP)]
+    [InlineData(Jpeg2000ProgressionOrder.RPCL)]
+    [InlineData(Jpeg2000ProgressionOrder.PCRL)]
+    [InlineData(Jpeg2000ProgressionOrder.CPRL)]
+    public void Jpeg2000_rgb_lossless_encodes_requested_progression_order_for_pure_and_native_decode(
+        Jpeg2000ProgressionOrder progressionOrder)
+    {
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 32, columns: 32));
+        var compressed = DicomPixelData.Create(
+            CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.JPEG2000Lossless),
+            true);
+        var pureDecoded = CreateRgbInterleavedTarget(source);
+        var nativeDecoded = CreateRgbInterleavedTarget(source);
+        var codec = new DicomJpeg2000LosslessCodec();
+
+        codec.Encode(source, compressed, new PureJpeg2000Params
+        {
+            Irreversible = false,
+            Rate = 0,
+            RateLevels = Array.Empty<int>(),
+            ProgressionOrder = progressionOrder
+        });
+        codec.Decode(compressed, pureDecoded, codec.GetDefaultParameters());
+        var nativeCodec = new NativeJpeg2000LosslessCodec();
+        nativeCodec.Decode(compressed, nativeDecoded, nativeCodec.GetDefaultParameters());
+
+        Assert.Equal(progressionOrder, ReadProgressionOrder(compressed.GetFrame(0).Data));
+        PixelDataAssertions.FramesMatchExactly(source, pureDecoded);
+        PixelDataAssertions.FramesMatchExactly(source, nativeDecoded);
+    }
+
+    [Theory]
+    [InlineData(Jpeg2000ProgressionOrder.LRCP)]
+    [InlineData(Jpeg2000ProgressionOrder.RLCP)]
+    [InlineData(Jpeg2000ProgressionOrder.RPCL)]
+    [InlineData(Jpeg2000ProgressionOrder.PCRL)]
+    [InlineData(Jpeg2000ProgressionOrder.CPRL)]
+    public void Jpeg2000_rgb_lossy_encodes_requested_progression_order_for_pure_and_native_decode(
+        Jpeg2000ProgressionOrder progressionOrder)
+    {
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 32, columns: 32));
+        var compressed = DicomPixelData.Create(
+            CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.JPEG2000Lossy),
+            true);
+        var pureDecoded = CreateRgbInterleavedTarget(source);
+        var nativeDecoded = CreateRgbInterleavedTarget(source);
+        var codec = new DicomJpeg2000LossyCodec();
+
+        codec.Encode(source, compressed, new PureJpeg2000Params
+        {
+            Irreversible = true,
+            Rate = 16,
+            RateLevels = Array.Empty<int>(),
+            ProgressionOrder = progressionOrder
+        });
+        codec.Decode(compressed, pureDecoded, codec.GetDefaultParameters());
+        var nativeCodec = new FellowOakDicom.Imaging.NativeCodec.DicomJpeg2000LossyCodec();
+        nativeCodec.Decode(compressed, nativeDecoded, nativeCodec.GetDefaultParameters());
+
+        Assert.Equal(progressionOrder, ReadProgressionOrder(compressed.GetFrame(0).Data));
+        PixelDataAssertions.FramesMatchWithinTolerance(source, pureDecoded, tolerance: 58);
+        PixelDataAssertions.FramesMatchWithinTolerance(source, nativeDecoded, tolerance: 58);
+    }
+
+    [Theory]
+    [InlineData(Jpeg2000ProgressionOrder.LRCP)]
+    [InlineData(Jpeg2000ProgressionOrder.RLCP)]
+    [InlineData(Jpeg2000ProgressionOrder.RPCL)]
+    [InlineData(Jpeg2000ProgressionOrder.PCRL)]
+    [InlineData(Jpeg2000ProgressionOrder.CPRL)]
+    public void Fo_dicom_codecs_lossless_progression_output_decodes_exactly_with_pure(
+        Jpeg2000ProgressionOrder progressionOrder)
+    {
+        var frame = Enumerable.Range(0, 64 * 64).Select(index => (byte)((index * 29) % 251)).ToArray();
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8(rows: 64, columns: 64, frame: frame));
+        var compressed = DicomPixelData.Create(
+            CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.JPEG2000Lossless),
+            true);
+        var pureDecoded = DicomPixelData.Create(
+            CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian),
+            true);
+        var nativeCodec = new NativeJpeg2000LosslessCodec();
+
+        nativeCodec.Encode(source, compressed, new NativeJpeg2000Params
+        {
+            Irreversible = false,
+            Rate = 0,
+            RateLevels = Array.Empty<double>(),
+            ProgressionOrder = (NativeProgressionOrder)(int)progressionOrder
+        });
+        new DicomJpeg2000LosslessCodec().Decode(
+            compressed,
+            pureDecoded,
+            new PureJpeg2000Params { Irreversible = false });
+
+        Assert.Equal(progressionOrder, ReadProgressionOrder(compressed.GetFrame(0).Data));
+        PixelDataAssertions.FramesMatchExactly(source, pureDecoded);
     }
 
     [Fact]
@@ -756,6 +877,67 @@ public sealed class Jpeg2000DicomIntegrationTests
         nativeCodec.Decode(compressed, nativeTarget, nativeCodec.GetDefaultParameters());
 
         Assert.Equal(new byte[] { 131 }, pureTarget.GetFrame(0).Data);
+        PixelDataAssertions.FramesMatchExactly(pureTarget, nativeTarget);
+    }
+
+    [Theory]
+    [InlineData((byte)0)]
+    [InlineData(Jpeg2000Marker.PPM)]
+    [InlineData(Jpeg2000Marker.PPT)]
+    public void Jpeg2000_pure_and_native_decode_SOP_EPH_packet_marker_codestream(byte packedHeaderMarker)
+    {
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows: 1, columns: 1);
+        var source = DicomPixelData.Create(dataset);
+        var codestream = CreateSinglePixelSemanticMarkerCodestream(packedHeaderMarker, includeSopAndEph: true);
+        var compressed = CreateCompressedPixelDataWithFrame(source, DicomTransferSyntax.JPEG2000Lossless, codestream);
+        var pureTarget = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
+        var nativeTarget = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
+
+        var pureCodec = new DicomJpeg2000LosslessCodec();
+        pureCodec.Decode(compressed, pureTarget, pureCodec.GetDefaultParameters());
+        var nativeCodec = new NativeJpeg2000LosslessCodec();
+        nativeCodec.Decode(compressed, nativeTarget, nativeCodec.GetDefaultParameters());
+
+        Assert.Equal(new byte[] { 131 }, pureTarget.GetFrame(0).Data);
+        PixelDataAssertions.FramesMatchExactly(pureTarget, nativeTarget);
+    }
+
+    [Theory]
+    [InlineData((byte)0x00)]
+    [InlineData((byte)0x02)]
+    [InlineData((byte)0x03)]
+    [InlineData((byte)0x08)]
+    [InlineData((byte)0x0A)]
+    [InlineData((byte)0x10)]
+    public void Jpeg2000_pure_and_native_decode_RESET_VSC_code_block_styles(byte codeBlockStyle)
+    {
+        const ushort rows = 8;
+        const ushort columns = 4;
+        var coefficients = new[]
+        {
+             7, -3,  1,  0,
+            -6,  2,  0, -1,
+             5,  0, -2,  3,
+            -7,  4,  1, -3,
+             6, -5,  2,  0,
+            -4,  3, -1,  5,
+             2, -6,  4, -2,
+            -1,  7, -5,  3,
+        };
+        var expected = coefficients.Select(value => (byte)(value + 128)).ToArray();
+        var dataset = DicomPixelDataFixtures.CreateMonochrome8(rows, columns, expected);
+        var source = DicomPixelData.Create(dataset);
+        var codestream = CreateCodeBlockStyleCodestream(columns, rows, coefficients, bitPlaneCount: 3, codeBlockStyle);
+        var compressed = CreateCompressedPixelDataWithFrame(source, DicomTransferSyntax.JPEG2000Lossless, codestream);
+        var pureTarget = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
+        var nativeTarget = DicomPixelData.Create(CloneForTransferSyntax(dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
+
+        var pureCodec = new DicomJpeg2000LosslessCodec();
+        pureCodec.Decode(compressed, pureTarget, pureCodec.GetDefaultParameters());
+        var nativeCodec = new NativeJpeg2000LosslessCodec();
+        nativeCodec.Decode(compressed, nativeTarget, nativeCodec.GetDefaultParameters());
+
+        Assert.Equal(expected, pureTarget.GetFrame(0).Data);
         PixelDataAssertions.FramesMatchExactly(pureTarget, nativeTarget);
     }
 
@@ -1426,7 +1608,7 @@ public sealed class Jpeg2000DicomIntegrationTests
         return result;
     }
 
-    private static byte[] CreateSinglePixelSemanticMarkerCodestream(byte marker)
+    private static byte[] CreateSinglePixelSemanticMarkerCodestream(byte marker, bool includeSopAndEph = false)
     {
         const int tier1FractionalBits = 6;
         const int bitPlaneCount = 2;
@@ -1466,29 +1648,44 @@ public sealed class Jpeg2000DicomIntegrationTests
         writer.WriteSegment(Jpeg2000Marker.SIZ, size);
         writer.WriteSegment(
             Jpeg2000Marker.COD,
-            new byte[] { 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x04, 0x04, 0x00, 0x01 });
+            new byte[] { includeSopAndEph ? (byte)0x06 : (byte)0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x04, 0x04, 0x00, 0x01 });
         writer.WriteSegment(Jpeg2000Marker.QCD, new byte[] { 0x40, 0x40 });
         if (marker == Jpeg2000Marker.RGN)
         {
             writer.WriteSegment(Jpeg2000Marker.RGN, new byte[] { 0x00, 0x00, 0x08 });
         }
-        else if (marker == Jpeg2000Marker.PPM)
+        var storedPacketHeader = includeSopAndEph
+            ? packetHeader.Concat(new byte[] { 0xFF, Jpeg2000Marker.EPH }).ToArray()
+            : packetHeader;
+        if (marker == Jpeg2000Marker.PPM)
         {
-            var ppm = new byte[packetHeader.Length + 5];
+            var ppm = new byte[storedPacketHeader.Length + 5];
             ppm[0] = 0;
-            WriteUInt32(ppm, 1, (uint)packetHeader.Length);
-            Buffer.BlockCopy(packetHeader, 0, ppm, 5, packetHeader.Length);
+            WriteUInt32(ppm, 1, (uint)storedPacketHeader.Length);
+            Buffer.BlockCopy(storedPacketHeader, 0, ppm, 5, storedPacketHeader.Length);
             writer.WriteSegment(Jpeg2000Marker.PPM, ppm);
         }
 
         byte[]? ppt = null;
         if (marker == Jpeg2000Marker.PPT)
         {
-            ppt = new byte[packetHeader.Length + 1];
-            Buffer.BlockCopy(packetHeader, 0, ppt, 1, packetHeader.Length);
+            ppt = new byte[storedPacketHeader.Length + 1];
+            Buffer.BlockCopy(storedPacketHeader, 0, ppt, 1, storedPacketHeader.Length);
         }
 
-        var tileData = marker == Jpeg2000Marker.RGN ? packet : packetBody;
+        var usesPackedHeaders = marker == Jpeg2000Marker.PPM || marker == Jpeg2000Marker.PPT;
+        byte[] tileData;
+        if (includeSopAndEph)
+        {
+            var sop = new byte[] { 0xFF, Jpeg2000Marker.SOP, 0x00, 0x04, 0x00, 0x00 };
+            tileData = usesPackedHeaders
+                ? sop.Concat(packetBody).ToArray()
+                : sop.Concat(storedPacketHeader).Concat(packetBody).ToArray();
+        }
+        else
+        {
+            tileData = marker == Jpeg2000Marker.RGN ? packet : packetBody;
+        }
         var tileHeaderLength = ppt == null ? 0 : ppt.Length + 4;
         var psot = checked((uint)(tileData.Length + tileHeaderLength + 14));
         var sot = new byte[8];
@@ -1502,6 +1699,68 @@ public sealed class Jpeg2000DicomIntegrationTests
 
         writer.WriteStandalone(Jpeg2000Marker.SOD);
         writer.WriteRaw(tileData);
+        writer.WriteStandalone(Jpeg2000Marker.EOC);
+        return writer.ToArray();
+    }
+
+    private static byte[] CreateCodeBlockStyleCodestream(
+        int width,
+        int height,
+        int[] coefficients,
+        int bitPlaneCount,
+        byte codeBlockStyle)
+    {
+        const int tier1FractionalBits = 6;
+        const int precision = 8;
+        var passCount = (bitPlaneCount * 3) - 2;
+        var zeroBitPlanes = precision + 1 - bitPlaneCount;
+        var assembly = typeof(Jpeg2000Marker).Assembly;
+        var tier1Type = assembly.GetType(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardTier1Encoder",
+            throwOnError: true)!;
+        var tier1 = Activator.CreateInstance(tier1Type, width, height, 0, codeBlockStyle)!;
+        var scaled = coefficients.Select(value => value << tier1FractionalBits).ToArray();
+        var tier1Data = (byte[])tier1Type.GetMethod("Encode", new[] { typeof(int[]), typeof(int) })!
+            .Invoke(tier1, new object[] { scaled, passCount })!;
+        var blockType = assembly.GetType(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000EncodedBlock",
+            throwOnError: true)!;
+        var block = Activator.CreateInstance(
+            blockType,
+            0,
+            0,
+            1,
+            1,
+            zeroBitPlanes,
+            passCount,
+            tier1Data)!;
+        var blocks = Array.CreateInstance(blockType, 1);
+        blocks.SetValue(block, 0);
+        var packetEncoderType = assembly.GetType(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard.Jpeg2000StandardPacketEncoder",
+            throwOnError: true)!;
+        var packet = (byte[])packetEncoderType.GetMethod("EncodeSingleLayerPacket")!
+            .Invoke(null, new object[] { blocks })!;
+        var payloadBuilderType = assembly.GetType(
+            "FellowOakDicom.PureCodecs.Jpeg2000.Internal.Jpeg2000MarkerPayloadBuilder",
+            throwOnError: true)!;
+        var size = (byte[])payloadBuilderType.GetMethod(
+            "CreateSize",
+            new[] { typeof(int), typeof(int), typeof(int), typeof(bool), typeof(int) })!
+            .Invoke(null, new object[] { width, height, precision, false, 1 })!;
+        var writer = new Jpeg2000CodestreamWriter();
+        writer.WriteStandalone(Jpeg2000Marker.SOC);
+        writer.WriteSegment(Jpeg2000Marker.SIZ, size);
+        writer.WriteSegment(
+            Jpeg2000Marker.COD,
+            new byte[] { 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x04, 0x04, codeBlockStyle, 0x01 });
+        writer.WriteSegment(Jpeg2000Marker.QCD, new byte[] { 0x40, 0x40 });
+        var sot = new byte[8];
+        WriteUInt32(sot, 2, checked((uint)(packet.Length + 14)));
+        sot[7] = 1;
+        writer.WriteSegment(Jpeg2000Marker.SOT, sot);
+        writer.WriteStandalone(Jpeg2000Marker.SOD);
+        writer.WriteRaw(packet);
         writer.WriteStandalone(Jpeg2000Marker.EOC);
         return writer.ToArray();
     }

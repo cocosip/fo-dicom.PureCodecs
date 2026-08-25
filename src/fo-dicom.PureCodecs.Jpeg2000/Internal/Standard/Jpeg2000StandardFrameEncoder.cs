@@ -29,11 +29,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 throw Jpeg2000Binary.CreateException("JPEG 2000 standard encoder currently supports monochrome and RGB frames only.");
             }
 
-            if (progressionOrder != Jpeg2000ProgressionOrder.LRCP)
-            {
-                throw Jpeg2000Binary.CreateException("JPEG 2000 standard encoder currently supports LRCP progression only.");
-            }
-
             var width = pixelData.Width;
             var height = pixelData.Height;
             var precision = pixelData.BitsStored;
@@ -46,8 +41,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             var irreversibleEncodedSteps = irreversible ? EncodeIrreversibleSteps(irreversibleSteps, precision) : Array.Empty<ushort>();
             var mainHeaderBytesBeforeSot = EstimateMainHeaderBytesBeforeSot(pixelData.SamplesPerPixel, irreversible);
             var tileData = irreversible
-                ? EncodeIrreversibleComponents(components, width, height, precision, irreversibleEncodedSteps, usesMultipleComponentTransform, rateControlSourceByteLength, layerCount, layerRates, mainHeaderBytesBeforeSot)
-                : EncodeReversibleComponents(components, width, height, precision, usesMultipleComponentTransform, layerCount, rateControlSourceByteLength, layerRates, mainHeaderBytesBeforeSot);
+                ? EncodeIrreversibleComponents(components, width, height, precision, irreversibleEncodedSteps, usesMultipleComponentTransform, rateControlSourceByteLength, layerCount, layerRates, mainHeaderBytesBeforeSot, progressionOrder)
+                : EncodeReversibleComponents(components, width, height, precision, usesMultipleComponentTransform, layerCount, rateControlSourceByteLength, layerRates, mainHeaderBytesBeforeSot, progressionOrder);
             var writer = new Jpeg2000CodestreamWriter();
             writer.WriteStandalone(Jpeg2000Marker.SOC);
             writer.WriteSegment(Jpeg2000Marker.SIZ, Jpeg2000MarkerPayloadBuilder.CreateSize(width, height, precision, isSigned, pixelData.SamplesPerPixel));
@@ -89,7 +84,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             return EncodePackets(coefficients, width, height, precision, reversible: false, layerCount: layerCount, sourceByteLength: sourceByteLength, layerRates: layerRates, mainHeaderBytesBeforeSot: mainHeaderBytesBeforeSot, encodedSteps: encodedSteps);
         }
 
-        private static byte[] EncodeReversibleComponents(int[][] components, int width, int height, int precision, bool usesMultipleComponentTransform, int layerCount, int sourceByteLength, double[]? layerRates, int mainHeaderBytesBeforeSot)
+        private static byte[] EncodeReversibleComponents(int[][] components, int width, int height, int precision, bool usesMultipleComponentTransform, int layerCount, int sourceByteLength, double[]? layerRates, int mainHeaderBytesBeforeSot, Jpeg2000ProgressionOrder progressionOrder)
         {
             if (components.Length == 3 && usesMultipleComponentTransform)
             {
@@ -111,10 +106,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     mctNorms: usesMultipleComponentTransform ? ReversibleMctNorms() : null));
             }
 
-            return EncodePackets(encodedComponents, layerCount, sourceByteLength, layerRates, mainHeaderBytesBeforeSot, reversible: true);
+            return EncodePackets(encodedComponents, layerCount, sourceByteLength, layerRates, mainHeaderBytesBeforeSot, reversible: true, progressionOrder: progressionOrder);
         }
 
-        private static byte[] EncodeIrreversibleComponents(int[][] components, int width, int height, int precision, ushort[] encodedSteps, bool usesMultipleComponentTransform, int sourceByteLength, int layerCount, double[]? layerRates, int mainHeaderBytesBeforeSot)
+        private static byte[] EncodeIrreversibleComponents(int[][] components, int width, int height, int precision, ushort[] encodedSteps, bool usesMultipleComponentTransform, int sourceByteLength, int layerCount, double[]? layerRates, int mainHeaderBytesBeforeSot, Jpeg2000ProgressionOrder progressionOrder)
         {
             var values = CreateDoubleComponents(components);
             if (values.Length == 3 && usesMultipleComponentTransform)
@@ -138,7 +133,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     mctNorms: usesMultipleComponentTransform ? IrreversibleMctNorms() : null));
             }
 
-            return EncodePackets(encodedComponents, layerCount, sourceByteLength, layerRates, mainHeaderBytesBeforeSot, reversible: false);
+            return EncodePackets(encodedComponents, layerCount, sourceByteLength, layerRates, mainHeaderBytesBeforeSot, reversible: false, progressionOrder: progressionOrder);
         }
 
         private static int CalculateRateControlSourceByteLength(int frameByteLength, int bitsStored, int bitsAllocated)
@@ -220,7 +215,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 sourceByteLength,
                 layerRates,
                 mainHeaderBytesBeforeSot,
-                reversible);
+                reversible,
+                Jpeg2000ProgressionOrder.LRCP);
         }
 
         private static byte[] EncodePackets(
@@ -229,7 +225,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             int sourceByteLength,
             double[]? layerRates,
             int mainHeaderBytesBeforeSot,
-            bool reversible)
+            bool reversible,
+            Jpeg2000ProgressionOrder progressionOrder)
         {
             var allBlocks = FlattenBlocks(components);
             var layerTargets = CreateLayerByteTargets(layerRates, Math.Max(1, layerCount), sourceByteLength, mainHeaderBytesBeforeSot);
@@ -240,30 +237,33 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 layeredComponents.Add(ProjectLayerComponents(components, selected));
             }
 
-            var packetEncoders = new List<List<Jpeg2000StandardPacketEncoder.LayeredPacketEncoder>>(components.Count);
-            foreach (var component in components)
+            var packetEncoders = new Dictionary<(int Component, int Resolution, int Precinct), Jpeg2000StandardPacketEncoder.LayeredPacketEncoder>();
+            for (var component = 0; component < components.Count; component++)
             {
-                var componentEncoders = new List<Jpeg2000StandardPacketEncoder.LayeredPacketEncoder>(component.Count);
-                foreach (var blocks in component)
+                for (var resolution = 0; resolution < components[component].Count; resolution++)
                 {
-                    componentEncoders.Add(Jpeg2000StandardPacketEncoder.CreateLayeredEncoder(blocks));
+                    var blocks = components[component][resolution];
+                    for (var precinct = 0; precinct <= MaxPrecinct(blocks); precinct++)
+                    {
+                        var packetBlocks = FilterPrecinct(blocks, precinct);
+                        if (packetBlocks.Count != 0)
+                        {
+                            packetEncoders.Add((component, resolution, precinct), Jpeg2000StandardPacketEncoder.CreateLayeredEncoder(packetBlocks));
+                        }
+                    }
                 }
-
-                packetEncoders.Add(componentEncoders);
             }
 
             var packets = new List<byte[]>();
-            for (var layer = 0; layer < layeredComponents.Count; layer++)
+            foreach (var packet in EnumeratePackets(components, progressionOrder, layeredComponents.Count))
             {
-                for (var resolution = 0; resolution <= DefaultLevels; resolution++)
+                var key = (packet.ComponentIndex, packet.ResolutionLevel, packet.PrecinctIndex);
+                if (packetEncoders.TryGetValue(key, out var packetEncoder))
                 {
-                    for (var component = 0; component < components.Count; component++)
-                    {
-                        if (components[component][resolution].Count != 0)
-                        {
-                            packets.Add(packetEncoders[component][resolution].EncodePacket(layeredComponents[layer][component][resolution], layer));
-                        }
-                    }
+                    var packetBlocks = FilterPrecinct(
+                        layeredComponents[packet.LayerIndex][packet.ComponentIndex][packet.ResolutionLevel],
+                        packet.PrecinctIndex);
+                    packets.Add(packetEncoder.EncodePacket(packetBlocks, packet.LayerIndex));
                 }
             }
 
@@ -274,6 +274,80 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             }
 
             return bytes.ToArray();
+        }
+
+        private static IEnumerable<Jpeg2000PacketModel> EnumeratePackets(
+            IReadOnlyList<List<List<Jpeg2000EncodedBlock>>> components,
+            Jpeg2000ProgressionOrder progressionOrder,
+            int layerCount)
+        {
+            var precinctCount = MaxPrecinct(components) + 1;
+            foreach (var packet in Jpeg2000ProgressionOrderIterator.Enumerate(
+                progressionOrder,
+                layerCount,
+                DefaultLevels + 1,
+                components.Count,
+                precinctCount))
+            {
+                if (HasPrecinct(components[packet.ComponentIndex][packet.ResolutionLevel], packet.PrecinctIndex))
+                {
+                    yield return packet;
+                }
+            }
+        }
+
+        private static IReadOnlyList<Jpeg2000EncodedBlock> FilterPrecinct(
+            IReadOnlyList<Jpeg2000EncodedBlock> blocks,
+            int precinct)
+        {
+            var filtered = new List<Jpeg2000EncodedBlock>();
+            foreach (var block in blocks)
+            {
+                if (block.Precinct == precinct)
+                {
+                    filtered.Add(block);
+                }
+            }
+
+            return filtered;
+        }
+
+        private static bool HasPrecinct(IReadOnlyList<Jpeg2000EncodedBlock> blocks, int precinct)
+        {
+            foreach (var block in blocks)
+            {
+                if (block.Precinct == precinct)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static int MaxPrecinct(IReadOnlyList<Jpeg2000EncodedBlock> blocks)
+        {
+            var max = 0;
+            foreach (var block in blocks)
+            {
+                max = Math.Max(max, block.Precinct);
+            }
+
+            return max;
+        }
+
+        private static int MaxPrecinct(IReadOnlyList<List<List<Jpeg2000EncodedBlock>>> components)
+        {
+            var max = 0;
+            foreach (var component in components)
+            {
+                foreach (var resolution in component)
+                {
+                    max = Math.Max(max, MaxPrecinct(resolution));
+                }
+            }
+
+            return max;
         }
 
         private static List<List<Jpeg2000EncodedBlock>> BuildCodeBlocksByResolution(int[] coefficients, int width, int height, int precision, bool reversible, ushort[]? encodedSteps, int componentIndex = 0, double[]? mctNorms = null)
@@ -479,7 +553,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                             passSnapshots,
                             passDistortions,
                             resolution,
-                            block.Orientation));
+                            block.Orientation,
+                            precinct));
                     }
                 }
             }

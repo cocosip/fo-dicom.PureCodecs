@@ -6,6 +6,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
     {
         protected Jpeg2000CodingStyle(
             bool hasPrecinctSizes,
+            bool hasStartOfPacketMarkers,
+            bool hasEndOfPacketHeaderMarkers,
             Jpeg2000ProgressionOrder progressionOrder,
             int layerCount,
             bool usesMultipleComponentTransform,
@@ -17,6 +19,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             byte[] precinctSizes)
         {
             HasPrecinctSizes = hasPrecinctSizes;
+            HasStartOfPacketMarkers = hasStartOfPacketMarkers;
+            HasEndOfPacketHeaderMarkers = hasEndOfPacketHeaderMarkers;
             ProgressionOrder = progressionOrder;
             LayerCount = layerCount;
             UsesMultipleComponentTransform = usesMultipleComponentTransform;
@@ -29,6 +33,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
 
         public bool HasPrecinctSizes { get; }
+
+        public bool HasStartOfPacketMarkers { get; }
+
+        public bool HasEndOfPacketHeaderMarkers { get; }
 
         public Jpeg2000ProgressionOrder ProgressionOrder { get; }
 
@@ -77,6 +85,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
             return new Jpeg2000CodingStyle(
                 hasPrecinctSizes,
+                (scod & 0x02) != 0,
+                (scod & 0x04) != 0,
                 progressionOrder,
                 layerCount,
                 usesMct,

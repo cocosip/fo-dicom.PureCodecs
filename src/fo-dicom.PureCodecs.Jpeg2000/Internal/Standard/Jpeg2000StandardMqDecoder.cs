@@ -64,6 +64,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             _contexts[context] = state;
         }
 
+        public void ResetContexts()
+        {
+            System.Array.Clear(_contexts, 0, _contexts.Length);
+        }
+
         public int Decode(int context)
         {
             var cx = _contexts[context];

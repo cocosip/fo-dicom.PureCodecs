@@ -81,6 +81,18 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
         public byte[] ReadEntropyDataUntilMarker(byte marker)
         {
+            var payload = ReadEntropyDataUntilNextMarker();
+            var segment = ReadNext();
+            if (segment.Code != marker)
+            {
+                throw CreateException($"JPEG expected marker 0x{marker:X2} after entropy data but found 0x{segment.Code:X2}.");
+            }
+
+            return payload;
+        }
+
+        public byte[] ReadEntropyDataUntilNextMarker()
+        {
             var start = _offset;
             while (_offset < _data.Length)
             {
@@ -115,23 +127,18 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
                 if (JpegMarker.IsRestart(code))
                 {
-                    throw CreateException("JPEG restart markers are not supported.");
+                    _offset = markerOffset + 1;
+                    continue;
                 }
 
                 var length = _offset - start;
                 var payload = new byte[length];
                 Buffer.BlockCopy(_data, start, payload, 0, length);
-                _offset = markerOffset + 1;
-
-                if (code != marker)
-                {
-                    throw CreateException($"JPEG expected marker 0x{marker:X2} after entropy data but found 0x{code:X2}.");
-                }
-
+                _offset = markerOffset - 1;
                 return payload;
             }
 
-            throw CreateException($"JPEG marker 0x{marker:X2} was not found after entropy data.");
+            throw CreateException("JPEG marker was not found after entropy data.");
         }
 
         private void SkipFillBytes()
@@ -145,6 +152,16 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         internal static int ReadUInt16BigEndian(byte[] bytes, int offset)
         {
             return (bytes[offset] << 8) | bytes[offset + 1];
+        }
+
+        internal static int ReadRestartInterval(byte[] payload)
+        {
+            if (payload == null || payload.Length != 2)
+            {
+                throw CreateException("JPEG DRI payload must contain exactly one 16-bit restart interval.");
+            }
+
+            return ReadUInt16BigEndian(payload, 0);
         }
 
         internal static DicomCodecException CreateException(string message)

@@ -101,11 +101,14 @@ The compatibility target is the public behavior of `fo-dicom.Codecs` for complet
 - Managed exceptions for invalid compressed streams.
 - Consumer package installation on modern .NET and .NET Framework 4.7.2 on Windows.
 
-Known phase 1 limitations are tracked in [`docs/development/phase-1-known-limitations.md`](docs/development/phase-1-known-limitations.md).
+Current Phase 1 exclusions and interoperability status are maintained in the
+[overall design](docs/design/fo-dicom-pure-codecs-design.md), the
+[JPEG 2000 and HTJ2K design](docs/design/jpeg2000-codec-design.md), and the
+[development checklist](docs/development/development-checklist.md).
 
 ## Native Interoperability Validation
 
-The Native/Pure codec interoperability matrix is a standalone process-isolated runner, not an xUnit test. It covers twelve RLE, JPEG, JPEG-LS, classic JPEG 2000, and HTJ2K transfer syntaxes, including HTJ2K `.201`, `.202`, and `.203`. HTJ2K workers use the public `fo-dicom.Codecs` 5.16.7 API as the reference side. Each format runs in its own process, defaults to four concurrent formats, and terminates a worker process tree after five minutes. A failing HTJ2K row is reported as a matrix failure; it is not skipped or hidden.
+The Native/Pure codec interoperability matrix is a standalone process-isolated runner, not an xUnit test. It covers twelve RLE, JPEG, JPEG-LS, classic JPEG 2000, and HTJ2K transfer syntaxes, including HTJ2K `.201`, `.202`, and `.203`. Workers use the public C# API of the normally restored `fo-dicom.Codecs` 6.0.0-beta1 NuGet package as the reference side. Each format runs in its own process, defaults to four concurrent formats, and terminates a worker process tree after five minutes. A failing row is reported as a matrix failure; it is not skipped or hidden.
 
 ```powershell
 dotnet run --project tools/fo-dicom.PureCodecs.InteropValidation -- --parallel 4 --worker-timeout-seconds 300

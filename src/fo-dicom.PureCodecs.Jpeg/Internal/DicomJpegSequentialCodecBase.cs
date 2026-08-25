@@ -33,18 +33,27 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             var jpegParameters = JpegCodecParams.From(parameters);
             ValidateEncodingParameters(jpegParameters);
             ValidateSupportedPixelData(oldPixelData);
+            NormalizeEightBitContainerMetadata(oldPixelData, newPixelData);
 
             for (var frame = 0; frame < oldPixelData.NumberOfFrames; frame++)
             {
                 try
                 {
-                    if (UsesTwelveBitMonochromePath(oldPixelData))
+                    if (UsesTwelveBitPath(oldPixelData))
                     {
+                        if (jpegParameters.SampleFactor == DicomJpegSampleFactor.SF422)
+                        {
+                            throw new DicomCodecException("JPEG Process 2/4 12-bit color currently supports only SF444 sampling.");
+                        }
+
                         var encoded12Bit = _frameCodec.Encode12Bit(
-                            ToUInt16Samples(ToArray(oldPixelData.GetFrame(frame))),
+                            NormalizeTwelveBitFrameForEncode(oldPixelData, ToArray(oldPixelData.GetFrame(frame))),
                             oldPixelData.Width,
                             oldPixelData.Height,
-                            jpegParameters.Quality);
+                            oldPixelData.SamplesPerPixel,
+                            jpegParameters.Quality,
+                            useYbrFull422: false,
+                            smoothingFactor: jpegParameters.SmoothingFactor);
                         newPixelData.AddFrame(new MemoryByteBuffer(encoded12Bit));
                         continue;
                     }
@@ -65,7 +74,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                         oldPixelData.SamplesPerPixel,
                         jpegParameters.Quality,
                         useYbrFull422: oldPixelData.SamplesPerPixel == 3
-                            && jpegParameters.SampleFactor == DicomJpegSampleFactor.SF422);
+                            && jpegParameters.SampleFactor == DicomJpegSampleFactor.SF422,
+                        smoothingFactor: jpegParameters.SmoothingFactor);
                     newPixelData.AddFrame(new MemoryByteBuffer(encoded));
                 }
                 catch (Exception exception)
@@ -84,24 +94,31 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
         public void Decode(DicomPixelData oldPixelData, DicomPixelData newPixelData, DicomCodecParams parameters)
         {
+            NormalizeEightBitContainerMetadata(newPixelData, newPixelData);
             ValidateSupportedPixelData(newPixelData);
 
             for (var frame = 0; frame < oldPixelData.NumberOfFrames; frame++)
             {
                 try
                 {
-                    if (UsesTwelveBitMonochromePath(newPixelData))
+                    if (UsesTwelveBitPath(newPixelData))
                     {
                         var decoded12Bit = _frameCodec.Decode12Bit(
-                            ToArray(oldPixelData.GetFrame(frame)),
+                            NormalizeCompressedFrameForDecode(ToArray(oldPixelData.GetFrame(frame))),
                             newPixelData.Width,
-                            newPixelData.Height);
+                            newPixelData.Height,
+                            newPixelData.SamplesPerPixel);
+                        decoded12Bit = NormalizeTwelveBitFrameForDecode(
+                            oldPixelData,
+                            newPixelData,
+                            decoded12Bit,
+                            JpegCodecParams.From(parameters));
                         newPixelData.AddFrame(new MemoryByteBuffer(ToLittleEndianBytes(decoded12Bit)));
                         continue;
                     }
 
                     var decoded = _frameCodec.Decode(
-                        ToArray(oldPixelData.GetFrame(frame)),
+                        NormalizeCompressedFrameForDecode(ToArray(oldPixelData.GetFrame(frame))),
                         newPixelData.Width,
                         newPixelData.Height,
                         newPixelData.SamplesPerPixel);
@@ -122,7 +139,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 throw new ArgumentNullException(nameof(pixelData));
             }
 
-            if (UsesTwelveBitMonochromePath(pixelData))
+            if (UsesTwelveBitPath(pixelData))
             {
                 return;
             }
@@ -132,9 +149,12 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 throw new DicomCodecException($"Unable to create JPEG Process 1 codec for bits stored == {pixelData.BitsStored}");
             }
 
-            if (pixelData.BitsAllocated != 8 || pixelData.BitsStored != 8)
+            if ((pixelData.BitsAllocated != 8 && !UsesSixteenBitContainerForEightBitSamples(pixelData))
+                || pixelData.BitsStored != 8)
             {
-                throw new DicomCodecException($"JPEG sequential DCT currently supports only BitsAllocated 8 and BitsStored 8.");
+                throw new DicomCodecException(
+                    "JPEG sequential DCT currently supports BitsStored 8 in an 8- or 16-bit container, " +
+                    "or Process 2/4 12-bit samples in a 16-bit container.");
             }
 
             if (pixelData.SamplesPerPixel != 1 && pixelData.SamplesPerPixel != 3)
@@ -157,9 +177,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
         private static void ValidateEncodingParameters(JpegCodecParams parameters)
         {
-            if (parameters.SmoothingFactor != 0)
+            if (parameters.SmoothingFactor < 0 || parameters.SmoothingFactor > 100)
             {
-                throw new DicomCodecException("JPEG smoothing is not supported by the pure C# encoder.");
+                throw new DicomCodecException("JPEG smoothing factor must be between 0 and 100.");
             }
 
             if (parameters.SampleFactor == DicomJpegSampleFactor.Unknown)
@@ -168,19 +188,28 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
         }
 
-        private bool UsesTwelveBitMonochromePath(DicomPixelData pixelData)
+        private bool UsesTwelveBitPath(DicomPixelData pixelData)
         {
             var photometric = pixelData.PhotometricInterpretation?.Value;
             return TransferSyntax == DicomTransferSyntax.JPEGProcess2_4 &&
                    pixelData.BitsAllocated == 16 &&
                    pixelData.BitsStored == 12 &&
-                   pixelData.SamplesPerPixel == 1 &&
-                   (photometric == PhotometricInterpretation.Monochrome1.Value ||
-                    photometric == PhotometricInterpretation.Monochrome2.Value);
+                   ((pixelData.SamplesPerPixel == 1 &&
+                     (photometric == PhotometricInterpretation.Monochrome1.Value ||
+                      photometric == PhotometricInterpretation.Monochrome2.Value)) ||
+                    (pixelData.SamplesPerPixel == 3 &&
+                     (photometric == PhotometricInterpretation.Rgb.Value ||
+                      photometric == PhotometricInterpretation.YbrFull.Value ||
+                      photometric == PhotometricInterpretation.YbrFull422.Value)));
         }
 
         private static byte[] NormalizeFrameForEncode(DicomPixelData pixelData, byte[] frame)
         {
+            if (UsesSixteenBitContainerForEightBitSamples(pixelData))
+            {
+                frame = UnpackLowEightBits(frame, pixelData.Width * pixelData.Height * pixelData.SamplesPerPixel);
+            }
+
             if (pixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull422)
             {
                 if (pixelData.PlanarConfiguration == PlanarConfiguration.Planar)
@@ -211,6 +240,93 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             return frame;
+        }
+
+        private static ushort[] NormalizeTwelveBitFrameForEncode(DicomPixelData pixelData, byte[] frame)
+        {
+            var samples = ToUInt16Samples(frame);
+            var expectedSampleCount = pixelData.Width * pixelData.Height * pixelData.SamplesPerPixel;
+            if (samples.Length < expectedSampleCount)
+            {
+                throw new DicomCodecException("JPEG Process 2/4 12-bit input frame is incomplete.");
+            }
+
+            if (samples.Length != expectedSampleCount)
+            {
+                Array.Resize(ref samples, expectedSampleCount);
+            }
+
+            for (var index = 0; index < samples.Length; index++)
+            {
+                if (samples[index] > 0x0FFF)
+                {
+                    throw new DicomCodecException("JPEG Process 2/4 input contains a sample outside 12-bit precision.");
+                }
+            }
+
+            if (pixelData.SamplesPerPixel == 3 && pixelData.PlanarConfiguration == PlanarConfiguration.Planar)
+            {
+                samples = JpegColorConverter.PlanarToInterleaved(samples, pixelData.Width * pixelData.Height);
+            }
+
+            if (pixelData.SamplesPerPixel == 3 && pixelData.PhotometricInterpretation == PhotometricInterpretation.Rgb)
+            {
+                samples = JpegColorConverter.RgbToYbrFull(samples, samplePrecision: 12);
+            }
+
+            return samples;
+        }
+
+        private static ushort[] NormalizeTwelveBitFrameForDecode(
+            DicomPixelData sourcePixelData,
+            DicomPixelData targetPixelData,
+            ushort[] frame,
+            JpegCodecParams parameters)
+        {
+            var photometric = sourcePixelData.PhotometricInterpretation?.Value;
+            var normalized = frame;
+            if (parameters.ConvertColorspaceToRGB
+                && (photometric == PhotometricInterpretation.YbrFull.Value
+                    || photometric == PhotometricInterpretation.YbrFull422.Value))
+            {
+                normalized = JpegColorConverter.YbrFullToRgb(normalized, samplePrecision: 12);
+            }
+
+            if (targetPixelData.SamplesPerPixel == 3 && targetPixelData.PlanarConfiguration == PlanarConfiguration.Planar)
+            {
+                normalized = JpegColorConverter.InterleavedToPlanar(normalized, targetPixelData.Width * targetPixelData.Height);
+            }
+
+            return normalized;
+        }
+
+        private static bool UsesSixteenBitContainerForEightBitSamples(DicomPixelData pixelData)
+        {
+            return pixelData.BitsAllocated == 16 && pixelData.BitsStored <= 8;
+        }
+
+        private static void NormalizeEightBitContainerMetadata(DicomPixelData sourcePixelData, DicomPixelData targetPixelData)
+        {
+            if (UsesSixteenBitContainerForEightBitSamples(sourcePixelData))
+            {
+                targetPixelData.Dataset.AddOrUpdate(DicomTag.BitsAllocated, (ushort)8);
+            }
+        }
+
+        private static byte[] UnpackLowEightBits(byte[] frame, int sampleCount)
+        {
+            if (frame.Length < sampleCount * 2)
+            {
+                throw new DicomCodecException("JPEG 16-bit DICOM container does not contain all 8-bit samples.");
+            }
+
+            var samples = new byte[sampleCount];
+            for (var index = 0; index < samples.Length; index++)
+            {
+                samples[index] = frame[index * 2];
+            }
+
+            return samples;
         }
 
         private static byte[] NormalizeFrameForDecode(DicomPixelData sourcePixelData, DicomPixelData targetPixelData, byte[] frame, JpegCodecParams parameters)
@@ -278,6 +394,30 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             return bytes;
+        }
+
+        private static byte[] NormalizeCompressedFrameForDecode(byte[] frame)
+        {
+            for (var index = 0; index + 1 < frame.Length; index++)
+            {
+                if (frame[index] == 0xFF && frame[index + 1] == JpegMarker.EOI)
+                {
+                    return frame;
+                }
+            }
+
+            if (frame.Length < 2
+                || frame[frame.Length - 1] == JpegMarker.EOI
+                || frame[frame.Length - 2] == 0xFF)
+            {
+                return frame;
+            }
+
+            var normalized = new byte[frame.Length + 2];
+            Buffer.BlockCopy(frame, 0, normalized, 0, frame.Length);
+            normalized[frame.Length] = 0xFF;
+            normalized[frame.Length + 1] = JpegMarker.EOI;
+            return normalized;
         }
     }
 

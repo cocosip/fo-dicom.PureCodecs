@@ -8,6 +8,8 @@ using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
 using NativeJpegCodecParams = FellowOakDicom.Imaging.NativeCodec.DicomJpegParams;
 using NativeJpegProcess1Codec = FellowOakDicom.Imaging.NativeCodec.DicomJpegProcess1Codec;
+using NativeJpegProcess4Codec = FellowOakDicom.Imaging.NativeCodec.DicomJpegProcess4Codec;
+using NativeJpegSampleFactor = FellowOakDicom.Imaging.NativeCodec.DicomJpegSampleFactor;
 
 namespace FellowOakDicom.PureCodecs.Tests;
 
@@ -44,18 +46,66 @@ public sealed class JpegDicomIntegrationTests
     }
 
     [Fact]
-    public void Process1_rejects_nonzero_smoothing_instead_of_ignoring_it()
+    public void Process1_smoothing_changes_codestream_and_zero_preserves_default()
     {
         var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 16, columns: 16));
-        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess1);
+        var defaultCompressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess1);
+        var zeroCompressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess1);
+        var smoothedCompressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess1);
         var codec = new DicomJpegProcess1Codec();
+
+        codec.Encode(source, defaultCompressed, codec.GetDefaultParameters());
+        codec.Encode(source, zeroCompressed, new DicomJpegParams { SmoothingFactor = 0 });
+        codec.Encode(source, smoothedCompressed, new DicomJpegParams { SmoothingFactor = 50 });
+
+        Assert.Equal(ToArray(defaultCompressed.GetFrame(0)), ToArray(zeroCompressed.GetFrame(0)));
+        Assert.NotEqual(ToArray(zeroCompressed.GetFrame(0)), ToArray(smoothedCompressed.GetFrame(0)));
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(101)]
+    public void Pure_process2_4_rejects_unsafe_smoothing_before_emitting_a_frame(int smoothingFactor)
+    {
+        var source = CreateMonochromeEdgePattern(rows: 16, columns: 16);
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess2_4);
+        var codec = new DicomJpegProcess2_4Codec();
 
         var exception = Assert.Throws<DicomCodecException>(() => codec.Encode(
             source,
             compressed,
-            new DicomJpegParams { SmoothingFactor = 1 }));
+            new DicomJpegParams { SmoothingFactor = smoothingFactor }));
 
         Assert.Contains("smoothing", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, compressed.NumberOfFrames);
+    }
+
+    [Fact]
+    public void Process2_4_smoothing_changes_output_and_cross_decodes_in_both_directions()
+    {
+        var source = CreateMonochromeEdgePattern(rows: 16, columns: 16);
+        var pureCodec = new DicomJpegProcess2_4Codec();
+        var nativeCodec = new NativeJpegProcess4Codec();
+        var pureZero = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess2_4);
+        var pureSmoothed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess2_4);
+        pureCodec.Encode(source, pureZero, new DicomJpegParams { SmoothingFactor = 0 });
+        pureCodec.Encode(source, pureSmoothed, new DicomJpegParams { SmoothingFactor = 50 });
+        Assert.NotEqual(ToArray(pureZero.GetFrame(0)), ToArray(pureSmoothed.GetFrame(0)));
+
+        var pureDecodedPureOutput = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var nativeDecodedPureOutput = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        pureCodec.Decode(pureSmoothed, pureDecodedPureOutput, pureCodec.GetDefaultParameters());
+        nativeCodec.Decode(pureSmoothed, nativeDecodedPureOutput, nativeCodec.GetDefaultParameters());
+        PixelDataAssertions.FramesMatchWithinTolerance(pureDecodedPureOutput, nativeDecodedPureOutput, tolerance: 2);
+
+        const string nativeSmoothedBase64 = "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/wAALCAAQABABAREA/8QAFgABAQEAAAAAAAAAAAAAAAAAAgAB/8QAIRAAAAUCBwAAAAAAAAAAAAAAAQIDBhQRQQASExYhMWH/2gAIAQEAAD8AxNMGmVMhEwZANbgiZRnbKkWDufMr7o5rUwk1BaZkzkUFkC1uSKFCdsqRcO58yvujmtTEomLTMoQ6YsgWtwdMwztlSLD3PmV90c1qYKigNMqhzqAyAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+        var nativeSmoothedFrame = Convert.FromBase64String(nativeSmoothedBase64);
+        var nativeSmoothed = CreateCompressedPixelData(source, DicomTransferSyntax.JPEGProcess2_4, nativeSmoothedFrame);
+        var pureDecodedNativeOutput = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var nativeDecodedNativeOutput = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        pureCodec.Decode(nativeSmoothed, pureDecodedNativeOutput, pureCodec.GetDefaultParameters());
+        nativeCodec.Decode(nativeSmoothed, nativeDecodedNativeOutput, nativeCodec.GetDefaultParameters());
+        PixelDataAssertions.FramesMatchWithinTolerance(nativeDecodedNativeOutput, pureDecodedNativeOutput, tolerance: 2);
     }
 
     [Fact]
@@ -190,6 +240,143 @@ public sealed class JpegDicomIntegrationTests
             pureDifference <= nativeDifference,
             $"Pure JPEG max sample difference {pureDifference} exceeds native difference {nativeDifference}.");
         Assert.Equal(source.GetFrame(0).Size, nativeDecodedPureOutput.GetFrame(0).Size);
+    }
+
+    [Fact]
+    public void Process1_normalizes_8_bit_samples_from_16_bit_dicom_containers()
+    {
+        var source = CreateMonochrome16Container8Stored(rows: 8, columns: 8, sample: 137);
+        var pureCompressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess1);
+        var pureDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var nativeDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var pureCodec = new DicomJpegProcess1Codec();
+        var nativeCodec = new NativeJpegProcess1Codec();
+
+        pureCodec.Encode(source, pureCompressed, pureCodec.GetDefaultParameters());
+        pureCodec.Decode(pureCompressed, pureDecoded, pureCodec.GetDefaultParameters());
+        nativeCodec.Decode(pureCompressed, nativeDecoded, nativeCodec.GetDefaultParameters());
+
+        Assert.Equal(8, pureCompressed.BitsAllocated);
+        Assert.Equal(8, pureDecoded.BitsAllocated);
+        Assert.Equal(8, nativeDecoded.BitsAllocated);
+        Assert.Equal(64, pureDecoded.GetFrame(0).Size);
+        Assert.Equal(64, nativeDecoded.GetFrame(0).Size);
+        Assert.All(ToArray(pureDecoded.GetFrame(0)), value => Assert.InRange(value, (byte)136, (byte)138));
+        PixelDataAssertions.FramesMatchExactly(pureDecoded, nativeDecoded);
+    }
+
+    [Fact]
+    public void Process2_4_12_bit_rgb_sf444_interoperates_in_both_directions()
+    {
+        const int tolerance = 160;
+        var source = CreateRgb12Interleaved(rows: 16, columns: 16);
+        var pureCompressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess2_4);
+        var nativeCompressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess2_4);
+        var nativeDecodedPureOutput = CreateRgbTargetPixelData(source);
+        var pureDecodedNativeOutput = CreateRgbTargetPixelData(source);
+        var pureCodec = new DicomJpegProcess2_4Codec();
+        var nativeCodec = new NativeJpegProcess4Codec();
+        var pureParameters = new JpegCodecParams
+        {
+            Quality = 90,
+            SampleFactor = DicomJpegSampleFactor.SF444,
+            ConvertColorspaceToRGB = true
+        };
+        var nativeParameters = new NativeJpegCodecParams
+        {
+            Quality = 90,
+            SampleFactor = NativeJpegSampleFactor.SF444,
+            ConvertColorSpaceToRGB = true
+        };
+
+        pureCodec.Encode(source, pureCompressed, pureParameters);
+        nativeCodec.Decode(pureCompressed, nativeDecodedPureOutput, nativeParameters);
+        Assert.Equal(12, ReadSofPrecision(ToArray(pureCompressed.GetFrame(0))));
+        Assert.Equal(3, GetSofSamplingFactors(ToArray(pureCompressed.GetFrame(0))).Length);
+        PixelDataAssertions.FramesMatchWithinTolerance(source, nativeDecodedPureOutput, tolerance);
+
+        nativeCodec.Encode(source, nativeCompressed, nativeParameters);
+        pureCodec.Decode(nativeCompressed, pureDecodedNativeOutput, pureParameters);
+        PixelDataAssertions.FramesMatchWithinTolerance(source, pureDecodedNativeOutput, tolerance);
+    }
+
+    [Fact]
+    public void Process2_4_12_bit_planar_rgb_is_normalized_before_native_decode()
+    {
+        const int tolerance = 160;
+        var expectedInterleaved = CreateRgb12Interleaved(rows: 16, columns: 16);
+        var planarSource = CreateRgb12Planar(expectedInterleaved);
+        var pureCompressed = CreateTargetPixelData(planarSource, DicomTransferSyntax.JPEGProcess2_4);
+        var nativeDecoded = CreateRgbTargetPixelData(expectedInterleaved);
+        var pureCodec = new DicomJpegProcess2_4Codec();
+        var nativeCodec = new NativeJpegProcess4Codec();
+
+        pureCodec.Encode(
+            planarSource,
+            pureCompressed,
+            new JpegCodecParams { Quality = 90, SampleFactor = DicomJpegSampleFactor.SF444 });
+        nativeCodec.Decode(pureCompressed, nativeDecoded, nativeCodec.GetDefaultParameters());
+
+        PixelDataAssertions.FramesMatchWithinTolerance(expectedInterleaved, nativeDecoded, tolerance);
+    }
+
+    [Fact]
+    public void Process2_4_decodes_16_bit_dqt_identically_with_native()
+    {
+        var frame = Enumerable.Repeat((byte)128, 64).ToArray();
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8(rows: 8, columns: 8, frame));
+        var encoded = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess2_4);
+        var pureDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var nativeDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var pureCodec = new DicomJpegProcess2_4Codec();
+        var nativeCodec = new NativeJpegProcess4Codec();
+
+        pureCodec.Encode(source, encoded, pureCodec.GetDefaultParameters());
+        var sixteenBitDqt = ConvertFirstDqtTo16Bit(ToArray(encoded.GetFrame(0)));
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess2_4);
+        compressed.AddFrame(new MemoryByteBuffer(sixteenBitDqt));
+
+        pureCodec.Decode(compressed, pureDecoded, pureCodec.GetDefaultParameters());
+        nativeCodec.Decode(compressed, nativeDecoded, nativeCodec.GetDefaultParameters());
+
+        PixelDataAssertions.FramesMatchExactly(pureDecoded, nativeDecoded);
+        Assert.All(ToArray(pureDecoded.GetFrame(0)), value => Assert.Equal((byte)128, value));
+    }
+
+    [Theory]
+    [InlineData("precision")]
+    [InlineData("zero")]
+    [InlineData("truncated")]
+    public void Process2_4_rejects_invalid_16_bit_dqt_payloads(string invalidKind)
+    {
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8(rows: 8, columns: 8));
+        var encoded = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess2_4);
+        var decoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var codec = new DicomJpegProcess2_4Codec();
+        codec.Encode(source, encoded, codec.GetDefaultParameters());
+        var invalid = ConvertFirstDqtTo16Bit(ToArray(encoded.GetFrame(0)));
+        var dqtOffset = FindMarker(invalid, JpegMarker.DQT);
+        switch (invalidKind)
+        {
+            case "precision":
+                invalid[dqtOffset + 4] = 0x20;
+                break;
+            case "zero":
+                invalid[dqtOffset + 5] = 0;
+                invalid[dqtOffset + 6] = 0;
+                break;
+            case "truncated":
+                invalid[dqtOffset + 3]--;
+                break;
+        }
+
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess2_4);
+        compressed.AddFrame(new MemoryByteBuffer(invalid));
+
+        var exception = Assert.Throws<DicomCodecException>(
+            () => codec.Decode(compressed, decoded, codec.GetDefaultParameters()));
+
+        Assert.Contains(invalidKind, exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -421,6 +608,118 @@ public sealed class JpegDicomIntegrationTests
         return dataset;
     }
 
+    private static DicomPixelData CreateMonochrome16Container8Stored(ushort rows, ushort columns, byte sample)
+    {
+        var frame = new byte[rows * columns * 2];
+        for (var index = 0; index < rows * columns; index++)
+        {
+            frame[index * 2] = sample;
+            frame[index * 2 + 1] = (byte)(0x40 + index % 0x40);
+        }
+
+        var dataset = DicomPixelDataFixtures.CreateBaseDataset(
+            rows,
+            columns,
+            samplesPerPixel: 1,
+            PhotometricInterpretation.Monochrome2,
+            bitsAllocated: 16,
+            bitsStored: 8,
+            highBit: 7,
+            planarConfiguration: null,
+            numberOfFrames: 1,
+            transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
+            frame);
+        return DicomPixelData.Create(dataset);
+    }
+
+    private static DicomPixelData CreateMonochromeEdgePattern(ushort rows, ushort columns)
+    {
+        var frame = new byte[rows * columns];
+        for (var y = 0; y < rows; y++)
+        {
+            for (var x = 0; x < columns; x++)
+            {
+                frame[y * columns + x] = ((x / 2 + y / 2) & 1) == 0 ? (byte)24 : (byte)232;
+            }
+        }
+
+        return DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8(rows, columns, frame));
+    }
+
+    private static DicomPixelData CreateCompressedPixelData(
+        DicomPixelData source,
+        DicomTransferSyntax transferSyntax,
+        byte[] frame)
+    {
+        var compressed = CreateTargetPixelData(source, transferSyntax);
+        compressed.AddFrame(new MemoryByteBuffer(frame));
+        return compressed;
+    }
+
+    private static DicomPixelData CreateRgb12Interleaved(ushort rows, ushort columns)
+    {
+        var frame = new byte[rows * columns * 3 * 2];
+        for (var pixel = 0; pixel < rows * columns; pixel++)
+        {
+            var x = pixel % columns;
+            var y = pixel / columns;
+            WriteUInt16(frame, (pixel * 3) * 2, 512 + x * 96 + y * 16);
+            WriteUInt16(frame, (pixel * 3 + 1) * 2, 768 + x * 32 + y * 80);
+            WriteUInt16(frame, (pixel * 3 + 2) * 2, 1024 + x * 48 + y * 48);
+        }
+
+        var dataset = DicomPixelDataFixtures.CreateBaseDataset(
+            rows,
+            columns,
+            samplesPerPixel: 3,
+            PhotometricInterpretation.Rgb,
+            bitsAllocated: 16,
+            bitsStored: 12,
+            highBit: 11,
+            planarConfiguration: PlanarConfiguration.Interleaved,
+            numberOfFrames: 1,
+            transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
+            frame);
+        return DicomPixelData.Create(dataset);
+    }
+
+    private static DicomPixelData CreateRgb12Planar(DicomPixelData interleaved)
+    {
+        var interleavedBytes = ToArray(interleaved.GetFrame(0));
+        var pixelCount = interleaved.Width * interleaved.Height;
+        var planarBytes = new byte[interleavedBytes.Length];
+        for (var pixel = 0; pixel < pixelCount; pixel++)
+        {
+            for (var component = 0; component < 3; component++)
+            {
+                var sourceOffset = (pixel * 3 + component) * 2;
+                var targetOffset = (component * pixelCount + pixel) * 2;
+                planarBytes[targetOffset] = interleavedBytes[sourceOffset];
+                planarBytes[targetOffset + 1] = interleavedBytes[sourceOffset + 1];
+            }
+        }
+
+        var dataset = DicomPixelDataFixtures.CreateBaseDataset(
+            interleaved.Height,
+            interleaved.Width,
+            samplesPerPixel: 3,
+            PhotometricInterpretation.Rgb,
+            bitsAllocated: 16,
+            bitsStored: 12,
+            highBit: 11,
+            planarConfiguration: PlanarConfiguration.Planar,
+            numberOfFrames: 1,
+            transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
+            planarBytes);
+        return DicomPixelData.Create(dataset);
+    }
+
+    private static void WriteUInt16(byte[] bytes, int offset, int value)
+    {
+        bytes[offset] = (byte)value;
+        bytes[offset + 1] = (byte)(value >> 8);
+    }
+
     private static DicomPixelData CreateRgbTargetPixelData(DicomPixelData source)
     {
         var dataset = CreateTargetDataset(source, DicomTransferSyntax.ExplicitVRLittleEndian);
@@ -492,7 +791,8 @@ public sealed class JpegDicomIntegrationTests
     {
         for (var index = 0; index + 9 < jpeg.Length; index++)
         {
-            if (jpeg[index] != 0xff || jpeg[index + 1] != 0xc0)
+            if (jpeg[index] != 0xff
+                || (jpeg[index + 1] != JpegMarker.SOF0 && jpeg[index + 1] != JpegMarker.SOF1))
             {
                 continue;
             }
@@ -507,6 +807,72 @@ public sealed class JpegDicomIntegrationTests
             return samplingFactors;
         }
 
-        throw new Xunit.Sdk.XunitException("JPEG frame does not contain an SOF0 marker.");
+        throw new Xunit.Sdk.XunitException("JPEG frame does not contain a sequential SOF marker.");
+    }
+
+    private static int ReadSofPrecision(byte[] jpeg)
+    {
+        for (var index = 0; index + 4 < jpeg.Length; index++)
+        {
+            if (jpeg[index] == 0xff && (jpeg[index + 1] == JpegMarker.SOF0 || jpeg[index + 1] == JpegMarker.SOF1))
+            {
+                return jpeg[index + 4];
+            }
+        }
+
+        throw new Xunit.Sdk.XunitException("JPEG frame does not contain a sequential SOF marker.");
+    }
+
+    private static byte[] ConvertFirstDqtTo16Bit(byte[] jpeg)
+    {
+        var dqtOffset = FindMarker(jpeg, JpegMarker.DQT);
+        var segmentLength = (jpeg[dqtOffset + 2] << 8) | jpeg[dqtOffset + 3];
+        var payloadLength = segmentLength - 2;
+        Assert.Equal(65, payloadLength);
+        var result = new byte[jpeg.Length + 64];
+        Buffer.BlockCopy(jpeg, 0, result, 0, dqtOffset + 2);
+        result[dqtOffset + 2] = 0;
+        result[dqtOffset + 3] = 131;
+        result[dqtOffset + 4] = (byte)(0x10 | (jpeg[dqtOffset + 4] & 0x0F));
+        var output = dqtOffset + 5;
+        for (var index = 0; index < 64; index++)
+        {
+            result[output++] = 0;
+            result[output++] = jpeg[dqtOffset + 5 + index];
+        }
+
+        Buffer.BlockCopy(
+            jpeg,
+            dqtOffset + 2 + segmentLength,
+            result,
+            output,
+            jpeg.Length - (dqtOffset + 2 + segmentLength));
+        var sofOffset = FindMarker(result, JpegMarker.SOF0);
+        result[sofOffset + 1] = JpegMarker.SOF1;
+        return result;
+    }
+
+    private static int FindMarker(byte[] jpeg, byte marker)
+    {
+        var offset = FindMarkerOffset(jpeg, marker);
+        if (offset >= 0)
+        {
+            return offset;
+        }
+
+        throw new Xunit.Sdk.XunitException($"JPEG frame does not contain marker 0x{marker:X2}.");
+    }
+
+    private static int FindMarkerOffset(byte[] jpeg, byte marker)
+    {
+        for (var index = 0; index + 1 < jpeg.Length; index++)
+        {
+            if (jpeg[index] == 0xFF && jpeg[index + 1] == marker)
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 }

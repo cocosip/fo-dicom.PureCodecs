@@ -17,9 +17,8 @@ Development must use this document together with the focused design documents be
 - `docs/design/rle-codec-design.md`: RLE Lossless encode/decode design.
 - `docs/design/jpeg-codec-design.md`: JPEG Process 1, Process 2/4, Process 14, and Process 14 SV1 design.
 - `docs/design/jpegls-codec-design.md`: JPEG-LS Lossless and JPEG-LS Near-Lossless design.
-- `docs/design/jpeg2000-codec-design.md`: JPEG 2000 Lossless, JPEG 2000 Lossy, and HTJ2K design.
-- `docs/design/jpeg2000-openjpeg-openjph-separation-design.md`: authoritative classic OpenJPEG versus HTJ2K OpenJPH compatibility boundary.
-- `docs/design/htj2k-openjph-alignment-design.md`: HTJ2K reference alignment and release gates.
+- `docs/design/jpeg2000-codec-design.md`: JPEG 2000 Lossless, JPEG 2000 Lossy,
+  HTJ2K design, classic/HT compatibility boundary, and release gates.
 
 ## Hard Requirements
 
@@ -382,7 +381,8 @@ Deliverables:
 - NuGet package.
 - Usage docs.
 - Compatibility matrix.
-- Known limitations document if any edge cases remain.
+- Update the focused design and development checklist with any remaining
+  supported-syntax exclusions or blocked release gates.
 
 Exit criteria:
 
@@ -448,6 +448,18 @@ The key Efferent implementation files are:
 - Separate NuGet packages per codec family.
 - `net8.0`-specific production assemblies.
 - Replacing fo-dicom core APIs.
+
+## Current Phase 1 Boundaries
+
+- Progressive, arithmetic-coded, CMYK, and YCCK JPEG are unsupported. JPEG
+  Process 1 accepts 8-bit samples; Process 2/4 also accepts 12-bit monochrome
+  and 12-bit RGB SF444 in 16-bit containers, but not 12-bit SF422 encoding.
+- JPEG-LS planar normalization is limited to three components with
+  `BitsStored <= 8`; planar `YBR_FULL_422` is rejected.
+- JPEG 2000 accepts raw codestreams only. Part 2 multi-component, JPIP, JPT,
+  and component subsampling are out of scope. See the
+  [JPEG 2000 and HTJ2K design](jpeg2000-codec-design.md) for HTJ2K marker
+  exclusions and the remaining public-reference interoperability gate.
 
 ## Open Decisions
 

@@ -64,6 +64,46 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return rgb;
         }
 
+        public static ushort[] RgbToYbrFull(ushort[] rgb, int samplePrecision)
+        {
+            ValidateHighPrecisionColorFrame(rgb, samplePrecision, "RGB");
+            var center = 1 << (samplePrecision - 1);
+            var ybr = new ushort[rgb.Length];
+            for (var index = 0; index < rgb.Length; index += 3)
+            {
+                var red = rgb[index];
+                var green = rgb[index + 1];
+                var blue = rgb[index + 2];
+                ybr[index] = (ushort)((RgbYScale * red + GbgYScale * green + BgbYScale * blue + ColorHalf) >> ColorScaleBits);
+                ybr[index + 1] = ClampHighPrecision(
+                    (-RgbCbScale * red - GbgCbScale * green + BgbCbScale * blue + (center << ColorScaleBits) + ColorHalf - 1) >> ColorScaleBits,
+                    samplePrecision);
+                ybr[index + 2] = ClampHighPrecision(
+                    (RgbCrScale * red - GbgCrScale * green - BgbCrScale * blue + (center << ColorScaleBits) + ColorHalf - 1) >> ColorScaleBits,
+                    samplePrecision);
+            }
+
+            return ybr;
+        }
+
+        public static ushort[] YbrFullToRgb(ushort[] ybr, int samplePrecision)
+        {
+            ValidateHighPrecisionColorFrame(ybr, samplePrecision, "YBR_FULL");
+            var center = 1 << (samplePrecision - 1);
+            var rgb = new ushort[ybr.Length];
+            for (var index = 0; index < ybr.Length; index += 3)
+            {
+                var y = ybr[index];
+                var cb = ybr[index + 1] - center;
+                var cr = ybr[index + 2] - center;
+                rgb[index] = ClampHighPrecision(y + 1.402 * cr, samplePrecision);
+                rgb[index + 1] = ClampHighPrecision(y - 0.344136 * cb - 0.714136 * cr, samplePrecision);
+                rgb[index + 2] = ClampHighPrecision(y + 1.772 * cb, samplePrecision);
+            }
+
+            return rgb;
+        }
+
         public static byte[] YbrFull422ToRgb(byte[] ybr)
         {
             if (ybr == null)
@@ -143,6 +183,52 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return planar;
         }
 
+        public static ushort[] PlanarToInterleaved(ushort[] planar, int pixelCount)
+        {
+            if (planar == null)
+            {
+                throw new ArgumentNullException(nameof(planar));
+            }
+
+            if (planar.Length != pixelCount * 3)
+            {
+                throw JpegMarkerReader.CreateException("JPEG planar frame length does not match pixel count.");
+            }
+
+            var interleaved = new ushort[planar.Length];
+            for (var pixel = 0; pixel < pixelCount; pixel++)
+            {
+                interleaved[pixel * 3] = planar[pixel];
+                interleaved[pixel * 3 + 1] = planar[pixelCount + pixel];
+                interleaved[pixel * 3 + 2] = planar[pixelCount * 2 + pixel];
+            }
+
+            return interleaved;
+        }
+
+        public static ushort[] InterleavedToPlanar(ushort[] interleaved, int pixelCount)
+        {
+            if (interleaved == null)
+            {
+                throw new ArgumentNullException(nameof(interleaved));
+            }
+
+            if (interleaved.Length != pixelCount * 3)
+            {
+                throw JpegMarkerReader.CreateException("JPEG interleaved frame length does not match pixel count.");
+            }
+
+            var planar = new ushort[interleaved.Length];
+            for (var pixel = 0; pixel < pixelCount; pixel++)
+            {
+                planar[pixel] = interleaved[pixel * 3];
+                planar[pixelCount + pixel] = interleaved[pixel * 3 + 1];
+                planar[pixelCount * 2 + pixel] = interleaved[pixel * 3 + 2];
+            }
+
+            return planar;
+        }
+
         private static void WriteRgb(byte y, byte cb, byte cr, byte[] rgb, int offset)
         {
             var cB = cb - 128;
@@ -166,6 +252,46 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             return (byte)rounded;
+        }
+
+        private static void ValidateHighPrecisionColorFrame(ushort[] frame, int samplePrecision, string colorSpace)
+        {
+            if (frame == null)
+            {
+                throw new ArgumentNullException(nameof(frame));
+            }
+
+            if (samplePrecision < 2 || samplePrecision > 16)
+            {
+                throw new ArgumentOutOfRangeException(nameof(samplePrecision));
+            }
+
+            if (frame.Length % 3 != 0)
+            {
+                throw JpegMarkerReader.CreateException($"JPEG {colorSpace} frame length must be divisible by 3.");
+            }
+        }
+
+        private static ushort ClampHighPrecision(double value, int samplePrecision)
+        {
+            var rounded = (int)Math.Round(value, MidpointRounding.AwayFromZero);
+            return ClampHighPrecision(rounded, samplePrecision);
+        }
+
+        private static ushort ClampHighPrecision(int value, int samplePrecision)
+        {
+            var maximum = (1 << samplePrecision) - 1;
+            if (value < 0)
+            {
+                return 0;
+            }
+
+            if (value > maximum)
+            {
+                return (ushort)maximum;
+            }
+
+            return (ushort)value;
         }
     }
 }

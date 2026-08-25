@@ -11,6 +11,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
         public const byte RST0 = 0xD0;
         public const byte RST7 = 0xD7;
         public const byte APP0 = 0xE0;
+        public const byte APP8 = 0xE8;
         public const byte APP15 = 0xEF;
         public const byte COM = 0xFE;
 

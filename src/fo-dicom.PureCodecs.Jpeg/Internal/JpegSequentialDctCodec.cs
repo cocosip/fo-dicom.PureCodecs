@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using FellowOakDicom.Imaging.Codec;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
@@ -41,27 +42,54 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return Encode(samples, width, height, componentCount: 1, quality);
         }
 
-        public byte[] Encode(byte[] samples, int width, int height, int componentCount, int quality, bool useYbrFull422 = false)
+        public byte[] Encode(
+            byte[] samples,
+            int width,
+            int height,
+            int componentCount,
+            int quality,
+            bool useYbrFull422 = false,
+            int smoothingFactor = 0)
         {
             if (samples == null)
             {
                 throw new ArgumentNullException(nameof(samples));
             }
 
-            return Encode(ToIntegerSamples(samples), width, height, componentCount, samplePrecision: 8, quality, useYbrFull422);
+            return Encode(ToIntegerSamples(samples), width, height, componentCount, samplePrecision: 8, quality, useYbrFull422, smoothingFactor);
         }
 
         public byte[] Encode12Bit(ushort[] samples, int width, int height, int quality)
         {
+            return Encode12Bit(samples, width, height, componentCount: 1, quality);
+        }
+
+        public byte[] Encode12Bit(
+            ushort[] samples,
+            int width,
+            int height,
+            int componentCount,
+            int quality,
+            bool useYbrFull422 = false,
+            int smoothingFactor = 0)
+        {
             if (samples == null)
             {
                 throw new ArgumentNullException(nameof(samples));
             }
 
-            return Encode(ToIntegerSamples(samples), width, height, componentCount: 1, samplePrecision: 12, quality, useYbrFull422: false);
+            return Encode(ToIntegerSamples(samples), width, height, componentCount, samplePrecision: 12, quality, useYbrFull422, smoothingFactor);
         }
 
-        private byte[] Encode(int[] samples, int width, int height, int componentCount, int samplePrecision, int quality, bool useYbrFull422)
+        private byte[] Encode(
+            int[] samples,
+            int width,
+            int height,
+            int componentCount,
+            int samplePrecision,
+            int quality,
+            bool useYbrFull422,
+            int smoothingFactor)
         {
             ValidateDimensions(width, height);
             ValidateComponentCount(componentCount);
@@ -74,6 +102,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             if (samples.Length != width * height * componentCount)
             {
                 throw CreateException($"JPEG sequential sample count {samples.Length} does not match dimensions {width}x{height}x{componentCount}.");
+            }
+
+            if (smoothingFactor != 0)
+            {
+                samples = ApplySmoothing(samples, width, height, componentCount, samplePrecision, smoothingFactor);
             }
 
             var quantizationTables = CreateQuantizationTables(componentCount, quality);
@@ -128,7 +161,12 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
         public ushort[] Decode12Bit(byte[] jpegFrame, int expectedWidth, int expectedHeight)
         {
-            var samples = DecodeSamples(jpegFrame, expectedWidth, expectedHeight, expectedComponentCount: 1, expectedSamplePrecision: 12);
+            return Decode12Bit(jpegFrame, expectedWidth, expectedHeight, expectedComponentCount: 1);
+        }
+
+        public ushort[] Decode12Bit(byte[] jpegFrame, int expectedWidth, int expectedHeight, int expectedComponentCount)
+        {
+            var samples = DecodeSamples(jpegFrame, expectedWidth, expectedHeight, expectedComponentCount, expectedSamplePrecision: 12);
             var output = new ushort[samples.Length];
             for (var index = 0; index < samples.Length; index++)
             {
@@ -154,7 +192,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 throw CreateException("JPEG sequential frame shape does not match expected pixel data.");
             }
 
-            return DecodeScan(parsed.ScanData, parsed);
+            return DecodeScans(parsed);
         }
 
         private static void CreateHuffmanTables(
@@ -316,7 +354,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
         }
 
-        private static int[] DecodeScan(byte[] scanData, ParsedSequentialFrame frame)
+        private static int[] DecodeScans(ParsedSequentialFrame frame)
         {
             var maxHorizontal = 1;
             var maxVertical = 1;
@@ -327,7 +365,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             var componentPlanes = new ComponentPlane[frame.Frame.Components.Length];
-            var previousDc = new int[frame.Frame.Components.Length];
             for (var index = 0; index < componentPlanes.Length; index++)
             {
                 var component = frame.Frame.Components[index];
@@ -336,37 +373,9 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 componentPlanes[index] = new ComponentPlane(component, width, height, frame.Frame.SamplePrecision);
             }
 
-            var reader = new JpegEntropyBitReader(scanData);
-            var mcuWidth = maxHorizontal * 8;
-            var mcuHeight = maxVertical * 8;
-            for (var mcuY = 0; mcuY < frame.Height; mcuY += mcuHeight)
+            foreach (var scan in frame.Scans)
             {
-                for (var mcuX = 0; mcuX < frame.Width; mcuX += mcuWidth)
-                {
-                    for (var scanComponentIndex = 0; scanComponentIndex < frame.Scan.Components.Length; scanComponentIndex++)
-                    {
-                        var scanComponent = frame.Scan.Components[scanComponentIndex];
-                        var planeIndex = frame.FindComponentIndex(scanComponent.Selector);
-                        var plane = componentPlanes[planeIndex];
-                        var component = plane.Component;
-                        var dcTable = frame.GetHuffmanTable(isAc: false, scanComponent.DcTableId);
-                        var acTable = frame.GetHuffmanTable(isAc: true, scanComponent.AcTableId);
-                        var quantizationTable = frame.GetQuantizationTable(component.QuantizationTableId);
-
-                        for (var vertical = 0; vertical < component.VerticalSamplingFactor; vertical++)
-                        {
-                            for (var horizontal = 0; horizontal < component.HorizontalSamplingFactor; horizontal++)
-                            {
-                                var block = DecodeBlock(reader, dcTable, acTable, quantizationTable, previousDc[planeIndex], out var dc);
-                                previousDc[planeIndex] = dc;
-
-                                var componentBlockX = ((mcuX / 8) * component.HorizontalSamplingFactor / maxHorizontal) + horizontal;
-                                var componentBlockY = ((mcuY / 8) * component.VerticalSamplingFactor / maxVertical) + vertical;
-                                plane.WriteBlock(componentBlockX * 8, componentBlockY * 8, block);
-                            }
-                        }
-                    }
-                }
+                DecodeScan(scan, frame, componentPlanes, maxHorizontal, maxVertical);
             }
 
             var output = new int[frame.Width * frame.Height * frame.Frame.Components.Length];
@@ -384,6 +393,128 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             return output;
+        }
+
+        private static void DecodeScan(
+            ParsedSequentialScan scan,
+            ParsedSequentialFrame frame,
+            ComponentPlane[] componentPlanes,
+            int maxHorizontal,
+            int maxVertical)
+        {
+            var reader = new JpegEntropyBitReader(scan.Data);
+            var previousDc = new int[frame.Frame.Components.Length];
+            if (scan.Header.Components.Length == 1)
+            {
+                DecodeNonInterleavedScan(reader, scan, frame, componentPlanes, previousDc);
+                return;
+            }
+
+            var mcuWidth = maxHorizontal * 8;
+            var mcuHeight = maxVertical * 8;
+            var mcuCount = DivideRoundUp(frame.Width, mcuWidth) * DivideRoundUp(frame.Height, mcuHeight);
+            var mcuIndex = 0;
+            var restartIndex = 0;
+            for (var mcuY = 0; mcuY < frame.Height; mcuY += mcuHeight)
+            {
+                for (var mcuX = 0; mcuX < frame.Width; mcuX += mcuWidth)
+                {
+                    for (var scanComponentIndex = 0; scanComponentIndex < scan.Header.Components.Length; scanComponentIndex++)
+                    {
+                        var scanComponent = scan.Header.Components[scanComponentIndex];
+                        var planeIndex = frame.FindComponentIndex(scanComponent.Selector);
+                        var plane = componentPlanes[planeIndex];
+                        var component = plane.Component;
+                        var dcTable = scan.GetHuffmanTable(isAc: false, scanComponent.DcTableId);
+                        var acTable = scan.GetHuffmanTable(isAc: true, scanComponent.AcTableId);
+                        var quantizationTable = scan.GetQuantizationTable(component.QuantizationTableId);
+
+                        for (var vertical = 0; vertical < component.VerticalSamplingFactor; vertical++)
+                        {
+                            for (var horizontal = 0; horizontal < component.HorizontalSamplingFactor; horizontal++)
+                            {
+                                var block = DecodeBlock(reader, dcTable, acTable, quantizationTable, previousDc[planeIndex], out var dc);
+                                previousDc[planeIndex] = dc;
+
+                                var componentBlockX = ((mcuX / 8) * component.HorizontalSamplingFactor / maxHorizontal) + horizontal;
+                                var componentBlockY = ((mcuY / 8) * component.VerticalSamplingFactor / maxVertical) + vertical;
+                                plane.WriteBlock(componentBlockX * 8, componentBlockY * 8, block);
+                            }
+                        }
+                    }
+
+                    mcuIndex++;
+                    if (scan.RestartInterval > 0
+                        && mcuIndex < mcuCount
+                        && mcuIndex % scan.RestartInterval == 0)
+                    {
+                        ConsumeRestartMarker(reader, previousDc, mcuIndex, ref restartIndex);
+                    }
+                }
+            }
+        }
+
+        private static void DecodeNonInterleavedScan(
+            JpegEntropyBitReader reader,
+            ParsedSequentialScan scan,
+            ParsedSequentialFrame frame,
+            ComponentPlane[] componentPlanes,
+            int[] previousDc)
+        {
+            var scanComponent = scan.Header.Components[0];
+            var planeIndex = frame.FindComponentIndex(scanComponent.Selector);
+            var plane = componentPlanes[planeIndex];
+            var dcTable = scan.GetHuffmanTable(isAc: false, scanComponent.DcTableId);
+            var acTable = scan.GetHuffmanTable(isAc: true, scanComponent.AcTableId);
+            var quantizationTable = scan.GetQuantizationTable(plane.Component.QuantizationTableId);
+            var blockColumns = DivideRoundUp(plane.Width, 8);
+            var blockRows = DivideRoundUp(plane.Height, 8);
+            var mcuCount = blockColumns * blockRows;
+            var mcuIndex = 0;
+            var restartIndex = 0;
+            for (var blockY = 0; blockY < blockRows; blockY++)
+            {
+                for (var blockX = 0; blockX < blockColumns; blockX++)
+                {
+                    var block = DecodeBlock(reader, dcTable, acTable, quantizationTable, previousDc[planeIndex], out var dc);
+                    previousDc[planeIndex] = dc;
+                    plane.WriteBlock(blockX * 8, blockY * 8, block);
+                    mcuIndex++;
+                    if (scan.RestartInterval > 0
+                        && mcuIndex < mcuCount
+                        && mcuIndex % scan.RestartInterval == 0)
+                    {
+                        ConsumeRestartMarker(reader, previousDc, mcuIndex, ref restartIndex);
+                    }
+                }
+            }
+        }
+
+        private static void ConsumeRestartMarker(
+            JpegEntropyBitReader reader,
+            int[] previousDc,
+            int mcuIndex,
+            ref int restartIndex)
+        {
+            byte marker;
+            try
+            {
+                marker = reader.ReadRestartMarker();
+            }
+            catch (DicomCodecException exception)
+            {
+                throw CreateException($"JPEG restart marker at MCU {mcuIndex} could not be read: {exception.Message}");
+            }
+
+            var expectedMarker = (byte)(JpegMarker.RST0 + restartIndex);
+            if (marker != expectedMarker)
+            {
+                throw CreateException(
+                    $"JPEG restart marker sequence at MCU {mcuIndex} expected RST{restartIndex} but found RST{marker - JpegMarker.RST0}.");
+            }
+
+            Array.Clear(previousDc, 0, previousDc.Length);
+            restartIndex = (restartIndex + 1) & 7;
         }
 
         private static JpegBlock8x8 DecodeBlock(
@@ -440,13 +571,14 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             }
 
             JpegStartOfFrame? frame = null;
-            JpegStartOfScan? scan = null;
             var quantizationTables = new JpegQuantizationTable?[4];
             var dcHuffmanTables = new JpegHuffmanTable?[4];
             var acHuffmanTables = new JpegHuffmanTable?[4];
-            byte[]? scanData = null;
+            var scans = new List<ParsedSequentialScan>();
+            var restartInterval = 0;
+            var reachedEndOfImage = false;
 
-            while (!reader.EndOfData)
+            while (!reader.EndOfData && !reachedEndOfImage)
             {
                 var segment = reader.ReadNextSkippingMetadata();
                 switch (segment.Code)
@@ -462,12 +594,20 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                         ParseHuffmanTables(segment.Payload, dcHuffmanTables, acHuffmanTables);
                         break;
                     case JpegMarker.DRI:
-                        throw CreateException("JPEG sequential restart intervals are not supported.");
+                        restartInterval = JpegMarkerReader.ReadRestartInterval(segment.Payload);
+                        break;
                     case JpegMarker.SOS:
-                        scan = JpegStartOfScan.Parse(segment);
-                        scanData = reader.ReadEntropyDataUntilMarker(JpegMarker.EOI);
+                        var scan = JpegStartOfScan.Parse(segment);
+                        scans.Add(new ParsedSequentialScan(
+                            scan,
+                            reader.ReadEntropyDataUntilNextMarker(),
+                            quantizationTables,
+                            dcHuffmanTables,
+                            acHuffmanTables,
+                            restartInterval));
                         break;
                     case JpegMarker.EOI:
+                        reachedEndOfImage = true;
                         break;
                     default:
                         if (JpegMarker.IsRestart(segment.Code))
@@ -478,10 +618,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                         throw CreateException($"JPEG sequential marker 0x{segment.Code:X2} is not supported.");
                 }
 
-                if (scanData != null)
-                {
-                    break;
-                }
             }
 
             if (frame == null)
@@ -496,18 +632,18 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
             ValidateComponentCount(frame.Components.Length);
 
-            if (scan == null)
+            if (scans.Count == 0)
             {
                 throw CreateException("JPEG sequential frame is missing SOS.");
             }
 
-            if (scanData == null)
+            if (!reachedEndOfImage)
             {
-                throw CreateException("JPEG sequential frame is missing scan data.");
+                throw CreateException("JPEG sequential frame is missing EOI.");
             }
 
-            var parsed = new ParsedSequentialFrame(frame.Width, frame.Height, frame.Components.Length, frame, scan, quantizationTables, dcHuffmanTables, acHuffmanTables, scanData);
-            parsed.ValidateReferencedTables();
+            var parsed = new ParsedSequentialFrame(frame, scans.ToArray());
+            parsed.ValidateScans();
             return parsed;
         }
 
@@ -637,20 +773,28 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 }
 
                 var entrySize = precision == 0 ? 1 : 2;
-                if (precision != 0)
+                if (precision > 1)
                 {
-                    throw CreateException("JPEG sequential codec currently supports only 8-bit quantization tables.");
+                    throw CreateException($"JPEG quantization table precision {precision} is not supported.");
                 }
 
                 if (offset + 64 * entrySize > payload.Length)
                 {
-                    throw CreateException("JPEG quantization table payload is too short.");
+                    throw CreateException("JPEG quantization table payload is truncated.");
                 }
 
                 var zigzag = new double[64];
                 for (var index = 0; index < zigzag.Length; index++)
                 {
-                    zigzag[index] = payload[offset++];
+                    var divisor = precision == 0
+                        ? payload[offset++]
+                        : (payload[offset++] << 8) | payload[offset++];
+                    if (divisor == 0)
+                    {
+                        throw CreateException("JPEG quantization table contains a zero divisor.");
+                    }
+
+                    zigzag[index] = divisor;
                 }
 
                 var block = JpegZigZag.FromZigZag(zigzag);
@@ -888,6 +1032,67 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             return output;
         }
 
+        private static int[] ApplySmoothing(
+            int[] samples,
+            int width,
+            int height,
+            int componentCount,
+            int samplePrecision,
+            int smoothingFactor)
+        {
+            var smoothed = new int[samples.Length];
+            for (var y = 0; y < height; y++)
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    for (var component = 0; component < componentCount; component++)
+                    {
+                        long neighborSum = 0;
+                        var neighborCount = 0;
+                        for (var offsetY = -1; offsetY <= 1; offsetY++)
+                        {
+                            var neighborY = y + offsetY;
+                            if (neighborY < 0 || neighborY >= height)
+                            {
+                                continue;
+                            }
+
+                            for (var offsetX = -1; offsetX <= 1; offsetX++)
+                            {
+                                if (offsetX == 0 && offsetY == 0)
+                                {
+                                    continue;
+                                }
+
+                                var neighborX = x + offsetX;
+                                if (neighborX < 0 || neighborX >= width)
+                                {
+                                    continue;
+                                }
+
+                                neighborSum += samples[(neighborY * width + neighborX) * componentCount + component];
+                                neighborCount++;
+                            }
+                        }
+
+                        var index = (y * width + x) * componentCount + component;
+                        var center = samples[index];
+                        var neighborAverage = neighborCount == 0
+                            ? center
+                            : (int)((neighborSum + neighborCount / 2) / neighborCount);
+                        var weighted = (long)center * (100L - smoothingFactor)
+                            + (long)neighborAverage * smoothingFactor;
+                        var rounded = weighted >= 0
+                            ? (weighted + 50) / 100
+                            : (weighted - 50) / 100;
+                        smoothed[index] = ClampToSamplePrecision((int)Math.Max(int.MinValue, Math.Min(int.MaxValue, rounded)), samplePrecision);
+                    }
+                }
+            }
+
+            return smoothed;
+        }
+
         private static DicomCodecException CreateException(string message)
         {
             return new DicomCodecException(message);
@@ -895,43 +1100,23 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
         private sealed class ParsedSequentialFrame
         {
-            private readonly JpegQuantizationTable?[] _quantizationTables;
-            private readonly JpegHuffmanTable?[] _dcHuffmanTables;
-            private readonly JpegHuffmanTable?[] _acHuffmanTables;
-
             public ParsedSequentialFrame(
-                int width,
-                int height,
-                int componentCount,
                 JpegStartOfFrame frame,
-                JpegStartOfScan scan,
-                JpegQuantizationTable?[] quantizationTables,
-                JpegHuffmanTable?[] dcHuffmanTables,
-                JpegHuffmanTable?[] acHuffmanTables,
-                byte[] scanData)
+                ParsedSequentialScan[] scans)
             {
-                Width = width;
-                Height = height;
-                ComponentCount = componentCount;
                 Frame = frame;
-                Scan = scan;
-                _quantizationTables = quantizationTables;
-                _dcHuffmanTables = dcHuffmanTables;
-                _acHuffmanTables = acHuffmanTables;
-                ScanData = scanData;
+                Scans = scans;
             }
 
-            public int Width { get; }
+            public int Width => Frame.Width;
 
-            public int Height { get; }
+            public int Height => Frame.Height;
 
-            public int ComponentCount { get; }
+            public int ComponentCount => Frame.Components.Length;
 
             public JpegStartOfFrame Frame { get; }
 
-            public JpegStartOfScan Scan { get; }
-
-            public byte[] ScanData { get; }
+            public ParsedSequentialScan[] Scans { get; }
 
             public int FindComponentIndex(int selector)
             {
@@ -946,33 +1131,83 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                 throw CreateException($"JPEG scan references unknown component {selector}.");
             }
 
+            public void ValidateScans()
+            {
+                var decodedComponents = new bool[Frame.Components.Length];
+                foreach (var scan in Scans)
+                {
+                    if (scan.Header.SpectralSelectionStart != 0
+                        || scan.Header.SpectralSelectionEnd != 63
+                        || scan.Header.SuccessiveApproximationHigh != 0
+                        || scan.Header.SuccessiveApproximationLow != 0)
+                    {
+                        throw CreateException("JPEG sequential scan parameters require Ss=0, Se=63, Ah=0, and Al=0.");
+                    }
+
+                    foreach (var component in scan.Header.Components)
+                    {
+                        var componentIndex = FindComponentIndex(component.Selector);
+                        if (decodedComponents[componentIndex])
+                        {
+                            throw CreateException($"JPEG sequential frame contains duplicate scan coverage for component {component.Selector}.");
+                        }
+
+                        scan.GetQuantizationTable(Frame.Components[componentIndex].QuantizationTableId);
+                        scan.GetHuffmanTable(isAc: false, component.DcTableId);
+                        scan.GetHuffmanTable(isAc: true, component.AcTableId);
+                        decodedComponents[componentIndex] = true;
+                    }
+                }
+
+                for (var componentIndex = 0; componentIndex < decodedComponents.Length; componentIndex++)
+                {
+                    if (!decodedComponents[componentIndex])
+                    {
+                        throw CreateException($"JPEG sequential frame is missing scan data for component {Frame.Components[componentIndex].Identifier}.");
+                    }
+                }
+            }
+        }
+
+        private sealed class ParsedSequentialScan
+        {
+            private readonly JpegQuantizationTable?[] _quantizationTables;
+            private readonly JpegHuffmanTable?[] _dcHuffmanTables;
+            private readonly JpegHuffmanTable?[] _acHuffmanTables;
+
+            public ParsedSequentialScan(
+                JpegStartOfScan header,
+                byte[] data,
+                JpegQuantizationTable?[] quantizationTables,
+                JpegHuffmanTable?[] dcHuffmanTables,
+                JpegHuffmanTable?[] acHuffmanTables,
+                int restartInterval)
+            {
+                Header = header;
+                Data = data;
+                _quantizationTables = (JpegQuantizationTable?[])quantizationTables.Clone();
+                _dcHuffmanTables = (JpegHuffmanTable?[])dcHuffmanTables.Clone();
+                _acHuffmanTables = (JpegHuffmanTable?[])acHuffmanTables.Clone();
+                RestartInterval = restartInterval;
+            }
+
+            public JpegStartOfScan Header { get; }
+
+            public byte[] Data { get; }
+
+            public int RestartInterval { get; }
+
             public JpegQuantizationTable GetQuantizationTable(int id)
             {
                 var table = id >= 0 && id < _quantizationTables.Length ? _quantizationTables[id] : null;
-                return table ?? throw CreateException($"JPEG sequential frame is missing quantization table {id}.");
+                return table ?? throw CreateException($"JPEG sequential scan is missing quantization table {id}.");
             }
 
             public JpegHuffmanTable GetHuffmanTable(bool isAc, int id)
             {
                 var tables = isAc ? _acHuffmanTables : _dcHuffmanTables;
                 var table = id >= 0 && id < tables.Length ? tables[id] : null;
-                return table ?? throw CreateException($"JPEG sequential frame is missing {(isAc ? "AC" : "DC")} Huffman table {id}.");
-            }
-
-            public void ValidateReferencedTables()
-            {
-                for (var index = 0; index < Frame.Components.Length; index++)
-                {
-                    GetQuantizationTable(Frame.Components[index].QuantizationTableId);
-                }
-
-                for (var index = 0; index < Scan.Components.Length; index++)
-                {
-                    var component = Scan.Components[index];
-                    FindComponentIndex(component.Selector);
-                    GetHuffmanTable(isAc: false, component.DcTableId);
-                    GetHuffmanTable(isAc: true, component.AcTableId);
-                }
+                return table ?? throw CreateException($"JPEG sequential scan is missing {(isAc ? "AC" : "DC")} Huffman table {id}.");
             }
         }
 

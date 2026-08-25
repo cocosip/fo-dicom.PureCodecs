@@ -173,20 +173,96 @@ public sealed class JpegLosslessCodecRoundTripTests
     }
 
     [Fact]
-    public void Process14_decoder_explicitly_rejects_restart_intervals()
+    public void Process14_restart_interval_fixture_decodes_identically_through_public_pure_and_native_codecs()
     {
-        var target = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8());
-        var codec = new JpegLosslessFrameCodec();
-        var encoded = codec.EncodeFrame(target, target.GetFrame(0).Data, selectionValue: 1);
-        var withRestartInterval = InsertBeforeMarker(
-            encoded,
-            JpegMarker.SOS,
-            new byte[] { 0xFF, JpegMarker.DRI, 0x00, 0x04, 0x00, 0x01 });
+        var source = DicomPixelData.Create(DicomPixelDataFixtures.CreateMonochrome8(
+            rows: 2,
+            columns: 2,
+            frame: new byte[] { 130, 130, 130, 130 }));
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess14);
+        compressed.AddFrame(new MemoryByteBuffer(CreateLosslessRestartIntervalFrame(JpegMarker.RST0)));
+        var pureDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var nativeDecoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var pureCodec = new DicomJpegLossless14Codec();
+        var nativeCodec = new NativeJpegLossless14Codec();
 
-        var exception = Assert.Throws<DicomCodecException>(() => codec.DecodeFrame(target, withRestartInterval));
+        pureCodec.Decode(compressed, pureDecoded, pureCodec.GetDefaultParameters());
+        nativeCodec.Decode(compressed, nativeDecoded, nativeCodec.GetDefaultParameters());
 
-        Assert.Contains("restart", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("not supported", exception.Message, StringComparison.OrdinalIgnoreCase);
+        PixelDataAssertions.FramesMatchExactly(source, pureDecoded);
+        PixelDataAssertions.FramesMatchExactly(source, nativeDecoded);
+    }
+
+    [Fact]
+    public void Process14_multi_scan_dht_redefinition_fixture_decodes_exactly_with_fo_dicom_codecs()
+    {
+        AssertNativeLosslessFixture(CreateLosslessMultiScanFrame());
+    }
+
+    [Fact]
+    public void Process14_multi_scan_dht_redefinition_fixture_decodes_exactly_with_pure_codec()
+    {
+        AssertPureLosslessFixture(CreateLosslessMultiScanFrame());
+    }
+
+    [Fact]
+    public void Process14_interleaved_distinct_dc_tables_fixture_decodes_exactly_with_fo_dicom_codecs()
+    {
+        AssertNativeLosslessFixture(CreateLosslessDistinctTableFrame());
+    }
+
+    [Fact]
+    public void Process14_interleaved_distinct_dc_tables_fixture_decodes_exactly_with_pure_codec()
+    {
+        AssertPureLosslessFixture(CreateLosslessDistinctTableFrame());
+    }
+
+    [Fact]
+    public void Process14_multi_scan_predictor_and_point_transform_fixture_decodes_exactly_with_fo_dicom_codecs()
+    {
+        AssertNativeLosslessFixture(CreateLosslessMultiScanParameterFrame());
+    }
+
+    [Fact]
+    public void Process14_multi_scan_predictor_and_point_transform_fixture_decodes_exactly_with_pure_codec()
+    {
+        AssertPureLosslessFixture(CreateLosslessMultiScanParameterFrame());
+    }
+
+    [Fact]
+    public void Process14_multi_scan_missing_final_component_is_rejected()
+    {
+        var exception = Assert.Throws<DicomCodecException>(() =>
+            AssertPureLosslessFixture(CreateLosslessMultiScanFrame((byte)'R', (byte)'G')));
+
+        Assert.Contains("missing scan data for component", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Process14_multi_scan_duplicate_component_is_rejected()
+    {
+        var exception = Assert.Throws<DicomCodecException>(() =>
+            AssertPureLosslessFixture(CreateLosslessMultiScanFrame((byte)'R', (byte)'R', (byte)'G', (byte)'B')));
+
+        Assert.Contains("duplicate scan coverage", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Process14_multi_scan_eoi_before_final_scan_data_completes_is_rejected()
+    {
+        var exception = Assert.Throws<DicomCodecException>(() =>
+            AssertPureLosslessFixture(CreateLosslessTruncatedFinalScanFrame()));
+
+        Assert.Contains("entropy data ended unexpectedly", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Process14_scan_with_unknown_component_selector_is_rejected()
+    {
+        var exception = Assert.Throws<DicomCodecException>(() =>
+            AssertPureLosslessFixture(CreateLosslessDistinctTableFrame((byte)'X')));
+
+        Assert.Contains("unknown component", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -299,23 +375,173 @@ public sealed class JpegLosslessCodecRoundTripTests
         throw new Xunit.Sdk.XunitException("JPEG frame does not contain an SOS marker.");
     }
 
-    private static byte[] InsertBeforeMarker(byte[] jpeg, byte marker, byte[] insertion)
+    private static byte[] CreateLosslessRestartIntervalFrame(byte restartMarker)
     {
-        for (var index = 0; index + 1 < jpeg.Length; index++)
+        var dcTable = new byte[34];
+        dcTable[8] = 17;
+        for (var category = 0; category <= 16; category++)
         {
-            if (jpeg[index] != 0xFF || jpeg[index + 1] != marker)
-            {
-                continue;
-            }
-
-            var result = new byte[jpeg.Length + insertion.Length];
-            Buffer.BlockCopy(jpeg, 0, result, 0, index);
-            Buffer.BlockCopy(insertion, 0, result, index, insertion.Length);
-            Buffer.BlockCopy(jpeg, index, result, index + insertion.Length, jpeg.Length - index);
-            return result;
+            dcTable[17 + category] = (byte)category;
         }
 
-        throw new Xunit.Sdk.XunitException($"JPEG frame does not contain marker 0x{marker:X2}.");
+        var writer = new JpegMarkerWriter();
+        writer.WriteStandalone(JpegMarker.SOI);
+        writer.WriteSegment(JpegMarker.SOF3, new byte[] { 8, 0, 2, 0, 2, 1, 1, 0x11, 0 });
+        writer.WriteSegment(JpegMarker.DHT, dcTable);
+        writer.WriteSegment(JpegMarker.DRI, new byte[] { 0, 2 });
+        writer.WriteSegment(JpegMarker.SOS, new byte[] { 1, 1, 0, 1, 0, 0 });
+
+        // Each row starts with difference 2 from the initial predictor, then difference 0 from left.
+        writer.WriteRaw(new byte[] { 0x02, 0x80, 0x3F, 0xFF, restartMarker, 0x02, 0x80, 0x3F });
+        writer.WriteStandalone(JpegMarker.EOI);
+        return writer.ToArray();
+    }
+
+    private static byte[] CreateLosslessMultiScanFrame()
+    {
+        return CreateLosslessMultiScanFrame((byte)'R', (byte)'G', (byte)'B');
+    }
+
+    private static byte[] CreateLosslessMultiScanFrame(params byte[] componentIdentifiers)
+    {
+        var writer = CreateLosslessRgbFrameWriter();
+        for (var component = 0; component < componentIdentifiers.Length; component++)
+        {
+            var codeLength = component % 3 + 1;
+            writer.WriteSegment(JpegMarker.DHT, CreateLosslessDhtPayload(tableId: 0, codeLength));
+            writer.WriteSegment(JpegMarker.SOS, new byte[]
+            {
+                1,
+                componentIdentifiers[component], 0,
+                1, 0, 0,
+            });
+            writer.WriteRaw(new byte[8 * codeLength]);
+        }
+
+        writer.WriteStandalone(JpegMarker.EOI);
+        return writer.ToArray();
+    }
+
+    private static byte[] CreateLosslessDistinctTableFrame(byte thirdSelector = (byte)'B')
+    {
+        var writer = CreateLosslessRgbFrameWriter();
+        for (var tableId = 0; tableId < 3; tableId++)
+        {
+            writer.WriteSegment(JpegMarker.DHT, CreateLosslessDhtPayload(tableId, codeLength: tableId + 1));
+        }
+
+        writer.WriteSegment(JpegMarker.SOS, new byte[]
+        {
+            3,
+            (byte)'R', 0x00,
+            (byte)'G', 0x10,
+            thirdSelector, 0x20,
+            1, 0, 0,
+        });
+        writer.WriteRaw(new byte[48]);
+        writer.WriteStandalone(JpegMarker.EOI);
+        return writer.ToArray();
+    }
+
+    private static byte[] CreateLosslessMultiScanParameterFrame()
+    {
+        var writer = CreateLosslessRgbFrameWriter();
+        writer.WriteSegment(JpegMarker.DHT, CreateLosslessDhtPayload(tableId: 0, codeLength: 1));
+        var selectors = new[] { (byte)'R', (byte)'G', (byte)'B' };
+        var predictors = new byte[] { 1, 4, 7 };
+        for (var component = 0; component < selectors.Length; component++)
+        {
+            writer.WriteSegment(JpegMarker.SOS, new byte[]
+            {
+                1,
+                selectors[component], 0,
+                predictors[component], 0, (byte)component,
+            });
+            writer.WriteRaw(new byte[8]);
+        }
+
+        writer.WriteStandalone(JpegMarker.EOI);
+        return writer.ToArray();
+    }
+
+    private static byte[] CreateLosslessTruncatedFinalScanFrame()
+    {
+        var writer = CreateLosslessRgbFrameWriter();
+        for (var component = 0; component < 3; component++)
+        {
+            writer.WriteSegment(JpegMarker.DHT, CreateLosslessDhtPayload(tableId: 0, codeLength: 1));
+            writer.WriteSegment(JpegMarker.SOS, new byte[]
+            {
+                1,
+                (byte)(component == 0 ? 'R' : component == 1 ? 'G' : 'B'), 0,
+                1, 0, 0,
+            });
+            writer.WriteRaw(new byte[component == 2 ? 1 : 8]);
+        }
+
+        writer.WriteStandalone(JpegMarker.EOI);
+        return writer.ToArray();
+    }
+
+    private static JpegMarkerWriter CreateLosslessRgbFrameWriter()
+    {
+        var writer = new JpegMarkerWriter();
+        writer.WriteStandalone(JpegMarker.SOI);
+        writer.WriteSegment(JpegMarker.APP14, new byte[]
+        {
+            (byte)'A', (byte)'d', (byte)'o', (byte)'b', (byte)'e',
+            0, 100, 0, 0, 0, 0, 0,
+        });
+        writer.WriteSegment(JpegMarker.SOF3, new byte[]
+        {
+            8, 0, 8, 0, 8, 3,
+            (byte)'R', 0x11, 0,
+            (byte)'G', 0x11, 0,
+            (byte)'B', 0x11, 0,
+        });
+        return writer;
+    }
+
+    private static byte[] CreateLosslessDhtPayload(int tableId, int codeLength)
+    {
+        var payload = new byte[18];
+        payload[0] = (byte)tableId;
+        payload[codeLength] = 1;
+        payload[17] = 0;
+        return payload;
+    }
+
+    private static void AssertNativeLosslessFixture(byte[] frame)
+    {
+        var source = CreateConstantRgbPixelData();
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess14);
+        compressed.AddFrame(new MemoryByteBuffer(frame));
+        var decoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var codec = new NativeJpegLossless14Codec();
+
+        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
+
+        PixelDataAssertions.FramesMatchExactly(source, decoded);
+    }
+
+    private static void AssertPureLosslessFixture(byte[] frame)
+    {
+        var source = CreateConstantRgbPixelData();
+        var compressed = CreateTargetPixelData(source, DicomTransferSyntax.JPEGProcess14);
+        compressed.AddFrame(new MemoryByteBuffer(frame));
+        var decoded = CreateTargetPixelData(source, DicomTransferSyntax.ExplicitVRLittleEndian);
+        var codec = new DicomJpegLossless14Codec();
+
+        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
+
+        PixelDataAssertions.FramesMatchExactly(source, decoded);
+    }
+
+    private static DicomPixelData CreateConstantRgbPixelData()
+    {
+        var frame = new byte[8 * 8 * 3];
+        Array.Fill(frame, (byte)128);
+        return DicomPixelData.Create(DicomPixelDataFixtures.CreateRgbInterleaved(rows: 8, columns: 8, frame));
     }
 
     private static byte[] CreateUInt16Frame(params int[] samples)

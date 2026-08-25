@@ -143,9 +143,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 }
 
                 _mq = new Jpeg2000StandardMqDecoder(segment.Data, 19);
-                _mq.SetContextState(ContextUniform, 46);
-                _mq.SetContextState(ContextRunLength, 3);
-                _mq.SetContextState(ContextZeroCodingStart, 4);
+                ResetMqContexts();
                 _raw = new Jpeg2000RawBitReader(segment.Data);
                 for (var segmentPass = 0; segmentPass < segment.PassCount && _bitPlane >= 0; segmentPass++)
                 {
@@ -176,6 +174,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                             break;
                     }
 
+                    if ((_codeBlockStyle & 0x02) != 0 && !raw)
+                    {
+                        ResetMqContexts();
+                    }
+
                     pass++;
                     if (passType == 2)
                     {
@@ -200,9 +203,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             }
 
             _mq = new Jpeg2000StandardMqDecoder(bytes, 19);
-            _mq.SetContextState(ContextUniform, 46);
-            _mq.SetContextState(ContextRunLength, 3);
-            _mq.SetContextState(ContextZeroCodingStart, 4);
+            ResetMqContexts();
             _raw = new Jpeg2000RawBitReader(bytes);
 
             var pass = 0;
@@ -235,6 +236,11 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                         }
 
                         break;
+                }
+
+                if ((_codeBlockStyle & 0x02) != 0 && !raw)
+                {
+                    ResetMqContexts();
                 }
 
                 pass++;
@@ -663,14 +669,31 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         private void UpdateNeighbors(int x, int y, int index)
         {
             var negative = (_flags[index] & Sign) != 0;
-            Mark(ToIndex(x, y - 1), SigS, negative ? SignS : 0);
+            if (!IsVerticallyCausalStripeBoundary(y))
+            {
+                Mark(ToIndex(x, y - 1), SigS, negative ? SignS : 0);
+                _flags[ToIndex(x - 1, y - 1)] |= SigSE;
+                _flags[ToIndex(x + 1, y - 1)] |= SigSW;
+            }
+
             Mark(ToIndex(x, y + 1), SigN, negative ? SignN : 0);
             Mark(ToIndex(x - 1, y), SigE, negative ? SignE : 0);
             Mark(ToIndex(x + 1, y), SigW, negative ? SignW : 0);
-            _flags[ToIndex(x - 1, y - 1)] |= SigSE;
-            _flags[ToIndex(x + 1, y - 1)] |= SigSW;
             _flags[ToIndex(x - 1, y + 1)] |= SigNE;
             _flags[ToIndex(x + 1, y + 1)] |= SigNW;
+        }
+
+        private bool IsVerticallyCausalStripeBoundary(int y)
+        {
+            return (_codeBlockStyle & 0x08) != 0 && (y & 3) == 0;
+        }
+
+        private void ResetMqContexts()
+        {
+            Mq.ResetContexts();
+            Mq.SetContextState(ContextUniform, 46);
+            Mq.SetContextState(ContextRunLength, 3);
+            Mq.SetContextState(ContextZeroCodingStart, 4);
         }
 
         private void Mark(int index, uint significantFlag, uint signFlag)

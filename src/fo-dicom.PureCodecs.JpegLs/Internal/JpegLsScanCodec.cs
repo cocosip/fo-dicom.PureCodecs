@@ -110,6 +110,11 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
         public int[] Decode(byte[] scanData)
         {
+            return Decode(scanData, restartInterval: 0);
+        }
+
+        public int[] Decode(byte[] scanData, uint restartInterval)
+        {
             if (scanData == null)
             {
                 throw new ArgumentNullException(nameof(scanData));
@@ -118,18 +123,36 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             var reader = new JpegLsGolombCodeReader(scanData);
             var samples = new int[_width * _height * _componentCount];
 
-            var states = CreateComponentStates();
-            if (_interleaveMode == JpegLsInterleaveMode.Sample)
+            var line = 0;
+            var restartMarkerIndex = 0;
+            while (line < _height)
             {
-                DecodeSampleInterleaved(reader, samples, states);
-                return samples;
+                var linesInInterval = restartInterval == 0
+                    ? _height - line
+                    : (int)Math.Min((uint)(_height - line), restartInterval);
+                var endLine = line + linesInInterval;
+                var states = CreateComponentStates(line);
+                if (_interleaveMode == JpegLsInterleaveMode.Sample)
+                {
+                    DecodeSampleInterleaved(reader, samples, states, line, endLine);
+                }
+                else
+                {
+                    foreach (var state in CreateProcessingOrder(states, line, endLine))
+                    {
+                        DecodeComponent(reader, samples, state);
+                    }
+                }
+
+                line = endLine;
+                if (line < _height)
+                {
+                    reader.ReadRestartMarker((byte)(JpegLsMarker.RST0 + restartMarkerIndex), line);
+                    restartMarkerIndex = (restartMarkerIndex + 1) & 7;
+                }
             }
 
-            foreach (var state in CreateProcessingOrder(states))
-            {
-                DecodeComponent(reader, samples, state);
-            }
-
+            reader.RejectTrailingRestartMarker();
             return samples;
         }
 
@@ -144,7 +167,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                     var context = state.Model.GetContext(left, above, aboveLeft, aboveRight, out var sign, out var predicted);
                     if (IsRunMode(left, above, aboveLeft, aboveRight, state.Model.Traits))
                     {
-                        x += EncodeRunMode(writer, state.Scanner, original, reconstructed, state.Component, x, y, left);
+                        x += EncodeRunMode(writer, state, original, reconstructed, x, y, left);
                         continue;
                     }
 
@@ -177,11 +200,14 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                     {
                         try
                         {
-                            x += DecodeRunMode(reader, state.Scanner, samples, state.Component, x, y, left);
+                            x += DecodeRunMode(reader, state, samples, x, y, left);
                         }
                         catch (Exception exception)
                         {
-                            throw new DicomCodecException($"JPEG-LS run mode decode failed at component {state.Component}, x {x}, y {y}, run index {state.Scanner.RunIndex}.", exception);
+                            throw new DicomCodecException(
+                                $"JPEG-LS run mode decode failed at component {state.Component}, x {x}, y {y}, " +
+                                $"run index {state.Scanner.RunIndex}: {exception.Message}",
+                                exception);
                         }
 
                         continue;
@@ -243,9 +269,11 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
         private void DecodeSampleInterleaved(
             JpegLsGolombCodeReader reader,
             int[] samples,
-            ProcessingState[] states)
+            ProcessingState[] states,
+            int startLine,
+            int endLine)
         {
-            for (var y = 0; y < _height; y++)
+            for (var y = startLine; y < endLine; y++)
             {
                 for (var x = 0; x < _width; x++)
                 {
@@ -444,14 +472,15 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
         private int EncodeRunMode(
             JpegLsGolombCodeWriter writer,
-            JpegLsRunModeScanner scanner,
+            ProcessingState state,
             int[] original,
             int[] reconstructed,
-            int component,
             int x,
             int y,
             int left)
         {
+            var scanner = state.Scanner;
+            var component = state.Component;
             var runLength = 0;
             while (x + runLength < _width)
             {
@@ -474,7 +503,9 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
             var interruptionX = x + runLength;
             var interruptionIndex = GetSampleIndex(interruptionX, y, component);
-            var above = y > 0 ? reconstructed[GetSampleIndex(interruptionX, y - 1, component)] : 0;
+            var above = HasPreviousLine(state, y)
+                ? reconstructed[GetSampleIndex(interruptionX, y - 1, component)]
+                : 0;
             var context = Math.Abs(left - above) <= _nearLossless
                 ? scanner.RunInterruptionContexts[1]
                 : scanner.RunInterruptionContexts[0];
@@ -490,13 +521,14 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
         private int DecodeRunMode(
             JpegLsGolombCodeReader reader,
-            JpegLsRunModeScanner scanner,
+            ProcessingState state,
             int[] samples,
-            int component,
             int x,
             int y,
             int left)
         {
+            var scanner = state.Scanner;
+            var component = state.Component;
             var runLength = scanner.DecodeRunLength(reader, _width - x);
             for (var index = 0; index < runLength; index++)
             {
@@ -509,7 +541,9 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             }
 
             var interruptionX = x + runLength;
-            var above = y > 0 ? samples[GetSampleIndex(interruptionX, y - 1, component)] : 0;
+            var above = HasPreviousLine(state, y)
+                ? samples[GetSampleIndex(interruptionX, y - 1, component)]
+                : 0;
             var context = Math.Abs(left - above) <= _nearLossless
                 ? scanner.RunInterruptionContexts[1]
                 : scanner.RunInterruptionContexts[0];
@@ -531,23 +565,29 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
         private void GetNeighbors(int[] samples, ProcessingState state, int x, int y, out int left, out int above, out int aboveLeft, out int aboveRight)
         {
             var component = state.Component;
+            var hasPreviousLine = HasPreviousLine(state, y);
             if (x == 0)
             {
                 left = state.PreviousLineFirstSample;
-                above = y > 0 ? state.PreviousLineFirstSample : 0;
+                above = hasPreviousLine ? state.PreviousLineFirstSample : 0;
                 aboveLeft = state.PreviousPreviousLineFirstSample;
-                aboveRight = y > 0 && _width > 1
+                aboveRight = hasPreviousLine && _width > 1
                     ? samples[GetSampleIndex(1, y - 1, component)]
                     : above;
                 return;
             }
 
-            above = y > 0 ? samples[GetSampleIndex(x, y - 1, component)] : 0;
+            above = hasPreviousLine ? samples[GetSampleIndex(x, y - 1, component)] : 0;
             left = samples[GetSampleIndex(x - 1, y, component)];
-            aboveLeft = y > 0 ? samples[GetSampleIndex(x - 1, y - 1, component)] : 0;
-            aboveRight = y > 0
+            aboveLeft = hasPreviousLine ? samples[GetSampleIndex(x - 1, y - 1, component)] : 0;
+            aboveRight = hasPreviousLine
                 ? samples[GetSampleIndex(Math.Min(x + 1, _width - 1), y - 1, component)]
                 : above;
+        }
+
+        private static bool HasPreviousLine(ProcessingState state, int y)
+        {
+            return y > state.RestartStartLine;
         }
 
         private int GetSampleIndex(int x, int y, int component)
@@ -555,7 +595,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             return (y * _width + x) * _componentCount + component;
         }
 
-        private ProcessingState[] CreateComponentStates()
+        private ProcessingState[] CreateComponentStates(int restartStartLine = 0)
         {
             var states = new ProcessingState[_componentCount];
             var sharedModel = _interleaveMode == JpegLsInterleaveMode.Line || _interleaveMode == JpegLsInterleaveMode.Sample
@@ -580,7 +620,8 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                     _height,
                     model,
                     sharedScanner ?? new JpegLsRunModeScanner(model.Traits, sharedRunContexts),
-                    edgeState: null);
+                    edgeState: null,
+                    restartStartLine);
             }
 
             return states;
@@ -588,12 +629,17 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
         private ProcessingState[] CreateProcessingOrder(ProcessingState[] states)
         {
+            return CreateProcessingOrder(states, 0, _height);
+        }
+
+        private ProcessingState[] CreateProcessingOrder(ProcessingState[] states, int startLine, int endLine)
+        {
             if (_interleaveMode == JpegLsInterleaveMode.None || _componentCount == 1)
             {
                 var order = new ProcessingState[_componentCount];
                 for (var component = 0; component < _componentCount; component++)
                 {
-                    order[component] = states[component].ForLines(0, _height);
+                    order[component] = states[component].ForLines(startLine, endLine);
                 }
 
                 return order;
@@ -601,9 +647,9 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
             if (_interleaveMode == JpegLsInterleaveMode.Line)
             {
-                var order = new ProcessingState[_height * _componentCount];
+                var order = new ProcessingState[(endLine - startLine) * _componentCount];
                 var index = 0;
-                for (var y = 0; y < _height; y++)
+                for (var y = startLine; y < endLine; y++)
                 {
                     for (var component = 0; component < _componentCount; component++)
                     {
@@ -641,7 +687,14 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
         {
             private readonly EdgeState _edgeState;
 
-            public ProcessingState(int component, int startLine, int endLine, JpegLsContextModel model, JpegLsRunModeScanner? scanner, EdgeState? edgeState)
+            public ProcessingState(
+                int component,
+                int startLine,
+                int endLine,
+                JpegLsContextModel model,
+                JpegLsRunModeScanner? scanner,
+                EdgeState? edgeState,
+                int restartStartLine)
             {
                 Component = component;
                 StartLine = startLine;
@@ -649,6 +702,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                 Model = model;
                 Scanner = scanner ?? new JpegLsRunModeScanner(model.Traits);
                 _edgeState = edgeState ?? new EdgeState();
+                RestartStartLine = restartStartLine;
             }
 
             public int Component { get; }
@@ -660,6 +714,8 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             public JpegLsContextModel Model { get; }
 
             public JpegLsRunModeScanner Scanner { get; }
+
+            public int RestartStartLine { get; }
 
             public int PreviousLineFirstSample
             {
@@ -673,7 +729,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
             public ProcessingState ForLines(int startLine, int endLine)
             {
-                return new ProcessingState(Component, startLine, endLine, Model, Scanner, _edgeState);
+                return new ProcessingState(Component, startLine, endLine, Model, Scanner, _edgeState, RestartStartLine);
             }
 
             public void UpdateLineEdge(int firstSample)

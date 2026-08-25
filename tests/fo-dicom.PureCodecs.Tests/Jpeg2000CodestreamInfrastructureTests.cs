@@ -120,11 +120,23 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
     }
 
     [Fact]
+    public void COD_preserves_SOP_and_EPH_packet_marker_flags()
+    {
+        var cod = Jpeg2000CodingStyleDefault.Parse(new Jpeg2000MarkerSegment(
+            Jpeg2000Marker.COD,
+            new byte[] { 0x06, 0x00, 0x00, 0x01, 0x00, 0x00, 0x04, 0x04, 0x00, 0x01 }));
+
+        Assert.True(cod.HasStartOfPacketMarkers);
+        Assert.True(cod.HasEndOfPacketHeaderMarkers);
+        Assert.False(cod.HasPrecinctSizes);
+    }
+
+    [Fact]
     public void COC_inherits_component_coding_style_from_default_COD()
     {
         var cod = Jpeg2000CodingStyleDefault.Parse(new Jpeg2000MarkerSegment(
             Jpeg2000Marker.COD,
-            new byte[] { 0x00, 0x02, 0x00, 0x02, 0x00, 0x01, 0x03, 0x03, 0x00, 0x01 }));
+            new byte[] { 0x06, 0x02, 0x00, 0x02, 0x00, 0x01, 0x03, 0x03, 0x00, 0x01 }));
         var coc = Jpeg2000CodingStyleComponent.Parse(new Jpeg2000MarkerSegment(
             Jpeg2000Marker.COC,
             new byte[] { 0x01, 0x01, 0x01, 0x04, 0x04, 0x00, 0x01, 0xAA, 0xBB }),
@@ -135,6 +147,8 @@ public sealed class Jpeg2000CodestreamInfrastructureTests
         Assert.Equal(1, inherited.ComponentIndex);
         Assert.Equal(cod.ProgressionOrder, inherited.ProgressionOrder);
         Assert.Equal(cod.LayerCount, inherited.LayerCount);
+        Assert.True(inherited.HasStartOfPacketMarkers);
+        Assert.True(inherited.HasEndOfPacketHeaderMarkers);
         Assert.Equal(64, inherited.CodeBlockWidth);
         Assert.Equal(64, inherited.CodeBlockHeight);
         Assert.Equal(2, inherited.PrecinctSizes.Count);

@@ -21,6 +21,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         private readonly Dictionary<string, PacketHeaderContext> _contexts = new Dictionary<string, PacketHeaderContext>();
         private int _offset;
         private int _packetHeaderOffset;
+        private long _packetSequence;
 
         public Jpeg2000StandardPacketDecoder(
             byte[] data,
@@ -382,6 +383,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
         private Jpeg2000StandardPacket DecodePacket(int layer, int resolution, int componentIndex, int precinctIndex)
         {
             var packet = new Jpeg2000StandardPacket(layer, resolution, componentIndex, precinctIndex);
+            var packetContext = PacketContext(layer, resolution, componentIndex, precinctIndex);
+            ConsumeStartOfPacket(componentIndex, packetContext);
             var packetHeaderData = _packedPacketHeaders ?? _data;
             var packetHeaderOffset = _packedPacketHeaders == null ? _offset : _packetHeaderOffset;
             if (packetHeaderOffset >= packetHeaderData.Length)
@@ -393,8 +396,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             var present = reader.ReadBit() != 0;
             if (!present)
             {
-                reader.AlignToByte();
-                AdvancePacketHeader(reader.BytesRead);
+                FinishPacketHeader(reader, packetHeaderData, componentIndex, packetContext);
                 return packet;
             }
 
@@ -428,8 +430,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                 }
             }
 
-            reader.AlignToByte();
-            AdvancePacketHeader(reader.BytesRead);
+            FinishPacketHeader(reader, packetHeaderData, componentIndex, packetContext);
 
             foreach (var contribution in packet.Contributions)
             {
@@ -461,15 +462,99 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             return packet;
         }
 
-        private void AdvancePacketHeader(int bytesRead)
+        private void ConsumeStartOfPacket(int componentIndex, string context)
+        {
+            var expectedSequence = (ushort)_packetSequence;
+            _packetSequence++;
+            if (!HasStartOfPacketMarkers(componentIndex)
+                || _offset + 1 >= _data.Length
+                || _data[_offset] != 0xFF
+                || _data[_offset + 1] != Jpeg2000Marker.SOP)
+            {
+                return;
+            }
+
+            if (_offset + 6 > _data.Length)
+            {
+                throw Jpeg2000Binary.CreateException("JPEG 2000 SOP marker is truncated; " + context + ".");
+            }
+
+            var markerLength = (_data[_offset + 2] << 8) | _data[_offset + 3];
+            if (markerLength != 4)
+            {
+                throw Jpeg2000Binary.CreateException(
+                    "JPEG 2000 SOP marker length must be 4 but was " + markerLength + "; " + context + ".");
+            }
+
+            var actualSequence = (ushort)((_data[_offset + 4] << 8) | _data[_offset + 5]);
+            if (actualSequence != expectedSequence)
+            {
+                throw Jpeg2000Binary.CreateException(
+                    "JPEG 2000 SOP sequence mismatch expected=" + expectedSequence
+                    + " actual=" + actualSequence + "; " + context + ".");
+            }
+
+            _offset += 6;
+        }
+
+        private void FinishPacketHeader(
+            Jpeg2000BioReader reader,
+            byte[] packetHeaderData,
+            int componentIndex,
+            string context)
+        {
+            reader.AlignToByte();
+            var packetHeaderOffset = reader.BytesRead;
+            if (HasEndOfPacketHeaderMarkers(componentIndex))
+            {
+                if (packetHeaderOffset + 1 >= packetHeaderData.Length)
+                {
+                    throw Jpeg2000Binary.CreateException("JPEG 2000 EPH marker is missing or truncated; " + context + ".");
+                }
+
+                if (packetHeaderData[packetHeaderOffset] != 0xFF
+                    || packetHeaderData[packetHeaderOffset + 1] != Jpeg2000Marker.EPH)
+                {
+                    throw Jpeg2000Binary.CreateException("JPEG 2000 EPH marker is missing; " + context + ".");
+                }
+
+                packetHeaderOffset += 2;
+            }
+
+            AdvancePacketHeader(packetHeaderOffset);
+        }
+
+        private bool HasStartOfPacketMarkers(int component)
+        {
+            return _componentCodingStyles != null && component < _componentCodingStyles.Count
+                ? _componentCodingStyles[component].HasStartOfPacketMarkers
+                : _codingStyle != null && _codingStyle.HasStartOfPacketMarkers;
+        }
+
+        private bool HasEndOfPacketHeaderMarkers(int component)
+        {
+            return _componentCodingStyles != null && component < _componentCodingStyles.Count
+                ? _componentCodingStyles[component].HasEndOfPacketHeaderMarkers
+                : _codingStyle != null && _codingStyle.HasEndOfPacketHeaderMarkers;
+        }
+
+        private static string PacketContext(int layer, int resolution, int component, int precinct)
+        {
+            return "layer=" + layer
+                + " resolution=" + resolution
+                + " component=" + component
+                + " precinct=" + precinct;
+        }
+
+        private void AdvancePacketHeader(int packetHeaderOffset)
         {
             if (_packedPacketHeaders == null)
             {
-                _offset = bytesRead;
+                _offset = packetHeaderOffset;
             }
             else
             {
-                _packetHeaderOffset = bytesRead;
+                _packetHeaderOffset = packetHeaderOffset;
             }
         }
 

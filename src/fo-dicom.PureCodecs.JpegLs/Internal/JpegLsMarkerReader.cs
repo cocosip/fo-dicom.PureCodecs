@@ -127,7 +127,8 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
                 if (JpegLsMarker.IsRestart(code))
                 {
-                    throw CreateException("JPEG-LS restart markers are not supported.");
+                    _offset = markerOffset + 1;
+                    continue;
                 }
 
                 var length = _offset - start;

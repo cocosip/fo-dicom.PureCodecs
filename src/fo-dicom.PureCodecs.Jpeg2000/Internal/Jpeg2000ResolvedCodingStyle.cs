@@ -10,6 +10,8 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             ProgressionOrder = defaults.ProgressionOrder;
             LayerCount = defaults.LayerCount;
             UsesMultipleComponentTransform = defaults.UsesMultipleComponentTransform;
+            HasStartOfPacketMarkers = defaults.HasStartOfPacketMarkers;
+            HasEndOfPacketHeaderMarkers = defaults.HasEndOfPacketHeaderMarkers;
             HasPrecinctSizes = component.HasPrecinctSizes;
             DecompositionLevels = component.DecompositionLevels;
             CodeBlockWidth = component.CodeBlockWidth;
@@ -42,6 +44,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public bool UsesMultipleComponentTransform { get; }
 
         public bool HasPrecinctSizes { get; }
+
+        public bool HasStartOfPacketMarkers { get; }
+
+        public bool HasEndOfPacketHeaderMarkers { get; }
 
         public int DecompositionLevels { get; }
 

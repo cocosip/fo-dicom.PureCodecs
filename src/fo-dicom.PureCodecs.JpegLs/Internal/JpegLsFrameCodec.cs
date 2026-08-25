@@ -80,6 +80,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             }
 
             var samples = DecodeScans(parsed);
+            JpegLsColorTransform.ApplyInverse(samples, parsed.ColorTransformation, parsed.FrameInfo.BitsPerSample);
             return SamplesToBytes(
                 samples,
                 targetPixelData.BitsAllocated,
@@ -98,14 +99,19 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
             JpegLsFrameInfo? frameInfo = null;
             JpegLsPresetCodingParameters? preset = null;
+            byte? colorTransformation = null;
+            uint restartInterval = 0;
             var scans = new List<ParsedJpegLsScan>();
             var reachedEndOfImage = false;
 
             while (!reader.EndOfData && !reachedEndOfImage)
             {
-                var segment = reader.ReadNextSkippingMetadata();
+                var segment = reader.ReadNext();
                 switch (segment.Code)
                 {
+                    case JpegLsMarker.APP8:
+                        ParseApplicationData8(segment, ref colorTransformation);
+                        break;
                     case JpegLsMarker.SOF55:
                         frameInfo = JpegLsFrameInfo.Parse(segment);
                         break;
@@ -113,18 +119,19 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                         preset = JpegLsPresetCodingParameters.Parse(segment);
                         break;
                     case JpegLsMarker.DRI:
-                        throw CreateException("JPEG-LS restart intervals are not supported.");
+                        restartInterval = ParseRestartInterval(segment);
+                        break;
                     case JpegLsMarker.SOS:
                         var scan = JpegLsStartOfScan.Parse(segment);
-                        scans.Add(new ParsedJpegLsScan(scan, reader.ReadEntropyDataUntilNextMarker(), preset));
+                        scans.Add(new ParsedJpegLsScan(scan, reader.ReadEntropyDataUntilNextMarker(), preset, restartInterval));
                         break;
                     case JpegLsMarker.EOI:
                         reachedEndOfImage = true;
                         break;
                     default:
-                        if (JpegLsMarker.IsRestart(segment.Code))
+                        if (JpegLsMarker.IsMetadata(segment.Code))
                         {
-                            throw CreateException("JPEG-LS restart markers are not supported.");
+                            break;
                         }
 
                         throw CreateException($"JPEG-LS marker 0x{segment.Code:X2} is not supported.");
@@ -147,7 +154,35 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                 throw CreateException("JPEG-LS frame is missing EOI.");
             }
 
-            return new ParsedJpegLsFrame(frameInfo, scans);
+            var transform = colorTransformation.GetValueOrDefault();
+            JpegLsColorTransform.Validate(transform, frameInfo);
+            return new ParsedJpegLsFrame(frameInfo, scans, transform);
+        }
+
+        private static void ParseApplicationData8(JpegLsMarkerSegment segment, ref byte? colorTransformation)
+        {
+            var payload = segment.Payload;
+            if (payload.Length != 5
+                || payload[0] != (byte)'m'
+                || payload[1] != (byte)'r'
+                || payload[2] != (byte)'f'
+                || payload[3] != (byte)'x')
+            {
+                return;
+            }
+
+            var transform = payload[4];
+            if (transform > 3)
+            {
+                throw CreateException($"JPEG-LS color transform {transform} is not supported.");
+            }
+
+            if (colorTransformation.HasValue && colorTransformation.Value != transform)
+            {
+                throw CreateException("JPEG-LS frame contains conflicting mrfx color transform declarations.");
+            }
+
+            colorTransformation = transform;
         }
 
         private static int[] DecodeScans(ParsedJpegLsFrame parsed)
@@ -167,7 +202,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                         onlyScan.Scan.NearLossless,
                         onlyScan.Scan.InterleaveMode,
                         onlyScan.Preset);
-                    return codec.Decode(onlyScan.Data);
+                    return codec.Decode(onlyScan.Data, onlyScan.RestartInterval);
                 }
             }
 
@@ -196,7 +231,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                     parsedScan.Scan.NearLossless,
                     JpegLsInterleaveMode.None,
                     parsedScan.Preset);
-                var componentSamples = codec.Decode(parsedScan.Data);
+                var componentSamples = codec.Decode(parsedScan.Data, parsedScan.RestartInterval);
                 for (var pixel = 0; pixel < pixelCount; pixel++)
                 {
                     samples[pixel * frameInfo.Components.Count + componentIndex] = componentSamples[pixel];
@@ -225,6 +260,23 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                     throw CreateException("JPEG-LS scan component order does not match the frame header.");
                 }
             }
+        }
+
+        private static uint ParseRestartInterval(JpegLsMarkerSegment segment)
+        {
+            var payload = segment.Payload;
+            if (payload.Length < 2 || payload.Length > 4)
+            {
+                throw CreateException($"JPEG-LS DRI payload length {payload.Length} is invalid; expected 2, 3, or 4 bytes.");
+            }
+
+            uint value = 0;
+            for (var index = 0; index < payload.Length; index++)
+            {
+                value = (value << 8) | payload[index];
+            }
+
+            return value;
         }
 
         private static int FindComponentIndex(JpegLsFrameInfo frameInfo, int selector)
@@ -403,15 +455,21 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 
         private sealed class ParsedJpegLsFrame
         {
-            public ParsedJpegLsFrame(JpegLsFrameInfo frameInfo, IReadOnlyList<ParsedJpegLsScan> scans)
+            public ParsedJpegLsFrame(
+                JpegLsFrameInfo frameInfo,
+                IReadOnlyList<ParsedJpegLsScan> scans,
+                byte colorTransformation)
             {
                 FrameInfo = frameInfo;
                 Scans = scans;
+                ColorTransformation = colorTransformation;
             }
 
             public JpegLsFrameInfo FrameInfo { get; }
 
             public IReadOnlyList<ParsedJpegLsScan> Scans { get; }
+
+            public byte ColorTransformation { get; }
         }
 
         private sealed class ParsedJpegLsScan
@@ -419,11 +477,13 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             public ParsedJpegLsScan(
                 JpegLsStartOfScan scan,
                 byte[] data,
-                JpegLsPresetCodingParameters? preset)
+                JpegLsPresetCodingParameters? preset,
+                uint restartInterval)
             {
                 Scan = scan;
                 Data = data;
                 Preset = preset;
+                RestartInterval = restartInterval;
             }
 
             public JpegLsStartOfScan Scan { get; }
@@ -431,6 +491,8 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
             public byte[] Data { get; }
 
             public JpegLsPresetCodingParameters? Preset { get; }
+
+            public uint RestartInterval { get; }
         }
     }
 }

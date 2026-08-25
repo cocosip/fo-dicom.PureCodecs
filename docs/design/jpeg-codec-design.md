@@ -68,13 +68,13 @@ Decoder must handle at least:
 - SOF3 for lossless sequential.
 - DHT.
 - DQT.
-- DRI is recognized and rejected with a managed exception until restart
-  interval decoding is implemented.
+- DRI restart intervals are parsed and applied by sequential DCT and lossless
+  decoders.
 - SOS.
 - APPn markers by skipping them safely.
 - COM markers by skipping them safely.
-- RST0 through RST7 are recognized and rejected with a managed exception until
-  MCU restart state is implemented.
+- RST0 through RST7 are consumed at restart boundaries with modulo-eight order,
+  predictor, Huffman, and interval-local neighbor state validation.
 
 Unsupported marker combinations must fail with a managed codec exception.
 
@@ -232,7 +232,8 @@ Error messages should include:
 - Marker parsing.
 - Huffman table construction.
 - Bit reader and bit writer.
-- Explicit managed rejection of DRI and RST restart structures.
+- Legal DRI/RST restart decoding and managed rejection of missing, duplicate,
+  truncated, or out-of-sequence restart markers.
 - Lossless predictor functions.
 - DCT block encode/decode primitives.
 - Invalid marker length handling.
@@ -241,7 +242,7 @@ Error messages should include:
 
 - Process 1 8-bit raw -> JPEG -> raw round-trip with lossy tolerance.
 - Process 2/4 8-bit raw -> JPEG -> raw round-trip with lossy tolerance.
-- Process 2/4 12-bit monochrome coverage where sample data is available.
+- Process 2/4 12-bit monochrome and RGB SF444 coverage in 16-bit containers.
 - Process 14 8-bit, 12-bit, and 16-bit lossless exact round-trip.
 - Process 14 SV1 8-bit, 12-bit, and 16-bit lossless exact round-trip.
 - `YBR_FULL` and `YBR_FULL_422` decode behavior.
@@ -271,22 +272,32 @@ JPEG is complete when:
 Current implementation status:
 
 - JPEG Process 1 and Process 2/4 use a managed sequential DCT path with marker parsing, DQT, DHT, SOF0/SOF1, SOS, Huffman entropy coding, quantization, zigzag, forward DCT, and inverse DCT.
-- The DCT path supports 8-bit monochrome and three-component interleaved data, plus 12-bit monochrome data in a 16-bit DICOM sample container for Process 2/4. Decode handles standard Efferent JPEG baseline `YBR_FULL` and `YBR_FULL_422` acceptance samples.
+- The DCT path supports 8-bit monochrome and three-component data, plus 12-bit
+  monochrome and RGB SF444 data in interleaved or planar 16-bit DICOM sample
+  containers for Process 2/4. Decode handles standard Efferent JPEG baseline
+  `YBR_FULL` and `YBR_FULL_422` acceptance samples.
 - JPEG Process 14 and Process 14 SV1 use a managed lossless predictive path with predictors 1 through 7, Huffman-coded differences, and exact 8-bit, 12-bit, and 16-bit monochrome round-trips. Process 14 honors `JpegCodecParams.Predictor`; Process 14 SV1 fixes the predictor to 1 as required by the transfer syntax.
 - `JpegCodecParams` provides quality, predictor, point transform, and `ConvertColorspaceToRGB`, with color conversion enabled by default for Process 1 and Process 2/4. The codecs also map fo-dicom Core `DicomJpegParams` instead of silently replacing them with defaults. Lossless encode writes predictor and point transform to SOS, and lossless decode reads both values from the codestream. A non-zero point transform intentionally clears discarded low bits, matching Native behavior.
 - RGB planar input is normalized to interleaved layout for sequential DCT encode, and decoded output can be converted back to planar when the target pixel data requires it.
 - Packed raw `YBR_FULL_422` input is expanded through fo-dicom's pixel converter
   before sequential DCT encoding and is covered by Pure encode ->
   `fo-dicom.Codecs` Native decode tests for both 4:4:4 and 4:2:2 output sampling.
-- DRI and RST restart structures are rejected explicitly by both sequential DCT
-  and lossless JPEG decoders; the current entropy paths do not silently decode
-  them without resetting predictor and Huffman state.
+- Sequential DCT and lossless JPEG decoders support validated DRI/RST restart
+  intervals, including predictor and entropy-state reset and explicit failures
+  for malformed marker placement or sequence.
+- Sequential DCT decoding accepts ordered multi-scan codestreams with
+  scan-effective DQT/DHT/DRI state; JPEG Lossless resolves each component's DC
+  table and predictor state from its SOS scan.
+- Sequential DCT accepts both 8-bit and 16-bit DQT entries. Process 1 normalizes
+  8-bit samples from 16-bit DICOM containers, and Process 2/4 handles 12-bit
+  component-aware samples without truncating them to bytes.
 
 Known limitations before full JPEG release readiness:
 
-- Process 2/4 high-bit support is monochrome-only for `BitsStored=12` in a 16-bit DICOM sample container; high-bit colour data remains unsupported.
+- Process 2/4 12-bit color encoding supports SF444; 12-bit SF422 encoding
+  remains unsupported.
 - The sequential DCT implementation prioritizes correctness and compatibility coverage over optimized performance.
-- Progressive JPEG, arithmetic coding, CMYK/YCCK, and restart interval MCU resynchronization are not implemented.
+- Progressive JPEG, arithmetic coding, and CMYK/YCCK are not implemented.
 - Native bidirectional interoperability is exercised by the non-HTJ2K worker
   matrix for Process 1, Process 2/4, Process 14, and Process 14 SV1, with exact
   decoded output for lossless syntaxes and tolerance checks for lossy syntaxes.

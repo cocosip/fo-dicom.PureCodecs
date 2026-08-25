@@ -16,8 +16,6 @@ Focused design documents:
 - `docs/design/jpeg-codec-design.md`
 - `docs/design/jpegls-codec-design.md`
 - `docs/design/jpeg2000-codec-design.md`
-- `docs/design/jpeg2000-openjpeg-openjph-separation-design.md`
-- `docs/design/htj2k-openjph-alignment-design.md`
 
 Future implementation work must follow that document unless the user explicitly changes the design.
 

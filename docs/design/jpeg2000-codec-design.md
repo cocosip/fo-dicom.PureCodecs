@@ -1,551 +1,160 @@
 # JPEG 2000 and HTJ2K Codec Design
 
-## Purpose
+## Purpose and Status
 
-This document defines the JPEG 2000 codec family for `fo-dicom.PureCodecs`.
+This is the single design authority for the JPEG 2000 family in
+`fo-dicom.PureCodecs`. It supersedes the former OpenJPEG/OpenJPH separation and
+HTJ2K alignment documents.
 
-The authoritative compatibility boundary between the classic OpenJPEG-aligned
-path and the HTJ2K OpenJPH-aligned path is defined in
-[`jpeg2000-openjpeg-openjph-separation-design.md`](jpeg2000-openjpeg-openjph-separation-design.md).
-Shared family infrastructure must follow that separation design.
+The family is implemented in pure C#. Classic JPEG 2000 functionality and the
+HTJ2K codec paths are present; Phase 1 is **not** released as fully aligned.
+The outstanding release gate is the normally restored public
+`fo-dicom.Codecs` complete-dataset interoperability matrix described in
+[Development Checklist](../development/development-checklist.md).
 
-This family covers classic JPEG 2000 and High-Throughput JPEG 2000 transfer syntaxes. It must be implemented in pure C# and must not call OpenJPEG, OpenJPH, or any native wrapper.
+## Scope
 
-## Assembly
+Production assembly: `fo-dicom.PureCodecs.Jpeg2000.dll` targeting
+`netstandard2.0`.
 
-Production assembly:
-
-```text
-fo-dicom.PureCodecs.Jpeg2000.dll
-```
-
-Target framework:
-
-```xml
-<TargetFramework>netstandard2.0</TargetFramework>
-```
-
-## Supported Transfer Syntaxes
-
-| Transfer syntax | UID | Encode | Decode |
+| Transfer syntax | UID | Codec path | Phase 1 status |
 | --- | --- | --- | --- |
-| JPEG 2000 Lossless | `1.2.840.10008.1.2.4.90` | Required | Required |
-| JPEG 2000 Lossy | `1.2.840.10008.1.2.4.91` | Required | Required |
-| HTJ2K Lossless | `1.2.840.10008.1.2.4.201` | Required | Required |
-| HTJ2K Lossless RPCL | `1.2.840.10008.1.2.4.202` | Required | Required |
-| HTJ2K Lossy | `1.2.840.10008.1.2.4.203` | Required | Required |
+| JPEG 2000 Lossless | `1.2.840.10008.1.2.4.90` | Classic | Implemented |
+| JPEG 2000 Lossy | `1.2.840.10008.1.2.4.91` | Classic | Implemented |
+| HTJ2K Lossless | `1.2.840.10008.1.2.4.201` | High-throughput | Implemented; release gate open |
+| HTJ2K Lossless RPCL | `1.2.840.10008.1.2.4.202` | High-throughput | Implemented; release gate open |
+| HTJ2K Lossy | `1.2.840.10008.1.2.4.203` | High-throughput | Implemented; release gate open |
 
-JPEG 2000 Part 2 Multi-component transfer syntaxes are intentionally outside phase 1:
+JPEG 2000 Part 2 multi-component syntaxes (`.92` and `.93`), JPIP, JPT, and
+component subsampling are outside Phase 1 and fail with managed exceptions.
+JP2-wrapped frames are detected and rejected; this codec consumes raw J2K
+codestreams.
 
-- `1.2.840.10008.1.2.4.92`.
-- `1.2.840.10008.1.2.4.93`.
+## Public Surface and DICOM Contract
 
-The Go reference codec contains useful Part 2 structures, but these UIDs must not expand the phase 1 scope unless the project plan changes.
-
-## Public Codec Types
-
-The assembly provides these fo-dicom codec implementations:
+`PureTranscoderManager` registers these `IDicomCodec` implementations; consumers
+do not register the JPEG 2000 assembly independently:
 
 ```csharp
-public sealed class DicomJpeg2000LosslessCodec : IDicomCodec
-public sealed class DicomJpeg2000LossyCodec : IDicomCodec
-public sealed class DicomHtJpeg2000LosslessCodec : IDicomCodec
-public sealed class DicomHtJpeg2000LosslessRpclCodec : IDicomCodec
-public sealed class DicomHtJpeg2000LossyCodec : IDicomCodec
+DicomJpeg2000LosslessCodec
+DicomJpeg2000LossyCodec
+DicomHtJpeg2000LosslessCodec
+DicomHtJpeg2000LosslessRpclCodec
+DicomHtJpeg2000LossyCodec
 ```
 
-They are registered by `PureTranscoderManager` in the entry assembly.
-
-## Family Architecture
-
-The JPEG 2000 assembly should be split internally into:
-
-- Codestream marker reader and writer.
-- Image, tile, component, precinct, code-block, and packet models.
-- Progression order logic.
-- Quantization model.
-- Discrete wavelet transform and inverse transform.
-- Classic JPEG 2000 entropy coding.
-- HTJ2K block coding.
-- Multi-component transform support.
-- DICOM frame adapter.
-
-Classic JPEG 2000 and HTJ2K should share codestream infrastructure where the standard allows it, but their block coding paths should remain separate.
-
-### Shared Family Boundary
-
-Classic JPEG 2000 and HTJ2K are part of the same JPEG 2000 codestream family.
-They must not be implemented as two unrelated mini-codecs. The implementation
-must share code for:
-
-- Raw codestream marker reading and writing.
-- SIZ, COD, QCD, SOT, SOD, EOC, COM, and related marker payload construction
-  and parsing when the marker syntax is the same.
-- Image, tile, component, precinct, code-block, packet, and progression-order
-  model types.
-- DICOM pixel metadata validation, Ssiz precision/sign mapping, frame-size
-  validation, and decoded-metadata validation.
-- Wavelet geometry and buffer primitives, with explicit family entry points for
-  OpenJPEG-compatible classic arithmetic and OpenJPH-compatible HT arithmetic.
-- QCD syntax, guard-bit representation, and subband indexing. Step generation,
-  fixed-point scaling, band-depth policy, and inverse quantization remain
-  family-specific unless reference tests prove identical behavior.
-- Big-endian byte I/O and marker-safe payload utilities.
-
-The implementation must keep explicit compatibility-policy splits in addition
-to the entropy/block-coding split:
-
-- Classic JPEG 2000 `.90` and `.91` use classic Tier-1 EBCOT/MQ code-block
-  coding and classic packet contribution handling.
-- HTJ2K `.201`, `.202`, and `.203` use Part 15 HT block coding: MEL, VLC,
-  MagSgn, cleanup/refinement handling, and HT-specific segment assembly.
-- Classic irreversible transforms, quantization, rate allocation, precision
-  validation, and packet policy follow the OpenJPEG compatibility contract.
-- HTJ2K irreversible transforms, normalized coefficient scaling, quantization,
-  precision exceptions, and tile-part policy follow the OpenJPH compatibility
-  contract.
-
-The authoritative separation rules and test gates are defined in
-[`jpeg2000-openjpeg-openjph-separation-design.md`](jpeg2000-openjpeg-openjph-separation-design.md).
-
-Shared production types remain named after JPEG 2000 standard concepts rather
-than native handles or implementation objects. Compatibility-specific entry
-points use standard family terms such as `Classic` or `HighThroughput`.
-Reference-library names remain appropriate in tests, fixture provenance,
-diagnostics, and design rationale. Production implementation types use names
-such as `Jpeg2000StandardWavelet`,
-`Jpeg2000StandardIrreversibleWavelet`, `Jpeg2000QuantizationTable`, or
-`Jpeg2000MarkerPayloadBuilder`.
-
-## Marker Support
-
-Decoder must handle required JPEG 2000 codestream markers, including:
-
-- SOC.
-- SIZ.
-- COD.
-- COC where needed.
-- QCD.
-- QCC where needed.
-- POC progression-order ranges for LRCP, RLCP, RPCL, PCRL, and CPRL.
-- RGN Maxshift ROI state from main and tile headers, plus COM preservation.
-- SOT.
-- SOD.
-- EOC.
-- SOP/EPH where supported by target samples.
-- PLT parsing and PPM/PPT packed packet-header decoding.
-- Tile-part markers needed by DICOM datasets.
-
-Unsupported legal markers should fail with a clear managed exception until implemented. Markers must never cause out-of-bounds reads.
-
-The decoder must explicitly distinguish raw J2K codestream frames from JP2-wrapped frames. JP2 support is optional for phase 1, but unsupported JP2 wrappers must fail with a clear managed exception instead of being misparsed as raw codestreams.
-
-## Transfer Syntax Mapping
-
-### JPEG 2000 Lossless
-
-Expected characteristics:
-
-- Reversible color transform when applicable.
-- Reversible wavelet transform.
-- Lossless reconstruction.
-
-Primary DICOM syntax:
-
-```text
-DicomTransferSyntax.JPEG2000Lossless
-```
-
-### JPEG 2000 Lossy
-
-Expected characteristics:
-
-- Irreversible transform and quantization when requested.
-- Lossy reconstruction.
-- Rate or quality parameters should be represented in managed codec params.
-
-Primary DICOM syntax:
-
-```text
-DicomTransferSyntax.JPEG2000Lossy
-```
-
-### HTJ2K Lossless
-
-Expected characteristics:
-
-- HT block coding.
-- Lossless reconstruction.
-
-Primary DICOM syntax:
-
-```text
-DicomTransferSyntax.HTJ2KLossless
-```
-
-### HTJ2K Lossless RPCL
-
-Expected characteristics:
-
-- HT block coding.
-- Lossless reconstruction.
-- RPCL progression order.
-
-Primary DICOM syntax:
-
-```text
-DicomTransferSyntax.HTJ2KLosslessRPCL
-```
-
-### HTJ2K Lossy
-
-Expected characteristics:
-
-- HT block coding.
-- Lossy reconstruction.
-
-Primary DICOM syntax:
-
-```text
-DicomTransferSyntax.HTJ2K
-```
-
-## Parameters
-
-Provide managed parameter types compatible with `DicomCodecParams`.
-
-JPEG 2000 parameters should cover:
-
-- Lossless vs lossy mode.
-- Irreversible transform selection.
-- OpenJPEG-compatible `Rate` and `RateLevels`.
-- Progression order where supported.
-- Multi-component transform enablement through `AllowMCT`.
-- Photometric update behavior through `UpdatePhotometricInterpretation`.
-- Signed-pixel encoding behavior through `EncodeSignedPixelValuesAsUnsigned`.
-- Quality-layer count and target-ratio semantics where exposed by managed parameters.
-
-HTJ2K parameters should cover:
-
-- Lossless vs lossy mode.
-- `ProgressionOrder`, including mandatory RPCL behavior for the RPCL transfer syntax.
-- Quality or rate target for lossy encoding.
-
-The compatibility baseline is the public behavior of `fo-dicom.Codecs`, not its native implementation details. Do not expose native-library concepts such as OpenJPEG handles, OpenJPH tables, or native stream objects.
-
-For classic JPEG 2000 `.90` and `.91`, `fo-dicom.Codecs` currently reaches
-that public behavior through OpenJPEG. When validating output compatibility,
-prefer a locally generated `fo-dicom.Codecs`/OpenJPEG DICOM baseline over
-third-party managed or Go codec output. Reference-library names belong in
-tests, diagnostics, and provenance notes only; production implementation names
-must stay standard-oriented.
-
-## Encoding Design
-
-For each source frame:
-
-1. Snapshot DICOM pixel metadata.
-2. Validate dimensions, bit depth, signedness, components, and frame size.
-3. Map DICOM `BitsAllocated`, `BitsStored`, `PixelRepresentation`, and component layout to JPEG 2000 `Ssiz` precision and sign.
-4. Normalize component layout for encoder internals.
-5. Apply DC level shift for unsigned and signed samples.
-6. Apply RCT/ICT only when the transfer syntax and `AllowMCT` permit it.
-7. Apply reversible or irreversible wavelet transform according to transfer syntax and parameters.
-8. Quantize for lossy paths.
-9. Partition into tiles, precincts, and code-blocks.
-10. Encode code-blocks using classic or HTJ2K path.
-11. Write packets and marker segments with the requested progression order.
-12. Add one compressed frame to `newPixelData`.
-
-Encoding uses a conservative single-tile strategy. Classic JPEG 2000 decoding accepts multi-tile codestreams, groups tile parts by SOT tile index, decodes each tile with its SIZ geometry, and copies it into the complete DICOM frame.
-
-### Classic OpenJPEG Alignment Order
-
-For classic JPEG 2000 `.90` and `.91`, compatibility work must follow the
-`fo-dicom.Codecs`/OpenJPEG encode pipeline before interpreting final binary
-differences:
-
-1. Match DICOM-to-component sample mapping, including signed extension,
-   unsigned masking, `BitsStored`, `BitsAllocated`, and
-   `EncodeSignedPixelValuesAsUnsigned`.
-2. Match OpenJPEG encoder parameters: six resolutions, 64 x 64 code-blocks,
-   LRCP by default, optional MCT, and `RateLevels`/`Rate` layer construction.
-3. Match reversible 5/3 and irreversible 9/7 DWT geometry and coefficient
-   placement. The irreversible forward 9/7 path must follow OpenJPEG's
-   `OPJ_FLOAT32` arithmetic before Tier-1 quantization; a managed `double`
-   substitute changes low bit-plane pass payloads.
-4. Match lossless no-quantization QCD and lossy scalar-expounded QCD step-size
-   generation.
-5. Match Tier-1 pass coding, cumulative pass lengths, and cumulative
-   `distortiondec`.
-6. Match PCRD layer allocation using pass `dd/dr` and OpenJPEG-style packet
-   byte budget checks.
-7. Match Tier-2 packet header/body state across quality layers.
-   OpenJPEG 2.5.4 default builds do not use the optional
-   `ENABLE_EMPTY_PACKET_OPTIMIZATION` path, so even packets with no new
-   code-block contribution write the packet-present bit and tag-tree header
-   state instead of a single `00` empty-packet byte.
-8. Use final codestream size and binary comparison only as terminal
-   compatibility signals after the stages above are aligned.
-
-Multi-layer support means real quality-layer packet contribution distribution.
-`COD.Layers`, `NumLayers`, or a larger layer count alone is not sufficient.
-
-## Decoding Design
-
-For each compressed frame:
-
-1. Read the complete codestream.
-2. Parse marker segments and build the image/tile/component model.
-3. Validate codestream metadata against DICOM pixel metadata.
-4. Decode tile-parts and packets in codestream order.
-5. Decode code-blocks using classic JPEG 2000 or HTJ2K path.
-6. Inverse quantize when needed.
-7. Apply inverse wavelet transform.
-8. Apply inverse component transform when the codestream uses RCT, ICT, or a supported component transform.
-9. Undo DC level shift.
-10. Repack samples into fo-dicom raw pixel layout.
-11. Add one raw frame to `newPixelData`.
-
-## Component and Photometric Handling
-
-The implementation must account for common DICOM image data:
-
-- Monochrome.
-- RGB.
-- YBR-related photometric interpretations used by JPEG 2000 transfer syntaxes.
-- Signed and unsigned samples.
-- 8-bit and 16-bit allocated samples.
-- Planar and interleaved RGB input layouts.
-- Component precision and sign from JPEG 2000 `Ssiz`.
-- Component subsampling. Unsupported subsampling must fail explicitly.
-
-Unsupported component transforms or photometric interpretations must fail explicitly.
-
-## Validation Rules
-
-Decode must reject:
-
-- Missing SOC.
-- Missing SIZ.
-- Missing COD.
-- Missing tile-part data.
-- Marker lengths outside input bounds.
-- Unsupported progression order.
-- Unsupported number of decomposition levels.
-- Unsupported component precision.
-- Unsupported component subsampling.
-- Unsupported JP2 wrapper when JP2 support is not implemented.
-- Codestream dimensions that conflict with DICOM metadata.
-- Packets or code-blocks that exceed declared bounds.
-- Tile-part lengths or indexes that conflict with declared tile structure.
-
-Encode must reject:
-
-- Unsupported bit depth.
-- Unsupported samples per pixel.
-- Unsupported photometric interpretation.
-- Unsupported progression order for the selected transfer syntax.
-- Invalid rate or quality parameters.
-- JPEG 2000 Part 2 transfer syntaxes `.92` and `.93` during phase 1.
-
-## Error Handling
-
-All failures must remain managed.
-
-Error messages should include:
-
-- JPEG 2000 or HTJ2K family.
-- Specific transfer syntax.
-- Encode or decode.
-- Frame index.
-- Tile and component where known.
-- Marker or coding stage that failed when known.
-
-## Tests
-
-### Unit Tests
-
-- Marker parsing and writing.
-- SIZ/COD/QCD validation.
-- Progression order iteration.
-- Tile and packet indexing.
-- Reversible wavelet transform round-trip.
-- Irreversible wavelet transform tolerance checks.
-- DC level shift and signedness mapping.
-- RCT/ICT behavior with `AllowMCT`.
-- Classic entropy coding primitives.
-- Tier-1 pass accounting and tag-tree packet header behavior.
-- HT block coding primitives.
-- MEL, VLC, MagSgn, and HT cleanup primitives.
-- Invalid marker length handling.
-
-### Codec Tests
-
-- JPEG 2000 Lossless 8-bit exact round-trip.
-- JPEG 2000 Lossless 16-bit exact round-trip.
-- JPEG 2000 Lossy tolerance round-trip.
-- HTJ2K Lossless exact round-trip.
-- HTJ2K Lossless RPCL exact round-trip with RPCL progression.
-- HTJ2K Lossy tolerance round-trip.
-- Multi-frame data.
-- Monochrome and RGB sample data.
-- `DicomJpeg2000Params` compatibility behavior.
-- `DicomHtJpeg2000Params.ProgressionOrder` compatibility behavior.
-
-### Compatibility Tests
-
-Use sample coverage from:
-
-- `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Unit\TranscodeUnitTest.cs`
-- `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Acceptance\PM5644-960x540_JPEG2000-Lossless.dcm`
-- `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Acceptance\PM5644-960x540_JPEG2000-Lossy.dcm`
-- `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests\Acceptance\PM5644-960x540_JPEG2000-Lossy50.dcm`
-- Any HTJ2K fixtures added to the local test suite.
-
-## Completion Criteria
-
-JPEG 2000 is complete when:
-
-- All five JPEG 2000 and HTJ2K transfer syntaxes are registered by `PureTranscoderManager`.
-- Encode and decode are implemented without native dependencies.
-- Lossless paths pass exact byte equality tests.
-- Lossy paths pass agreed tolerance tests.
-- Efferent JPEG 2000 acceptance samples transcode, inverse transcode, and render.
-- HTJ2K fixtures pass encode/decode tests.
-- Invalid codestreams fail with managed exceptions.
-
-## Current HTJ2K Reference Coverage
-
-The current pure C# HTJ2K path writes a standard JPEG 2000 codestream envelope
-with SIZ, CAP, COD, QCD, SOT, SOD, and EOC markers, and uses Part 15 HT block
-coding in packet tile data instead of a project-managed payload. The HT block
-path includes MEL event coding, OpenJPH/Annex C VLC table validation, UVLC,
-MagSgn coding, cleanup quad scanning, HT packet header handling, and reversible
-and scalar-expounded irreversible block reconstruction.
-
-The test suite includes standard HT cleanup-pass vectors generated by OpenJPH
-`ojph_encode_codeblock32` and verified with OpenJPH
-`ojph_decode_codeblock32`. It also includes an OpenJPH irreversible HTJ2K
-codestream fixture decoded by the pure decoder.
-
-HTJ2K release validation requires process-isolated `fo-dicom.Codecs`/OpenJPH
-interoperability for `.201`, `.202`, and `.203`, in addition to managed
-round-trips, standard HT cleanup-pass vectors, and committed reference
-codestream fixtures. Native operations must not execute inside the ordinary
-xUnit test process.
-
-## Current DICOM Integration Coverage
-
-The DICOM adapter now matches the `fo-dicom.Codecs` public JPEG 2000
-parameter contract for phase 1 integration:
-
-- `DicomJpeg2000Params` derives from fo-dicom's JPEG 2000 parameter type and
-  preserves `Irreversible`, `Rate`, `RateLevels`, `AllowMCT`,
-  `UpdatePhotometricInterpretation`, and
-  `EncodeSignedPixelValuesAsUnsigned` behavior.
-- The pure parameter type adds managed `Jpeg2000ProgressionOrder`; HTJ2K
-  parameters derive from fo-dicom's HTJ2K type and map core
-  `ProgressionOrder` values to the internal progression enum.
-- Classic JPEG 2000 encoding writes COD progression order, layer count,
-  multiple-component transform use, transform type, and SIZ component
-  signedness from the requested parameters. Multi-layer support must be real
-  packet-layer contribution support: the encoder must distribute code-block
-  passes across quality layers, not only write a larger COD layer count and
-  leave early layers empty.
-- When `TargetRatio` is set for classic JPEG 2000, `NumLayers` creates
-  successively finer rate layers ending at the requested ratio. Lossless
-  target-ratio encoding requires `IncludeFinalLosslessLayer` and appends a
-  final rate-zero layer; without `TargetRatio`, the fo-dicom/OpenJPEG
-  `Rate`/`RateLevels` layer contract remains authoritative. Only exact zero
-  means unset; other values must be finite and greater than one, and the total
-  layer count must fit the 16-bit COD field.
-- `YBR_FULL` and `YBR_FULL_422` input is normalized to RGB before classic MCT.
-  When that normalization occurs, compressed photometric metadata is always
-  updated to `YBR_RCT` or `YBR_ICT` so the tags cannot describe stale source
-  components, even if optional RGB photometric updates are disabled.
-- Classic JPEG 2000 encoding pads an odd-length EOC-terminated codestream with
-  a trailing `00` byte for the DICOM encapsulated item. This padding is outside
-  the logical JPEG 2000 codestream and must not be counted in SOT `Psot` or
-  packet tile-data length.
-- Classic JPEG 2000 lossy encoding uses OpenJPEG-compatible irreversible QCD
-  step-size generation. The managed rate-control must target
-  `DicomJpeg2000Params.Rate` and `RateLevels` using OpenJPEG-compatible
-  quality-layer behavior for the public `fo-dicom.Codecs` contract. Decoded
-  pixels use lossy tolerance, but the `D:\1.dcm` classic JPEG 2000 regression
-  fixture must also compare codestream frame size against the generated
-  `fo-dicom.Codecs`/OpenJPEG baseline.
-- Classic lossy Tier-1 bit-plane depth must be derived from the encoded QCD
-  step-size exponent plus guard bits, matching OpenJPEG's band `numbps`
-  calculation. Do not infer irreversible band depth only from component
-  precision and subband gain; signed 16-bit fixtures expose that error as a
-  large reconstruction offset even when packet truncation is disabled.
-- RGB input is normalized to interleaved component order for encoding and
-  decoded frames are repacked to the target fo-dicom raw layout, including
-  planar RGB targets. Monochrome, RGB, and supported YBR-related photometric
-  interpretations have explicit paths. Classic `YBR_FULL` and
-  `YBR_FULL_422` input is converted through fo-dicom's pixel converter to a
-  complete RGB frame before MCT and is covered by fo-dicom.Codecs/OpenJPEG
-  decode validation; unsupported photometric values fail
-  with managed `DicomCodecException`.
-- Component subsampling and unsupported standard progression orders fail with
-  explicit managed exceptions.
-- JPEG 2000 Part 2 multi-component syntaxes `.92` and `.93`, JPIP, and JPT
-  transfer syntaxes are explicitly outside phase 1 and are not registered by
-  `PureTranscoderManager`.
-
-The project-managed classic encoder writes a raw codestream envelope with SIZ,
-COD, QCD, SOT, SOD, and EOC markers and stores standard-compatible tile data.
-The HTJ2K encoder writes the corresponding HTJ2K codestream envelope with SIZ,
-CAP, COD, QCD, SOT, SOD, and EOC markers and standard Part 15 HT packet data.
-`PureTranscoderManager` registers HTJ2K Lossless, HTJ2K Lossless RPCL, and
-HTJ2K Lossy; JPIP, JPT, JPEG XL, and JPEG 2000 Part 2 multi-component syntaxes
-remain outside phase 1.
-
-The standard reader now honors SOT tile-part lengths before falling back to
-EOC scanning for unknown-length tile-parts, and stops parsing a frame at EOC
-so DICOM item padding is not interpreted as another marker.
-
-The standard decoder applies main-header and tile-header COC/QCC and RGN
-component overrides, with tile component state taking precedence over main-header
-defaults. It applies POC packet ranges in marker order with a shared inclusion
-map, merges PPM/PPT segments by marker index, and reads packed packet headers
-independently from SOD packet bodies. It requires EOC, validates each SIZ
-component precision and signedness against the DICOM pixel metadata, and
-excludes tile-header bytes from the `Psot` tile payload.
-
-Verified DICOM integration coverage includes:
-
-- Multi-frame JPEG 2000 round-trips with frame count preservation.
-- Required DICOM compression tag checks for JPEG 2000 lossless and JPEG 2000
-  lossy.
-- Managed exceptions for invalid JPEG 2000 and HTJ2K codestreams.
-- Pure and Native/OpenJPEG pixel equality for synthetic standard codestreams
-  carrying POC, RGN Maxshift, PPM, and PPT semantics.
-- Efferent JPEG 2000 acceptance sample decode baselines, inverse transcode
-  round-trips for unit and RGB samples, and render smoke tests where rendering
-  dependencies are available.
-- HTJ2K managed round-trips, standard HT block vectors, committed reference
-  fixtures, and process-isolated bidirectional `fo-dicom.Codecs` interoperability
-  for lossless, lossless RPCL, and lossy transfer syntaxes.
-
-## Implementation Risk
-
-This is the highest-risk codec family in phase 1.
-
-Risks:
-
-- Full JPEG 2000 and HTJ2K implementation complexity is high.
-- DICOM datasets may contain progression orders, tile layouts, or marker combinations not covered by initial samples.
-- Lossy tolerance must be defined carefully to avoid false failures.
-- `fo-dicom.Codecs` uses native codec behavior as the compatibility baseline; public parameter semantics must be matched without copying native implementation concepts.
-- The Go JPEG 2000 reference is useful for structure and tests, but its Part 2 support is outside phase 1 and its HTJ2K notes still identify partial VLC and cleanup-pass work.
-- Performance may require iterative optimization after correctness is achieved.
-
-Mitigation:
-
-- Build marker and codestream parser tests first.
-- Add fixtures incrementally.
-- Keep classic JPEG 2000 and HTJ2K entropy paths isolated.
-- Cross-check HTJ2K block coding against OpenJPH or OpenJPEG reference vectors before marking support complete.
-- Prefer correctness over speed until compatibility tests are stable.
+`DicomJpeg2000Params` preserves the public fo-dicom parameter contract for
+`Irreversible`, `Rate`, `RateLevels`, `AllowMCT`,
+`UpdatePhotometricInterpretation`, and
+`EncodeSignedPixelValuesAsUnsigned`. Its managed progression-order value covers
+LRCP, RLCP, RPCL, PCRL, and CPRL. `DicomHtJpeg2000Params` maps fo-dicom's HTJ2K
+parameters; `.202` always enforces RPCL.
+
+For each frame, the adapter validates the DICOM geometry, bit depth, signedness,
+component layout, and frame length; maps them to `Ssiz`; normalizes supported
+RGB/YBR layouts; and repacks decoded samples into fo-dicom's raw frame layout.
+`YBR_FULL` and `YBR_FULL_422` normalize to RGB before classic MCT and update the
+compressed photometric interpretation to `YBR_RCT` or `YBR_ICT`.
+
+## Architecture
+
+The implementation shares JPEG 2000 structural infrastructure, not compatibility
+policy:
+
+| Layer | Shared responsibility | Classic `.90/.91` policy | HTJ2K `.201/.202/.203` policy |
+| --- | --- | --- | --- |
+| Codestream | Marker I/O; SIZ, COD, COC, QCD, QCC, SOT, SOD, EOC, COM; tile, component, precinct and packet models | Classic packet contribution model | HT packet and segment assembly |
+| Transform/quantization | Geometry, subband indexing, QCD syntax and guards | OpenJPEG-observable 5/3, 9/7, QCD, PCRD and rate allocation | OpenJPH-observable normalization, scaling and irreversible quantization |
+| Entropy coding | Bounds checks and model hand-off | EBCOT/MQ Tier-1 | Part 15 MEL, VLC, MagSgn, cleanup and refinement coding |
+| DICOM boundary | Metadata validation, sample conversion, managed exceptions | OpenJPEG-observable public behavior | OpenJPH-observable public behavior |
+
+Shared code must not erase the split. Classic and HTJ2K maintain separate
+transform entry points, precision rules, rate/allocation behavior, packet policy,
+and block coding. A change to shared code requires the classic reference gates
+and all three HTJ2K reference gates.
+
+Encoding follows: validate and normalize input; level shift; optional RCT/ICT;
+reversible or irreversible DWT; quantization when lossy; tile/precinct/code-block
+partitioning; family-specific block encoding; packet/marker writing; DICOM frame
+encapsulation. Decoding performs the inverse stages after bounded marker, tile,
+packet and block parsing.
+
+## Compatibility and Reference Boundary
+
+The behavioral baseline is `fo-dicom.Codecs` through its public C# API:
+
+- Classic `.90/.91` behavior is referred to as OpenJPEG-compatible; HTJ2K
+  `.201/.202/.203` behavior is referred to as OpenJPH-compatible. These names
+  describe observed behavior, never a production dependency.
+- Production remains managed C# only: no P/Invoke, native codec DLL, native
+  fallback, native resolver, or runtime library selection.
+- OpenJPEG/OpenJPH source may be read for algorithm, parameter, control-flow,
+  and behavioral research. It must not be copied, translated, vendored,
+  compiled, linked, loaded, or executed by production code, tests, or tools.
+- Reference tests and tools use normal `PackageReference` to `fo-dicom` and
+  `fo-dicom.Codecs`. They do not use local upstream project/assembly references,
+  `HintPath`, DLL replacement, or identity/provenance checks.
+- Native/reference operations run only in bounded child processes. A worker's
+  result is its public API behavior; package version, commit, assembly metadata,
+  `.deps.json`, and environment switches must not classify, skip, or alter a row.
+
+Classic lossy alignment proceeds from DICOM sample mapping through DWT, QCD,
+Tier-1 pass rate/distortion accounting, PCRD allocation, and Tier-2 packet
+writing. Final codestream bytes are a terminal signal, not a substitute for
+those stages. Multi-layer output requires actual early-layer packet
+contributions. A DICOM encapsulation padding byte after EOC is outside the
+logical codestream and is not included in `Psot`.
+
+## Validation and Error Handling
+
+The decoder supports the Phase 1 marker and coding features covered by fixtures,
+including POC progression changes, RGN Maxshift, PPM/PPT packed packet headers,
+SOP/EPH packet markers, and RESET/VSC classic code-block styles. HTJ2K rejects
+unsupported RGN and PPM/PPT semantics.
+
+Malformed marker lengths, missing required markers, invalid tile/packet bounds,
+unsupported precision or layout, invalid progression/rate parameters, and
+unsupported codestream features produce `DicomCodecException` with the transfer
+syntax, operation, frame, and tile/component/marker context where known.
+
+Validation has three independent layers:
+
+1. Managed unit and DICOM integration tests cover markers, transforms,
+   quantization, block coding, progression order, invalid input, tags, frame
+   counts, lossless exact samples, and fixed lossy tolerances.
+2. Committed fixtures exercise standard external codestream decoding and
+   reference-produced HT block vectors.
+3. Process-isolated workers compare complete DICOM datasets through public
+   `fo-dicom.Codecs` APIs in both directions. Lossless assertions are exact;
+   lossy assertions use the pre-measured fixed tolerance.
+
+## Recorded Verification and Open Release Gate
+
+The 2026-08-25 source/test audit recorded a full Release suite of `902/902`
+passing and no skipped tests. The same audit recorded `104/112` passing rows in
+the 12-format complete-dataset interoperability matrix: 4 workers passed and 8
+failed. All eight failures are the seven-frame `sample-05.dcm` Pure-to-reference
+decode path at frame 1; the corresponding reference-to-Pure rows pass.
+
+This result proves neither a Pure codec defect nor release readiness. The public
+reference decoder returns oversized pooled buffers for those complete-dataset
+rows, whereas the declared frame size is exact. Per-frame extraction is allowed
+only to diagnose the failure; it is not an acceptance substitute. Do not add
+output reconstruction, frame splitting, package checks, or failure downgrades.
+
+The gate closes only when an ordinarily restored public `fo-dicom.Codecs`
+package passes every complete-dataset row, including `.201`, `.202`, and `.203`,
+in both directions. At that point rerun the unchanged worker matrix, focused
+JPEG 2000/HTJ2K tests, full Release suite, package inspection, and consumer smoke
+tests before claiming Phase 1 completion.
+
+## Maintenance Rules
+
+Do not create a second JPEG 2000 design, alignment handoff, or optimization
+checklist. Keep enduring design and current release-gate facts here; record
+cross-codec active remediation only in
+[fo-dicom.Codecs Alignment Remediation](../development/fo-dicom-codecs-alignment-remediation.md).
+Historical benchmark measurements and resolved tool-compression investigations
+are intentionally not retained as living requirements. Start future performance
+work only from a new measured hotspot after the affected reference gate is
+stable.
