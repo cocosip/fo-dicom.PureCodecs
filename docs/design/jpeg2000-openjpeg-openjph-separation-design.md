@@ -83,9 +83,9 @@ The 2026-08-24 review established the following baseline before repair:
 
 The alignment work after that baseline now verifies:
 
-- Default RGB `.203` output matches the current `fo-dicom.Codecs 6.0.0-beta1`
-  logical codestream exactly. The repair is confined to HT normalized float
-  sample import and OpenJPH-compatible ICT operation order.
+- The HT normalized float sample import and ICT operation order repair remains
+  covered by production codec tests. The former EOC-trimmed `.203` byte
+  comparison is no longer a valid interoperability gate.
 - Classic `.90/.91` encoding remains on the existing OpenJPEG-compatible path;
   the classic focused regression gate passes after the HT arithmetic changes.
 - HT parameters reject unsupported `NumLayers` and invalid `TargetRatio` values
@@ -94,24 +94,15 @@ The alignment work after that baseline now verifies:
   `BitsStored`; HT alone may accept 12-in-16 SIZ precision. Reversible samples
   outside the declared stored range are rejected, while irreversible
   reconstruction overshoot is clipped to the declared range.
-- Reference manifests compare provenance, effective parameters, frame count,
-  frame indexes, raw/codestream/decoded hashes, logical length, markers, and
-  tile-part count. Pure manifests are built independently from Pure data.
+- Reference manifests contain transfer syntax, frame count, frame indexes, raw
+  frame hashes, public encoded-frame hashes/lengths, and decoded-frame hashes.
 - Reference and Native HTJ2K operations run in bounded child processes with
   redirected output, a 120-second timeout, nonzero propagation, and process-tree
   termination.
 - Complete `.201/.202/.203` multi-frame calls are covered in both directions.
-  Native-to-Pure decoding is byte-exact for `.201/.202` and within tolerance 8
-  for `.203`. With the current `fo-dicom.Codecs 6.0.0-beta1`, Pure-to-native
-  complete decoding
-  first differs at frame 1 byte 32400 for `.201/.202` and byte 31312 for
-  `.203`, while the same Pure codestreams decode correctly one frame per native
-  call. This is an upstream `ArrayPool<byte>` ownership defect retained by the
-  beta package: the wrapper returns
-  an array to the pool after handing it to the output buffer. Upstream commit
-  `56a2da0155fa5c1123761b6c0520279baa811183` copies each frame before return.
-  The defect is retained only as a process-isolated characterization of the
-  old wrapper and is not copied into PureCodecs.
+  Native-to-Pure passes; all three Pure-to-Native rows currently fail on frame
+  1. They remain ordinary failed rows and are not reclassified by dependency
+  version, commit, or single-frame diagnostics.
 
 The investigation then confirmed these separate defects:
 
@@ -153,44 +144,31 @@ SOT lengths.
 The two remaining RGB codestream byte differences were traced to HT input
 normalization and ICT operation order. The HT-only color transform now
 normalizes each source sample before applying the OpenJPH-compatible formulas.
-The deterministic RGB output matches the 3369-byte reference logical
-codestream exactly; classic JPEG 2000 color handling is unchanged.
+The prior trimmed comparison matched a 3369-byte logical codestream. That result
+is historical diagnostic evidence only; the current public-frame gate does not
+trim reference output. Classic JPEG 2000 color handling is unchanged.
 
-## Current Verification (2026-08-24)
+## Current Verification (2026-08-25)
 
-- Focused HTJ2K tests: 103 passed, 0 failed.
-- Focused classic JPEG 2000 tests: 78 passed, 0 failed, using the documented
-  classic, external-acceptance, and standard-internal class filters.
-- Full Release suite: 814 passed, 0 failed.
+- Full Release suite: 806 passed, 0 failed, 0 skipped.
 - Release build: 0 warnings and 0 errors.
-- `.201`, `.202`, and `.203` workers each passed five fixtures in both reported
-  directions. The seven-frame fixture is covered in both complete-call
-  directions; the current beta package's reverse wrapper characterization is
-  isolated to the known pooled-buffer defect above.
-- The complete 12-format interoperability matrix passed with 0 failed workers.
+- The complete 12-format interoperability matrix returned nonzero: 4 workers
+  passed, 8 failed, with 104 of 112 complete-dataset direction rows passing.
+- `.201`, `.202`, and `.203` Native-to-Pure rows pass. Their Pure-to-Native
+  seven-frame rows fail on frame 1 and remain failed.
 - Modern and .NET Framework 4.7.2 smoke applications passed using direct
   project references.
 - `FoDicom.PureCodecs.0.4.0.nupkg` contains only the five managed production
   assemblies under `lib/netstandard2.0` and no runtime or native codec payload.
 
-### Upstream package caveat
+### Reference package boundary
 
-The repository restores `fo-dicom 5.2.6` and the minimum package range
-`fo-dicom.Codecs [6.0.0-beta1,)`; the version resolved for this snapshot is
-`6.0.0-beta1`, release commit `fc2df0efaa9acdee7b3640f821665107630933e8`,
-with codestream-reported OpenJPH `0.30.1`. This beta still exhibits the
-pooled-buffer defect associated with upstream fix commit `56a2da0`. The
-reproducible gate
-`eng/Verify-Htj2kUpstreamMultiframe.ps1` restores a minimum package range
-through normal NuGet `PackageReference`, enables the strict behavior flag, and
-requires all three Pure-to-native complete decode cases. The default minimum is
-`6.0.0-beta1`; exact DLL paths, source references, and exact commit locks are not
-accepted. Passing the version check is insufficient without passing the
-behavioral gate. The package-based strict gate remains pending because the
-currently resolved beta does not pass it. The other direction is covered by
-three complete native-encode-to-Pure-decode cases, which pass 3/3. The current
-package's known decode-wrapper failure must remain
-documented rather than treated as a Pure codec failure.
+Reference projects restore `fo-dicom.Codecs` through normal NuGet
+`PackageReference` and call only its public C# API. Validation does not inspect
+the resolved package version, release commit, assembly metadata, codestream
+implementation version, or `.deps.json`. Complete-dataset behavior is the only
+gate: each direction either passes its pixel, frame, and tag assertions or fails
+with a nonzero worker exit.
 
 ## Required Separation Matrix
 
@@ -324,8 +302,9 @@ Exact output failures are diagnosed in this order:
 7. Marker values and complete logical codestream bytes.
 8. Decoded sample metrics.
 
-Tests and tools must build Pure manifests independently. Cloning an expected
-manifest and replacing only the codestream hash can conceal semantic drift.
+Reference tools record only public reference artifacts. Production codec tests
+may inspect Pure internal stages for algorithm diagnosis, but interoperability
+results come only from complete public-path behavior.
 
 ## Development Sequence
 
@@ -356,10 +335,9 @@ manifest and replacing only the codestream hash can conceal semantic drift.
 
 ### Phase 4: Reference Infrastructure
 
-- Compare every manifest semantic field, including raw hash, decoded hash,
-  logical length, effective parameters, marker summary, metrics, and provenance.
-- Read the loaded reference assembly version and codestream-reported OpenJPH
-  version instead of trusting hard-coded labels.
+- Compare every behavioral manifest field, including transfer syntax, raw hash,
+  decoded hash, logical length, effective parameters, marker summary, and metrics.
+- Do not inspect dependency or implementation versions to classify behavior.
 - Isolate every Native operation in a bounded worker process.
 - Validate multi-frame input with one complete codec call per direction.
 
@@ -426,10 +404,6 @@ dotnet run --project tools/fo-dicom.PureCodecs.InteropValidation `
 dotnet run --project tools/fo-dicom.PureCodecs.InteropValidation `
   -c Release --no-build -- --parallel 4 --worker-timeout-seconds 300
 
-.\eng\Verify-Htj2kUpstreamMultiframe.ps1 `
-  -MinimumFoDicomCodecsVersion 6.0.0-beta1 `
-  -PackageSource <NUGET_PACKAGE_SOURCE>
-
 .\eng\Verify-PackageConsumerSmoke.ps1 -RequireNet472
 ```
 
@@ -465,12 +439,10 @@ independent manifests, bounded workers, and classic `.90/.91` behavior. Do not
 widen tolerances, patch output bytes, or rely on Pure self-roundtrip as external
 compatibility evidence.
 
-Continue only the unchecked checklist and final gates. Keep the documented
-`fo-dicom.Codecs 6.0.0-beta1` pooled-buffer difference separate from Pure codec
-correctness. Use `eng/Verify-Htj2kUpstreamMultiframe.ps1` with a complete NuGet
-package containing upstream fix `56a2da0` for the strict three-case
-native-decode gate, and run the three native-encode-to-Pure-decode
-complete-call cases separately.
+Continue only the unchecked checklist and final gates. Run the process-isolated
+interop matrix with normally restored packages; do not classify failures by
+package version or commit. Run both complete-call directions and leave every
+failed row failed.
 Report exact commands, counts, failures, and any gate that could not run. Do
 not claim completion while a required gate is failing or unexecuted.
 ```
@@ -498,7 +470,7 @@ The separation work is complete only when:
   policies have explicit entry points or strategy ownership.
 - No shared default silently selects OpenJPEG behavior for HTJ2K or OpenJPH
   behavior for classic JPEG 2000.
-- All manifest and provenance comparisons are independent and complete.
+- All behavioral manifest comparisons are independent and complete.
 - Native tests are process-isolated and real multi-frame calls are covered.
 - Focused tests, full tests, Release build, worker matrix, consumer smoke tests,
   and package inspection pass.

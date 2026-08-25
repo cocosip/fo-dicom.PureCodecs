@@ -1,5 +1,3 @@
-using System.Reflection;
-using System.Reflection.Emit;
 using System.Text.Json;
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
@@ -12,7 +10,7 @@ namespace FellowOakDicom.PureCodecs.Tests;
 public sealed class Htj2kReferenceWorkerTests
 {
     [Fact]
-    public async Task Reference_worker_writes_versioned_lossless_manifest_for_each_frame()
+    public void Reference_worker_writes_public_codec_artifacts_for_each_frame()
     {
         var directory = Path.Combine(Path.GetTempPath(), "purecodecs-htj2k-reference-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -28,61 +26,23 @@ public sealed class Htj2kReferenceWorkerTests
             Assert.True(result.ExitCode == 0, result.StandardError);
             var manifest = JsonSerializer.Deserialize<Htj2kReferenceManifest>(File.ReadAllText(manifestPath));
             Assert.NotNull(manifest);
-            Assert.Equal("6.0.0-beta1", manifest.ReferencePackageVersion);
-            Assert.Equal("fc2df0efaa9acdee7b3640f821665107630933e8", manifest.ReferenceReleaseCommit);
-            Assert.Equal("0.30.1", manifest.CodestreamReportedOpenJphVersion);
             Assert.Equal(DicomTransferSyntax.HTJ2KLossless.UID.UID, manifest.TransferSyntaxUid);
             Assert.Equal(1, manifest.FrameCount);
-            Assert.Equal(new Htj2kReferenceParameters("RPCL", true, true, 8), manifest.EffectiveParameters);
             Assert.Single(manifest.Frames);
             Assert.All(manifest.Frames, frame =>
             {
                 Assert.Equal(64, frame.RawFrameSha256.Length);
-                Assert.Equal(64, frame.CodestreamSha256.Length);
+                Assert.Equal(64, frame.EncodedFrameSha256.Length);
                 Assert.Equal(64, frame.DecodedFrameSha256.Length);
-                Assert.True(frame.LogicalCodestreamLength > 2);
-                Assert.Contains("FFD9", frame.MarkerSummary.MarkerCodes);
+                Assert.True(frame.EncodedFrameLength > 2);
                 Assert.True(File.Exists(Path.Combine(directory, frame.FrameIndex + ".j2c")));
             });
+            Assert.True(File.Exists(Path.Combine(directory, "reference.dcm")));
         }
         finally
         {
             Directory.Delete(directory, recursive: true);
         }
-    }
-
-    [Fact]
-    public void Reference_provenance_accepts_a_newer_package_and_records_its_actual_commit()
-    {
-        var provenance = Htj2kReferenceProvenanceReader.ReadAndValidate(
-            CreateAssemblyWithInformationalVersion("6.1.0+newer-commit"),
-            minimumPackageVersion: "6.0.0");
-
-        Assert.Equal("6.1.0", provenance.PackageVersion);
-        Assert.Equal("newer-commit", provenance.ReleaseCommit);
-    }
-
-    [Fact]
-    public void Reference_provenance_rejects_a_package_below_the_supported_range()
-    {
-        var exception = Assert.Throws<InvalidDataException>(() =>
-            Htj2kReferenceProvenanceReader.ReadAndValidate(
-                CreateAssemblyWithInformationalVersion(
-                    "5.16.7+older-commit"),
-                minimumPackageVersion: "6.0.0"));
-
-        Assert.Contains("minimum", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Reference_provenance_rejects_an_earlier_prerelease_of_the_same_version()
-    {
-        var exception = Assert.Throws<InvalidDataException>(() =>
-            Htj2kReferenceProvenanceReader.ReadAndValidate(
-                CreateAssemblyWithInformationalVersion("6.0.0-alpha1+older-prerelease"),
-                minimumPackageVersion: "6.0.0-beta1"));
-
-        Assert.Contains("minimum", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -94,7 +54,7 @@ public sealed class Htj2kReferenceWorkerTests
 
         Assert.False(result.TimedOut);
         Assert.NotEqual(0, result.ExitCode);
-        Assert.Contains("HTJ2K_REFERENCE|fail", result.StandardError);
+        Assert.Contains("HTJ2K_REFERENCE|failed", result.StandardError);
     }
 
     [Fact]
@@ -193,16 +153,6 @@ public sealed class Htj2kReferenceWorkerTests
             "--output", outputPath,
             "--syntax", syntax
         });
-    }
-
-    private static Assembly CreateAssemblyWithInformationalVersion(string informationalVersion)
-    {
-        var assembly = AssemblyBuilder.DefineDynamicAssembly(
-            new AssemblyName("HtJ2kReferenceProvenanceTest" + Guid.NewGuid().ToString("N")),
-            AssemblyBuilderAccess.Run);
-        var constructor = typeof(AssemblyInformationalVersionAttribute).GetConstructor(new[] { typeof(string) })!;
-        assembly.SetCustomAttribute(new CustomAttributeBuilder(constructor, new object[] { informationalVersion }));
-        return assembly;
     }
 
     private static bool IsNativeCodecsAssemblyLoaded()

@@ -51,10 +51,13 @@ Future implementation work must follow that document unless the user explicitly 
   compatibility research only. To validate a local upstream change, first
   produce a complete NuGet package and consume it from a package source through
   normal restore.
-- Define supported `fo-dicom.Codecs` dependencies as a minimum version range,
-  not one exact version or commit. Record the actually resolved package version
-  and provenance in reference output, and require behavior tests to pass;
-  version eligibility alone is never compatibility evidence.
+- The `fo-dicom.Codecs` version in central package management exists only for
+  ordinary NuGet restore. Do not add supported-version ranges, package-version
+  checks, commit/provenance checks, assembly metadata checks, `.deps.json`
+  inspection, or environment-variable switches to compatibility tooling.
+- Compatibility results must be determined only by behavior through the public
+  codec APIs. Package or runtime identity must not be recorded in reference
+  output and must not classify, skip, downgrade, or otherwise alter a result.
 
 ## Assembly Split
 

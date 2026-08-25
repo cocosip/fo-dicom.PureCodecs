@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.PureCodecs.Jpeg2000;
@@ -12,7 +11,7 @@ namespace FellowOakDicom.PureCodecs.Tests;
 public sealed class Htj2kDisplayValidationToolTests
 {
     [Fact]
-    public void Validation_tool_reports_codestream_native_decode_and_render_fingerprint()
+    public void Validation_tool_uses_complete_dataset_decode_and_writes_the_decoded_dicom()
     {
         var directory = Path.Combine(Path.GetTempPath(), "purecodecs-htj2k-validation-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -32,13 +31,10 @@ public sealed class Htj2kDisplayValidationToolTests
             var result = RunValidationTool(sourcePath, compressedPath, outputDirectory);
 
             Assert.True(result.ExitCode == 0, result.Output);
-            Assert.Contains("STRUCTURE|ok", result.Output);
-            Assert.Contains("NATIVE-DECODE|ok|maxDiff=0", result.Output);
-            Assert.Contains("RENDER|ok", result.Output);
-            Assert.Matches(new Regex("sourceHash=[0-9A-F]{64}"), result.Output);
-            Assert.Matches(new Regex("decodedHash=[0-9A-F]{64}"), result.Output);
-            Assert.True(File.Exists(Path.Combine(outputDirectory, "source.bmp")));
-            Assert.True(File.Exists(Path.Combine(outputDirectory, "decoded.bmp")));
+            Assert.Contains("VALIDATION|passed|maxDiff=0", result.Output);
+            Assert.True(File.Exists(Path.Combine(outputDirectory, "decoded.dcm")));
+            Assert.False(File.Exists(Path.Combine(outputDirectory, "source.bmp")));
+            Assert.False(File.Exists(Path.Combine(outputDirectory, "decoded.bmp")));
         }
         finally
         {

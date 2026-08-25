@@ -18,19 +18,17 @@ This document records compatibility edges that are intentionally outside the pha
 - JPEG 2000 JP2 wrapper frames are detected and rejected unless a raw J2K codestream is supplied.
 - JPEG 2000 decoding supports POC progression changes, RGN Maxshift, and PPM/PPT packed packet headers for classic codestreams. The managed encoder still emits LRCP without ROI or packed packet headers; component subsampling remains unsupported.
 - HTJ2K decoding does not currently accept RGN or PPM/PPT semantics.
-- `fo-dicom.Codecs 6.0.0-beta1` complete-dataset decode of the bundled 12-bit
-  multi-frame fixture differs at frame 1 byte 32400 for Pure `.201/.202`
-  output. Each identical Pure codestream decodes byte-exact through an
-  individual native call, and complete native-to-Pure decoding is byte-exact;
-  this is tracked as a reference wrapper limitation rather than a managed
-  codestream defect.
+- Public reference complete-dataset decode of the bundled 12-bit multi-frame
+  fixture currently fails for Pure `.201/.202/.203` output on frame 1. The
+  process-isolated worker reports ordinary failures and exits nonzero; no
+  package-version classification or single-frame replacement is applied.
 
 ## Fixture Availability
 
 - The Efferent acceptance fixture set included in the test support data does not
   include HTJ2K compressed DICOM samples. The process-isolated interoperability
   runner nevertheless exercises HTJ2K `.201`, `.202`, and `.203` against the
-  public `fo-dicom.Codecs` 6.0.0-beta1 API using the bundled raw DICOM fixtures.
+  public `fo-dicom.Codecs` API using the bundled raw DICOM fixtures.
   Completion remains gated on the exact reference and bidirectional rows listed
   in the development checklist.
 - The Efferent unit fixture matrix is represented by the available 8-bit and 16-bit raw unit samples. Lossy byte tolerance is applied to 8-bit unit samples only; 16-bit lossy behavior is validated by the smaller raw fixture matrix where byte-level tolerance is meaningful.

@@ -17,25 +17,19 @@ reference library's arithmetic or policy on the other family.
 Complete the managed HTJ2K implementation for transfer syntaxes `.201`, `.202`,
 and `.203` by aligning its observable codec behavior with `fo-dicom.Codecs`.
 
-The current deterministic reference baseline is:
-
-- Reference NuGet package: `fo-dicom.Codecs 6.0.0-beta1`
-- Reference release commit: `fc2df0efaa9acdee7b3640f821665107630933e8`
-- Codestream-reported OpenJPH version: `0.30.1`
-
-The package version, release commit, and codestream-reported OpenJPH version
-must be recorded in generated fixture manifests. Runtime reference generation
-accepts a supported version range (`fo-dicom.Codecs >= 6.0.0-beta1`) and records the
-actual provenance; it does not require one exact assembly version or commit.
-If a newer package changes deterministic output, frozen baselines must be
-regenerated and reviewed explicitly rather than silently accepting new output.
+The deterministic reference baseline is the behavior produced through the
+normally restored `fo-dicom.Codecs` public C# API. Generated manifests record
+behavioral evidence only: transfer syntax, effective parameters, frame hashes,
+codestream hashes, decoded hashes, logical lengths, and marker summaries. The
+worker does not inspect package versions, commits, assembly metadata, or
+`.deps.json`, and none of those values can change a compatibility result.
 
 ## Verified Alignment Status (2026-08-24)
 
-- Default `.201`, `.202`, and RGB/monochrome `.203` reference cases have exact
-  logical-codestream alignment with `fo-dicom.Codecs 6.0.0-beta1`.
-- Runtime provenance is read from the loaded package informational version and
-  the codestream COM marker, then checked against the frozen baseline.
+- A prior EOC-trimmed comparison reported exact `.201/.202/.203` codestream
+  alignment. That comparison is no longer a valid gate because validation must
+  not crop the frame exposed by either public API.
+- Runtime package and implementation versions are not inspected or compared.
 - Invalid HT extension parameters fail before frame access, and the 12-in-16
   SIZ precision exception is restricted to the HT decode profile. Reversible
   out-of-range samples are rejected; irreversible reconstruction overshoot is
@@ -43,13 +37,8 @@ regenerated and reviewed explicitly rather than silently accepting new output.
 - All HT native reference calls in the alignment, compatibility, and tool
   regression tests execute in bounded child processes.
 - Complete multi-frame `.201/.202/.203` calls are covered in both directions.
-  Native-to-Pure is exact for lossless and within tolerance 8 for lossy. The
-  current 6.0.0-beta1 wrapper differs only in the Pure-to-native complete call:
-  frame 1 byte 32400 for `.201/.202`, and byte 31312 for `.203`; individual
-  native calls are correct. This is caused by returning pooled arrays after
-  exposing them to output buffers. Upstream commit `56a2da0` copies encoded
-  and decoded frames before returning the arrays. PureCodecs does not reproduce
-  this ownership bug.
+  Native-to-Pure passes; all three Pure-to-Native rows currently fail on frame
+  1 and remain ordinary failed rows with nonzero worker exits.
 
 ## Hard Constraints
 
@@ -70,10 +59,9 @@ regenerated and reviewed explicitly rather than silently accepting new output.
   source or project references to local upstream checkouts are prohibited.
   A local upstream build is eligible only after it is packed as a complete
   NuGet package and restored from a package source.
-- Supported upstream dependencies use a minimum version range and record the
-  actually resolved version. No exact package version or commit is a permanent
-  execution requirement; behavior gates remain mandatory for every resolved
-  version.
+- The centrally managed package version exists only for reproducible NuGet
+  restore. It does not define a supported compatibility range; behavior gates
+  through the public APIs are authoritative.
 - The existing JPEG 2000 family assembly remains the production boundary.
 - Classic JPEG 2000 `.90` and `.91` behavior must not regress.
 - Reference implementation names may appear in tests, tools, fixtures, and
@@ -82,14 +70,15 @@ regenerated and reviewed explicitly rather than silently accepting new output.
 ## Alignment Authority
 
 ISO/IEC 15444-15 is authoritative for the HTJ2K algorithm and codestream
-requirements. The public .NET behavior and generated output of
-`fo-dicom.Codecs 6.0.0-beta1` are the compatibility baseline for DICOM integration,
-transfer-syntax selection, defaults, parameters, and deterministic reference
-codestreams. OpenJPH implementation details are not an implementation source.
+requirements. The public .NET behavior and generated output of the normally
+restored `fo-dicom.Codecs` package are the compatibility baseline for DICOM
+integration, transfer-syntax selection, defaults, parameters, and deterministic
+reference frames. OpenJPH implementation details are not an implementation
+source.
 
-For deterministic default encoding, alignment ends with exact extracted-frame
-codestream equality. Whole DICOM file equality is not required because dataset
-serialization, item padding, and unrelated metadata may differ.
+For deterministic default encoding, alignment ends with exact equality of the
+frame bytes exposed by the public APIs. Validation must not search for EOC or
+trim pooled capacity/padding to manufacture equality.
 
 Incidental native-wrapper defects are not compatibility requirements. In
 particular, the managed implementation must not reject a valid codestream only
@@ -149,7 +138,6 @@ This boundary must not contain DWT, quantization, HT block, or packet logic.
 
 This is test and tooling infrastructure only. It records:
 
-- Reference package version, release commit, and codestream version marker.
 - Input DICOM and extracted raw frame hashes.
 - Effective encoder parameters.
 - `fo-dicom.Codecs` codestream hashes and marker summaries.
@@ -160,11 +148,10 @@ isolated .NET process. Isolation bounds package failures without requiring a
 local OpenJPH build, direct native invocation, custom DLL resolution, or any
 OpenJPH source checkout.
 
-Reference provenance is verified rather than copied from repository constants.
-The worker reads the loaded `fo-dicom.Codecs` assembly version and the OpenJPH
-version reported by the generated codestream. A manifest comparison includes
-the raw-frame hash, codestream hash and logical length, decoded-frame hash or
-lossy metrics, effective parameters, marker summary, and tile-part count.
+The worker does not read or compare dependency versions. A manifest comparison
+includes the transfer syntax, raw-frame hash, codestream hash and logical length,
+decoded-frame hash or lossy metrics, effective parameters, marker summary, and
+tile-part count.
 Pure manifests are constructed independently from Pure output; they are not
 created by copying reference fields. Deterministic reference artifacts are
 versioned, and regeneration never silently accepts new output.
@@ -379,16 +366,11 @@ and decoder once. Per-frame extraction may diagnose a failure but does not
 satisfy the multi-frame gate. Lossy rows record maximum absolute error, MAE,
 PSNR, and compression ratio using the declared precision and signedness.
 
-The executable strict gate is `eng/Verify-Htj2kUpstreamMultiframe.ps1`. It
-restores `fo-dicom.Codecs` through `PackageReference` from the configured NuGet
-sources, with a configurable minimum version defaulting to `6.0.0-beta1`, and then
-requires the three Pure-to-native complete decode cases. Version eligibility
-does not replace the behavioral tests. A prior DLL-replacement probe is
-diagnostic evidence only and is not a valid release gate under this dependency
-boundary. The package-based strict gate remains pending because the current
-`6.0.0-beta1` package does not pass the Pure-to-native complete-call cases. The
-three native-encode-to-Pure-decode complete-call cases pass separately with
-`6.0.0-beta1`.
+The executable gate is the process-isolated interoperability runner. It uses
+normal `PackageReference` restore and requires complete-dataset calls in both
+directions. Any failed row is a normal failure and makes the worker return
+nonzero; version eligibility, failure classification, and DLL replacement are
+not gates.
 
 ## CI and Isolation
 

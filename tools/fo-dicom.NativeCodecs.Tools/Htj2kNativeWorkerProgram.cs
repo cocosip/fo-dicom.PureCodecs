@@ -36,8 +36,6 @@ public static class Htj2kNativeWorkerProgram
         var outputDataset = sourceSyntax == options.TargetSyntax
             ? sourceFile.Dataset.Clone()
             : new DicomTranscoder(sourceSyntax, options.TargetSyntax).Transcode(sourceFile.Dataset);
-        DicomCompressionTool.TrimHtj2kFrames(outputDataset, options.TargetSyntax);
-
         var outputDirectory = Path.GetDirectoryName(options.OutputPath);
         if (string.IsNullOrWhiteSpace(outputDirectory))
         {

@@ -435,16 +435,10 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 
 Multi-frame status: the complete-call test covers all three syntaxes in both
 directions; lossless rows require exact bytes and `.203` uses tolerance 8.
-`fo-dicom.Codecs 6.0.0-beta1` has a known Pure-to-native wrapper defect (frame 1
-byte 32400 for `.201/.202`, byte 31312 for `.203`) caused by returning pooled
-arrays after exposing them to output buffers. Upstream commit `56a2da0` fixes
-the ownership. The strict package-based gate is executable with
-`eng/Verify-Htj2kUpstreamMultiframe.ps1`; it restores a complete NuGet package
-using a version range (default minimum `6.0.0-beta1`) and still requires behavioral
-success. The package-based strict native-decode gate is pending until such a
-package containing the upstream fix is available. The opposite three
-native-encode-to-Pure-decode cases pass with 6.0.0-beta1. Do not copy the beta
-behavior into PureCodecs.
+The process-isolated interoperability runner is the gate. It restores
+`fo-dicom.Codecs` normally and runs complete datasets in both directions. It
+does not inspect package versions, commits, assembly metadata, or `.deps.json`;
+any failed row remains failed and makes the worker exit nonzero.
 
 ### 6.6 JPEG 2000 DICOM Integration
 

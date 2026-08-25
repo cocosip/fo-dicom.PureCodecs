@@ -13,15 +13,8 @@ public sealed class Htj2kReferenceDiffTests
         var expectedFrame = expected.Frames[0];
         var cases = new (string Name, string ExpectedSummary, Htj2kReferenceManifest Actual)[]
         {
-            ("package version", "package version", expected with { ReferencePackageVersion = "5.16.8" }),
-            ("release commit", "release commit", expected with { ReferenceReleaseCommit = "other" }),
-            ("codestream version", "codestream-reported version", expected with { CodestreamReportedOpenJphVersion = "0.22.0" }),
             ("transfer syntax", "transfer syntax", expected with { TransferSyntaxUid = "1.2.840.10008.1.2.4.202" }),
             ("frame count", "frame count", expected with { FrameCount = 2 }),
-            ("effective parameters", "effective parameters", expected with
-            {
-                EffectiveParameters = expected.EffectiveParameters with { ProgressionOrder = "LRCP" }
-            }),
             ("frame index", "frame index", expected with
             {
                 Frames = new[] { expectedFrame with { FrameIndex = 1 } }
@@ -30,37 +23,17 @@ public sealed class Htj2kReferenceDiffTests
             {
                 Frames = new[] { expectedFrame with { RawFrameSha256 = "OTHER" } }
             }),
-            ("codestream hash", "codestream hash", expected with
+            ("encoded frame hash", "encoded frame hash", expected with
             {
-                Frames = new[] { expectedFrame with { CodestreamSha256 = "OTHER" } }
+                Frames = new[] { expectedFrame with { EncodedFrameSha256 = "OTHER" } }
             }),
             ("decoded frame hash", "decoded-frame hash", expected with
             {
                 Frames = new[] { expectedFrame with { DecodedFrameSha256 = "OTHER" } }
             }),
-            ("logical length", "logical codestream length", expected with
+            ("encoded length", "encoded frame length", expected with
             {
-                Frames = new[] { expectedFrame with { LogicalCodestreamLength = 5 } }
-            }),
-            ("marker codes", "marker summary", expected with
-            {
-                Frames = new[]
-                {
-                    expectedFrame with
-                    {
-                        MarkerSummary = expectedFrame.MarkerSummary with { MarkerCodes = new[] { "FF4F", "FF90", "FFD9" } }
-                    }
-                }
-            }),
-            ("tile-part count", "marker summary", expected with
-            {
-                Frames = new[]
-                {
-                    expectedFrame with
-                    {
-                        MarkerSummary = expectedFrame.MarkerSummary with { TilePartCount = 1 }
-                    }
-                }
+                Frames = new[] { expectedFrame with { EncodedFrameLength = 5 } }
             })
         };
 
@@ -100,15 +73,11 @@ public sealed class Htj2kReferenceDiffTests
     private static Htj2kReferenceManifest CreateManifest(string codestreamHash)
     {
         return new Htj2kReferenceManifest(
-            "6.0.0-beta1",
-            "fc2df0efaa9acdee7b3640f821665107630933e8",
-            "0.30.1",
             "1.2.840.10008.1.2.4.201",
             1,
-            new Htj2kReferenceParameters("RPCL", true, true, 8),
             new[]
             {
-                new Htj2kReferenceFrame(0, "RAW", codestreamHash, "DECODED", 4, new Htj2kMarkerSummary(new[] { "FF4F", "FFD9" }, 0))
+                new Htj2kReferenceFrame(0, "RAW", codestreamHash, "DECODED", 4)
             });
     }
 }

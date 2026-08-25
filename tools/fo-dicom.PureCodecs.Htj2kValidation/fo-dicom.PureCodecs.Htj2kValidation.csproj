@@ -10,6 +10,5 @@
   <ItemGroup>
     <PackageReference Include="fo-dicom" />
     <PackageReference Include="fo-dicom.Codecs" />
-    <ProjectReference Include="..\..\src\fo-dicom.PureCodecs.Jpeg2000\fo-dicom.PureCodecs.Jpeg2000.csproj" />
   </ItemGroup>
 </Project>

@@ -1,7 +1,6 @@
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
-using FellowOakDicom.IO.Buffer;
 using FellowOakDicom.PureCodecs.Jpeg2000.Internal;
 using FellowOakDicom.PureCodecs.Tests.TestSupport;
 using Xunit;
@@ -166,74 +165,6 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
         Assert.True(
             lossyPixelData.GetFrame(0).Size < losslessPixelData.GetFrame(0).Size,
             $"HTJ2K lossy frame should be smaller than lossless. Lossy={lossyPixelData.GetFrame(0).Size}, lossless={losslessPixelData.GetFrame(0).Size}.");
-    }
-
-    [Theory]
-    [InlineData("201", null)]
-    [InlineData("202", null)]
-    [InlineData("203", 8)]
-    public void Htj2k_complete_multiframe_native_decode_is_exact_or_isolated_to_known_reference_pooling_defect(
-        string syntaxArgument,
-        int? tolerance)
-    {
-        var sourceFrames = DecodeSample05ToRaw();
-        var syntax = syntaxArgument switch
-        {
-            "201" => DicomTransferSyntax.HTJ2KLossless,
-            "202" => DicomTransferSyntax.HTJ2KLosslessRPCL,
-            "203" => DicomTransferSyntax.HTJ2K,
-            _ => throw new ArgumentOutOfRangeException(nameof(syntaxArgument))
-        };
-        IDicomCodec codec = syntaxArgument switch
-        {
-            "201" => new PureHtJpeg2000LosslessCodec(),
-            "202" => new PureHtJpeg2000LosslessRpclCodec(),
-            "203" => new PureHtJpeg2000LossyCodec(),
-            _ => throw new ArgumentOutOfRangeException(nameof(syntaxArgument))
-        };
-        var pureCompressedDataset = CloneForTransferSyntax(sourceFrames.Dataset, syntax);
-        var pureCompressed = DicomPixelData.Create(pureCompressedDataset, true);
-        codec.Encode(sourceFrames, pureCompressed, codec.GetDefaultParameters());
-
-        var completeDecoded = DicomPixelData.Create(
-            NativeTranscode(pureCompressedDataset, DicomTransferSyntax.ExplicitVRLittleEndian));
-        var frameScopedDataset = CloneForTransferSyntax(sourceFrames.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian);
-        var frameScopedDecoded = DicomPixelData.Create(frameScopedDataset, true);
-
-        for (var frameIndex = 0; frameIndex < sourceFrames.NumberOfFrames; frameIndex++)
-        {
-            var compressedFrame = ExtractSingleFrame(pureCompressed, frameIndex, syntax);
-            var decodedFrame = DicomPixelData.Create(
-                NativeTranscode(compressedFrame.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian));
-            frameScopedDecoded.AddFrame(new MemoryByteBuffer(decodedFrame.GetFrame(0).Data));
-        }
-
-        if (tolerance.HasValue)
-        {
-            PixelDataAssertions.FramesMatchWithinTolerance(sourceFrames, frameScopedDecoded, tolerance.Value);
-        }
-        else
-        {
-            AssertFramesMatchExactlyWithLocation(sourceFrames, frameScopedDecoded);
-        }
-
-        var difference = FindFirstDifference(frameScopedDecoded, completeDecoded);
-        if (string.Equals(
-                Environment.GetEnvironmentVariable("PURECODECS_REQUIRE_FIXED_HTJ2K_MULTIFRAME"),
-                "1",
-                StringComparison.Ordinal))
-        {
-            Assert.True(
-                difference is null,
-                $"The fixed fo-dicom.Codecs wrapper still differs at frame {difference?.FrameIndex}, byte {difference?.ByteOffset}.");
-            return;
-        }
-
-        if (difference is not null)
-        {
-            Assert.Equal(1, difference.Value.FrameIndex);
-            Assert.Equal(syntaxArgument == "203" ? 31312 : 32400, difference.Value.ByteOffset);
-        }
     }
 
     [Theory]
@@ -488,37 +419,4 @@ public sealed class Jpeg2000HtNativeCompatibilityTests
         }
     }
 
-    private static (int FrameIndex, int ByteOffset)? FindFirstDifference(
-        DicomPixelData expected,
-        DicomPixelData actual)
-    {
-        Assert.Equal(expected.NumberOfFrames, actual.NumberOfFrames);
-        for (var frameIndex = 0; frameIndex < expected.NumberOfFrames; frameIndex++)
-        {
-            var expectedFrame = expected.GetFrame(frameIndex).Data;
-            var actualFrame = actual.GetFrame(frameIndex).Data;
-            Assert.Equal(expectedFrame.Length, actualFrame.Length);
-            for (var offset = 0; offset < expectedFrame.Length; offset++)
-            {
-                if (expectedFrame[offset] != actualFrame[offset])
-                {
-                    return (frameIndex, offset);
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private static DicomPixelData ExtractSingleFrame(
-        DicomPixelData source,
-        int frameIndex,
-        DicomTransferSyntax syntax)
-    {
-        var dataset = CloneForTransferSyntax(source.Dataset, syntax);
-        var singleFrame = DicomPixelData.Create(dataset, true);
-        singleFrame.NumberOfFrames = 0;
-        singleFrame.AddFrame(new MemoryByteBuffer(source.GetFrame(frameIndex).Data));
-        return singleFrame;
-    }
 }

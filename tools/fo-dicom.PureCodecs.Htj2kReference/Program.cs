@@ -3,6 +3,7 @@ using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 using FellowOakDicom.Imaging.NativeCodec;
+using FellowOakDicom.IO.Buffer;
 using FellowOakDicom.PureCodecs.Htj2kReference;
 
 return Htj2kReferenceWorkerProgram.Run(args);
@@ -16,12 +17,12 @@ public static class Htj2kReferenceWorkerProgram
             DelayForWorkerContractTest(args);
             var options = Options.Parse(args);
             WriteReference(options);
-            Console.WriteLine("HTJ2K_REFERENCE|ok");
+            Console.WriteLine("HTJ2K_REFERENCE|passed");
             return 0;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            Console.Error.WriteLine($"HTJ2K_REFERENCE|fail|{exception.GetType().Name}: {exception.Message}");
+            Console.Error.WriteLine($"HTJ2K_REFERENCE|failed|{exception.GetType().Name}: {exception.Message}");
             return 1;
         }
     }
@@ -50,6 +51,13 @@ public static class Htj2kReferenceWorkerProgram
 
     private static void WriteReference(Options options)
     {
+        new DicomSetupBuilder()
+            .RegisterServices(services => services
+                .AddFellowOakDicom()
+                .AddTranscoderManager<NativeTranscoderManager>())
+            .SkipValidation()
+            .Build();
+
         var sourceFile = DicomFile.Open(options.InputPath, FileReadOption.ReadAll);
         var source = DicomPixelData.Create(sourceFile.Dataset);
         if (source.Syntax.IsEncapsulated)
@@ -57,9 +65,9 @@ public static class Htj2kReferenceWorkerProgram
             throw new InvalidDataException("HTJ2K reference input must have uncompressed PixelData.");
         }
 
-        var codec = CreateCodec(options.TransferSyntax);
-        var compressed = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, codec.TransferSyntax), true);
-        codec.Encode(source, compressed, codec.GetDefaultParameters());
+        var compressedDataset = new DicomTranscoder(source.Syntax, options.TransferSyntax)
+            .Transcode(sourceFile.Dataset);
+        var compressed = DicomPixelData.Create(compressedDataset);
         if (source.NumberOfFrames != compressed.NumberOfFrames)
         {
             throw new InvalidDataException("HTJ2K reference codec did not preserve frame count.");
@@ -72,117 +80,52 @@ public static class Htj2kReferenceWorkerProgram
         }
 
         Directory.CreateDirectory(outputDirectory);
-        var encodedFrames = new List<EncodedFrame>(source.NumberOfFrames);
+        new DicomFile(compressedDataset).Save(Path.Combine(outputDirectory, "reference.dcm"));
+
+        var encodedFrames = new byte[source.NumberOfFrames][];
         for (var frameIndex = 0; frameIndex < source.NumberOfFrames; frameIndex++)
         {
-            var rawFrame = source.GetFrame(frameIndex).Data;
-            var compressedFrame = compressed.GetFrame(frameIndex);
-            var logicalCodestream = ExtractLogicalCodestream(compressedFrame, frameIndex);
-            File.WriteAllBytes(Path.Combine(outputDirectory, frameIndex + ".j2c"), logicalCodestream);
-            encodedFrames.Add(new EncodedFrame(
-                rawFrame,
-                logicalCodestream,
-                Htj2kReferenceManifestBuilder.ReadMarkerSummary(logicalCodestream)));
+            encodedFrames[frameIndex] = ReadFrameBytes(compressed.GetFrame(frameIndex));
+            File.WriteAllBytes(Path.Combine(outputDirectory, frameIndex + ".j2c"), encodedFrames[frameIndex]);
         }
 
-        var decoded = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian), true);
-        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
+        var decodedDataset = new DicomTranscoder(
+                options.TransferSyntax,
+                DicomTransferSyntax.ExplicitVRLittleEndian)
+            .Transcode(compressedDataset);
+        var decoded = DicomPixelData.Create(decodedDataset);
         if (source.NumberOfFrames != decoded.NumberOfFrames)
         {
             throw new InvalidDataException("HTJ2K reference codec did not preserve decoded frame count.");
         }
 
-        var frames = new List<Htj2kReferenceFrame>(source.NumberOfFrames);
+        var frames = new Htj2kReferenceFrame[source.NumberOfFrames];
         for (var frameIndex = 0; frameIndex < source.NumberOfFrames; frameIndex++)
         {
-            var encodedFrame = encodedFrames[frameIndex];
-            var decodedFrame = decoded.GetFrame(frameIndex).Data;
-            frames.Add(new Htj2kReferenceFrame(
+            var rawFrame = ReadFrameBytes(source.GetFrame(frameIndex));
+            var decodedFrame = ReadFrameBytes(decoded.GetFrame(frameIndex));
+            frames[frameIndex] = new Htj2kReferenceFrame(
                 frameIndex,
-                Htj2kReferenceManifestBuilder.ComputeSha256(encodedFrame.RawFrame),
-                Htj2kReferenceManifestBuilder.ComputeSha256(encodedFrame.LogicalCodestream),
+                Htj2kReferenceManifestBuilder.ComputeSha256(rawFrame),
+                Htj2kReferenceManifestBuilder.ComputeSha256(encodedFrames[frameIndex]),
                 Htj2kReferenceManifestBuilder.ComputeSha256(decodedFrame),
-                encodedFrame.LogicalCodestream.Length,
-                encodedFrame.MarkerSummary));
-        }
-
-        var dependencyManifestPath = Path.ChangeExtension(
-            typeof(Htj2kReferenceWorkerProgram).Assembly.Location,
-            ".deps.json");
-        var resolvedPackageVersion = Htj2kReferencePackageVersionReader.ReadResolvedVersion(
-            dependencyManifestPath,
-            "fo-dicom.Codecs");
-        var provenance = Htj2kReferenceProvenanceReader.ReadAndValidate(
-            codec.GetType().Assembly,
-            resolvedPackageVersion);
-        var codestreamReportedVersion = Htj2kReferenceManifestBuilder.ReadCodestreamReportedOpenJphVersion(
-            encodedFrames[0].LogicalCodestream);
-        var effectiveParameters = Htj2kReferenceManifestBuilder.ReadEffectiveParameters(encodedFrames[0].LogicalCodestream);
-        foreach (var encodedFrame in encodedFrames)
-        {
-            if (Htj2kReferenceManifestBuilder.ReadCodestreamReportedOpenJphVersion(encodedFrame.LogicalCodestream) != codestreamReportedVersion
-                || Htj2kReferenceManifestBuilder.ReadEffectiveParameters(encodedFrame.LogicalCodestream) != effectiveParameters)
-            {
-                throw new InvalidDataException("HTJ2K reference frames report inconsistent provenance or effective parameters.");
-            }
+                encodedFrames[frameIndex].Length);
         }
 
         var manifest = new Htj2kReferenceManifest(
-            provenance.PackageVersion,
-            provenance.ReleaseCommit,
-            codestreamReportedVersion,
-            codec.TransferSyntax.UID.UID,
+            options.TransferSyntax.UID.UID,
             source.NumberOfFrames,
-            effectiveParameters,
             frames);
-        File.WriteAllText(options.OutputPath, JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(
+            options.OutputPath,
+            JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
     }
 
-    private static byte[] ExtractLogicalCodestream(FellowOakDicom.IO.Buffer.IByteBuffer frame, int frameIndex)
+    private static byte[] ReadFrameBytes(IByteBuffer frame)
     {
-        try
-        {
-            return Htj2kReferenceManifestBuilder.ExtractLogicalCodestream(frame.Data);
-        }
-        catch (InvalidDataException exception)
-        {
-            var data = frame.Data;
-            throw new InvalidDataException(
-                $"HTJ2K reference frame {frameIndex} does not expose EOC. BufferSize={frame.Size}, DataLength={data.Length}.",
-                exception);
-        }
-    }
-
-    private static IDicomCodec CreateCodec(DicomTransferSyntax transferSyntax)
-    {
-        if (transferSyntax == DicomTransferSyntax.HTJ2KLossless)
-        {
-            return new DicomHtJpeg2000LosslessCodec();
-        }
-
-        if (transferSyntax == DicomTransferSyntax.HTJ2KLosslessRPCL)
-        {
-            return new DicomHtJpeg2000LosslessRPCLCodec();
-        }
-
-        if (transferSyntax == DicomTransferSyntax.HTJ2K)
-        {
-            return new DicomHtJpeg2000LossyCodec();
-        }
-
-        throw new ArgumentOutOfRangeException(nameof(transferSyntax), "Unsupported HTJ2K transfer syntax.");
-    }
-
-    private static DicomDataset CloneForTransferSyntax(DicomDataset source, DicomTransferSyntax transferSyntax)
-    {
-        var clone = new DicomDataset(transferSyntax);
-        foreach (var item in source)
-        {
-            clone.Add(item);
-        }
-
-        clone.Remove(DicomTag.PixelData);
-        return clone;
+        var bytes = new byte[frame.Size];
+        Buffer.BlockCopy(frame.Data, 0, bytes, 0, bytes.Length);
+        return bytes;
     }
 
     private sealed record Options(string InputPath, DicomTransferSyntax TransferSyntax, string OutputPath)
@@ -217,9 +160,13 @@ public static class Htj2kReferenceWorkerProgram
                 }
             }
 
-            if (!worker || string.IsNullOrWhiteSpace(inputPath) || string.IsNullOrWhiteSpace(syntax) || string.IsNullOrWhiteSpace(outputPath))
+            if (!worker
+                || string.IsNullOrWhiteSpace(inputPath)
+                || string.IsNullOrWhiteSpace(syntax)
+                || string.IsNullOrWhiteSpace(outputPath))
             {
-                throw new ArgumentException("Usage: --worker --input <raw-dicom> --syntax <201|202|203> --output <manifest.json>.");
+                throw new ArgumentException(
+                    "Usage: --worker --input <raw-dicom> --syntax <201|202|203> --output <manifest.json>.");
             }
 
             if (!File.Exists(inputPath))
@@ -227,7 +174,10 @@ public static class Htj2kReferenceWorkerProgram
                 throw new FileNotFoundException("HTJ2K reference input file was not found.");
             }
 
-            return new Options(Path.GetFullPath(inputPath), ParseTransferSyntax(syntax), Path.GetFullPath(outputPath));
+            return new Options(
+                Path.GetFullPath(inputPath),
+                ParseTransferSyntax(syntax),
+                Path.GetFullPath(outputPath));
         }
 
         private static string NextValue(string[] args, ref int index, string option)
@@ -247,10 +197,10 @@ public static class Htj2kReferenceWorkerProgram
                 "201" => DicomTransferSyntax.HTJ2KLossless,
                 "202" => DicomTransferSyntax.HTJ2KLosslessRPCL,
                 "203" => DicomTransferSyntax.HTJ2K,
-                _ => throw new ArgumentOutOfRangeException(nameof(value), "HTJ2K syntax must be 201, 202, or 203.")
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(value),
+                    "HTJ2K syntax must be 201, 202, or 203.")
             };
         }
     }
-
-    private sealed record EncodedFrame(byte[] RawFrame, byte[] LogicalCodestream, Htj2kMarkerSummary MarkerSummary);
 }

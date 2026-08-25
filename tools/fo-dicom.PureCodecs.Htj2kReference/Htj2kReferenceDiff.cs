@@ -46,10 +46,9 @@ public static class Htj2kReferenceDiffComparer
             throw new ArgumentNullException(nameof(actualFrames));
         }
 
-        var provenanceMismatch = CompareProvenance(expected, actual);
-        if (provenanceMismatch is not null)
+        if (!string.Equals(expected.TransferSyntaxUid, actual.TransferSyntaxUid, StringComparison.Ordinal))
         {
-            return Htj2kReferenceDiff.Mismatch(provenanceMismatch);
+            return Htj2kReferenceDiff.Mismatch("HTJ2K transfer syntaxes differ.");
         }
 
         if (expected.FrameCount != actual.FrameCount
@@ -59,11 +58,6 @@ public static class Htj2kReferenceDiffComparer
             || expected.Frames.Count != expectedFrames.Count)
         {
             return Htj2kReferenceDiff.Mismatch("HTJ2K reference frame count differs.");
-        }
-
-        if (expected.EffectiveParameters != actual.EffectiveParameters)
-        {
-            return Htj2kReferenceDiff.Mismatch("HTJ2K effective parameters differ.");
         }
 
         for (var frameIndex = 0; frameIndex < expected.Frames.Count; frameIndex++)
@@ -84,12 +78,12 @@ public static class Htj2kReferenceDiffComparer
             var byteDifference = FindFirstByteDifference(expectedFrames[frameIndex], actualFrames[frameIndex], frameIndex);
             if (byteDifference is not null)
             {
-                return Htj2kReferenceDiff.Mismatch("HTJ2K logical codestream bytes differ.", byteDifference);
+                return Htj2kReferenceDiff.Mismatch("HTJ2K encoded frame bytes differ.", byteDifference);
             }
 
-            if (!string.Equals(expectedFrame.CodestreamSha256, actualFrame.CodestreamSha256, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(expectedFrame.EncodedFrameSha256, actualFrame.EncodedFrameSha256, StringComparison.OrdinalIgnoreCase))
             {
-                return Htj2kReferenceDiff.Mismatch("HTJ2K logical codestream hashes differ.");
+                return Htj2kReferenceDiff.Mismatch("HTJ2K encoded frame hashes differ.");
             }
 
 
@@ -98,41 +92,13 @@ public static class Htj2kReferenceDiffComparer
                 return Htj2kReferenceDiff.Mismatch("HTJ2K decoded-frame hashes differ.");
             }
 
-            if (expectedFrame.LogicalCodestreamLength != actualFrame.LogicalCodestreamLength)
+            if (expectedFrame.EncodedFrameLength != actualFrame.EncodedFrameLength)
             {
-                return Htj2kReferenceDiff.Mismatch("HTJ2K logical codestream lengths differ.");
-            }
-
-            if (!expectedFrame.MarkerSummary.MarkerCodes.SequenceEqual(actualFrame.MarkerSummary.MarkerCodes, StringComparer.Ordinal)
-                || expectedFrame.MarkerSummary.TilePartCount != actualFrame.MarkerSummary.TilePartCount)
-            {
-                return Htj2kReferenceDiff.Mismatch("HTJ2K marker summary differs.");
+                return Htj2kReferenceDiff.Mismatch("HTJ2K encoded frame lengths differ.");
             }
         }
 
         return Htj2kReferenceDiff.Match();
-    }
-
-    private static string? CompareProvenance(Htj2kReferenceManifest expected, Htj2kReferenceManifest actual)
-    {
-        if (!string.Equals(expected.ReferencePackageVersion, actual.ReferencePackageVersion, StringComparison.Ordinal))
-        {
-            return "HTJ2K reference package versions differ.";
-        }
-
-        if (!string.Equals(expected.ReferenceReleaseCommit, actual.ReferenceReleaseCommit, StringComparison.Ordinal))
-        {
-            return "HTJ2K reference release commits differ.";
-        }
-
-        if (!string.Equals(expected.CodestreamReportedOpenJphVersion, actual.CodestreamReportedOpenJphVersion, StringComparison.Ordinal))
-        {
-            return "HTJ2K codestream-reported versions differ.";
-        }
-
-        return string.Equals(expected.TransferSyntaxUid, actual.TransferSyntaxUid, StringComparison.Ordinal)
-            ? null
-            : "HTJ2K transfer syntaxes differ.";
     }
 
     private static Htj2kReferenceByteDifference? FindFirstByteDifference(byte[] expected, byte[] actual, int frameIndex)

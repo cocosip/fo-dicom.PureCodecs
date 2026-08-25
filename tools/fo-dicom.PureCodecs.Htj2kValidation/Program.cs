@@ -1,14 +1,13 @@
-using System.Security.Cryptography;
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 using FellowOakDicom.Imaging.NativeCodec;
-using FellowOakDicom.IO.Buffer;
-using FellowOakDicom.PureCodecs.Jpeg2000.Internal;
 
 if (args.Length < 3)
 {
-    Console.Error.WriteLine("Usage: htj2k-validation <source.dcm> <compressed-htj2k.dcm> <output-directory> [--lossy-tolerance <samples>]");
+    Console.Error.WriteLine(
+        "Usage: htj2k-validation <source.dcm> <compressed-htj2k.dcm> <output-directory> " +
+        "[--lossy-tolerance <samples>]");
     return 2;
 }
 
@@ -18,17 +17,17 @@ var outputDirectory = args[2];
 int? lossyTolerance = null;
 for (var index = 3; index < args.Length; index++)
 {
-    if (args[index] != "--lossy-tolerance" || ++index >= args.Length
-        || !int.TryParse(args[index], out var parsedTolerance) || parsedTolerance < 0)
+    if (args[index] != "--lossy-tolerance"
+        || ++index >= args.Length
+        || !int.TryParse(args[index], out var parsedTolerance)
+        || parsedTolerance < 0)
     {
-        Console.Error.WriteLine("VALIDATION|fail|--lossy-tolerance requires a non-negative integer.");
+        Console.Error.WriteLine("VALIDATION|failed|--lossy-tolerance requires a non-negative integer.");
         return 2;
     }
 
     lossyTolerance = parsedTolerance;
 }
-
-Directory.CreateDirectory(outputDirectory);
 
 new DicomSetupBuilder()
     .RegisterServices(services => services
@@ -43,346 +42,157 @@ try
     var compressedFile = DicomFile.Open(compressedPath, FileReadOption.ReadAll);
     var sourcePixelData = DicomPixelData.Create(sourceFile.Dataset);
     var compressedPixelData = DicomPixelData.Create(compressedFile.Dataset);
+    ValidateCompressedDataset(sourcePixelData, compressedPixelData, compressedFile.Dataset);
+
     var lossless = IsLosslessSyntax(compressedPixelData.Syntax);
     if (!lossless && !lossyTolerance.HasValue)
     {
         throw new InvalidOperationException("HTJ2K lossy validation requires --lossy-tolerance <samples>.");
     }
 
-    var structure = ValidateStructure(compressedFile, compressedPixelData);
-    Console.WriteLine($"STRUCTURE|ok|{structure}");
-
-    var decodedDataset = new DicomTranscoder(compressedPixelData.Syntax, DicomTransferSyntax.ExplicitVRLittleEndian)
+    var decodedDataset = new DicomTranscoder(
+            compressedPixelData.Syntax,
+            DicomTransferSyntax.ExplicitVRLittleEndian)
         .Transcode(compressedFile.Dataset);
+
+    Directory.CreateDirectory(outputDirectory);
+    var decodedPath = Path.Combine(outputDirectory, "decoded.dcm");
+    new DicomFile(decodedDataset).Save(decodedPath);
+
     var decodedPixelData = DicomPixelData.Create(decodedDataset);
     ValidateComparablePixelData(sourcePixelData, decodedPixelData);
-    var maxDiff = MaxSampleDifference(sourcePixelData, decodedPixelData);
+    var maxDifference = MaxSampleDifference(sourcePixelData, decodedPixelData);
     var tolerance = lossless ? 0 : lossyTolerance!.Value;
-    var decodePassed = maxDiff <= tolerance;
-    Console.WriteLine($"NATIVE-DECODE|{(decodePassed ? "ok" : "fail")}|maxDiff={maxDiff}|tolerance={tolerance}|decodedSyntax={decodedPixelData.Syntax.UID.UID}");
+    if (maxDifference > tolerance)
+    {
+        throw new InvalidDataException(
+            $"Maximum sample difference {maxDifference} exceeds tolerance {tolerance}.");
+    }
 
-    var sourceRender = RenderGrayscale(sourcePixelData, preferDicomWindow: true);
-    var decodedRender = RenderGrayscale(decodedPixelData, preferDicomWindow: true);
-    var sourceAutoRender = RenderGrayscale(sourcePixelData, preferDicomWindow: false);
-    var decodedAutoRender = RenderGrayscale(decodedPixelData, preferDicomWindow: false);
-    var sourceHash = Sha256(sourceRender);
-    var decodedHash = Sha256(decodedRender);
-    WriteGrayscaleBmp(Path.Combine(outputDirectory, "source.bmp"), sourcePixelData.Width, sourcePixelData.Height, sourceRender);
-    WriteGrayscaleBmp(Path.Combine(outputDirectory, "decoded.bmp"), decodedPixelData.Width, decodedPixelData.Height, decodedRender);
-    WriteGrayscaleBmp(Path.Combine(outputDirectory, "source_auto.bmp"), sourcePixelData.Width, sourcePixelData.Height, sourceAutoRender);
-    WriteGrayscaleBmp(Path.Combine(outputDirectory, "decoded_auto.bmp"), decodedPixelData.Width, decodedPixelData.Height, decodedAutoRender);
-    Console.WriteLine($"RENDER|ok|sourceHash={sourceHash}|decodedHash={decodedHash}|maxDisplayDiff={MaxByteDifference(sourceRender, decodedRender)}|sourceBmp={Path.Combine(outputDirectory, "source.bmp")}|decodedBmp={Path.Combine(outputDirectory, "decoded.bmp")}");
-    Console.WriteLine($"AUTO-RENDER|ok|sourceHash={Sha256(sourceAutoRender)}|decodedHash={Sha256(decodedAutoRender)}|maxDisplayDiff={MaxByteDifference(sourceAutoRender, decodedAutoRender)}|sourceBmp={Path.Combine(outputDirectory, "source_auto.bmp")}|decodedBmp={Path.Combine(outputDirectory, "decoded_auto.bmp")}");
-
-    return decodePassed ? 0 : 1;
+    Console.WriteLine(
+        $"VALIDATION|passed|maxDiff={maxDifference}|tolerance={tolerance}" +
+        $"|frames={decodedPixelData.NumberOfFrames}|decoded={decodedPath}");
+    return 0;
 }
 catch (Exception exception) when (exception is not OperationCanceledException)
 {
-    Console.Error.WriteLine($"VALIDATION|fail|{exception.GetType().Name}: {exception.Message}");
+    Console.Error.WriteLine($"VALIDATION|failed|{exception.GetType().Name}: {exception.Message}");
     return 1;
 }
 
-static string ValidateStructure(DicomFile file, DicomPixelData pixelData)
+static void ValidateCompressedDataset(
+    DicomPixelData source,
+    DicomPixelData compressed,
+    DicomDataset compressedDataset)
 {
-    if (!pixelData.Syntax.UID.UID.StartsWith("1.2.840.10008.1.2.4.20", StringComparison.Ordinal))
+    if (compressed.Syntax != DicomTransferSyntax.HTJ2KLossless
+        && compressed.Syntax != DicomTransferSyntax.HTJ2KLosslessRPCL
+        && compressed.Syntax != DicomTransferSyntax.HTJ2K)
     {
         throw new InvalidOperationException("Transfer syntax is not HTJ2K.");
     }
 
-    if (!file.Dataset.InternalTransferSyntax.IsEncapsulated)
+    if (!compressedDataset.InternalTransferSyntax.IsEncapsulated)
     {
         throw new InvalidOperationException("HTJ2K PixelData is not encapsulated.");
     }
 
-    var frame = ToArray(pixelData.GetFrame(0));
-    Jpeg2000CodestreamReader.EnsureRawCodestream(frame);
-    var markerCodes = new List<byte>();
-    var capFound = false;
-    var codFound = false;
-    var qcdFound = false;
-    var sotCount = 0;
-    var eocFound = false;
-    var offset = 0;
-
-    while (offset < frame.Length)
+    if (source.NumberOfFrames != compressed.NumberOfFrames)
     {
-        if (offset + 1 >= frame.Length || frame[offset] != 0xFF)
-        {
-            throw new InvalidOperationException("JPEG 2000 marker prefix 0xFF was not found.");
-        }
-
-        var segment = ReadMarker(frame, offset);
-        markerCodes.Add(segment.Code);
-        switch (segment.Code)
-        {
-            case Jpeg2000Marker.CAP:
-                capFound = true;
-                break;
-            case Jpeg2000Marker.COD:
-                codFound = true;
-                var cod = Jpeg2000CodingStyleDefault.Parse(segment);
-                if ((cod.CodeBlockStyle & 0x40) == 0)
-                {
-                    throw new InvalidOperationException("COD marker does not signal HT code-blocks.");
-                }
-
-                break;
-            case Jpeg2000Marker.QCD:
-                qcdFound = true;
-                break;
-            case Jpeg2000Marker.SOT:
-                sotCount++;
-                var sot = Jpeg2000StartOfTilePart.Parse(segment, tileCount: 1);
-                offset += 2 + ReadBeUInt16(frame, offset + 2);
-                if (offset + 1 >= frame.Length || frame[offset] != 0xFF || frame[offset + 1] != Jpeg2000Marker.SOD)
-                {
-                    throw new InvalidOperationException("SOT marker is not followed by SOD.");
-                }
-
-                markerCodes.Add(Jpeg2000Marker.SOD);
-                offset += 2;
-                var tileBytes = sot.TilePartLength == 0
-                    ? FindMarker(frame, Jpeg2000Marker.EOC, offset) - offset
-                    : checked((int)sot.TilePartLength - 14);
-                if (tileBytes < 0 || offset + tileBytes > frame.Length)
-                {
-                    throw new InvalidOperationException("SOT tile-part length is outside the codestream.");
-                }
-
-                offset += tileBytes;
-                continue;
-            case Jpeg2000Marker.SOD:
-                throw new InvalidOperationException("SOD marker was found without a preceding SOT.");
-            case Jpeg2000Marker.EOC:
-                eocFound = true;
-                break;
-        }
-
-        if (segment.Code == Jpeg2000Marker.EOC)
-        {
-            break;
-        }
-
-        offset += Jpeg2000Marker.HasLength(segment.Code)
-            ? 2 + ReadBeUInt16(frame, offset + 2)
-            : 2;
+        throw new InvalidOperationException(
+            $"Compressed frame count {compressed.NumberOfFrames} differs from source frame count {source.NumberOfFrames}.");
     }
-
-    if (!capFound || !codFound || !qcdFound || sotCount == 0 || !eocFound)
-    {
-        throw new InvalidOperationException("Codestream is missing required HTJ2K markers.");
-    }
-
-    return $"syntax={pixelData.Syntax.UID.UID}|frame0={frame.Length}|markers={string.Join(",", markerCodes.Select(code => "FF" + code.ToString("X2")))}|tileParts={sotCount}";
-}
-
-static Jpeg2000MarkerSegment ReadMarker(byte[] codestream, int offset)
-{
-    var code = codestream[offset + 1];
-    if (!Jpeg2000Marker.HasLength(code))
-    {
-        return new Jpeg2000MarkerSegment(code, Array.Empty<byte>());
-    }
-
-    var length = ReadBeUInt16(codestream, offset + 2);
-    var payload = new byte[length - 2];
-    Buffer.BlockCopy(codestream, offset + 4, payload, 0, payload.Length);
-    return new Jpeg2000MarkerSegment(code, payload);
-}
-
-static int ReadBeUInt16(byte[] bytes, int offset)
-{
-    return (bytes[offset] << 8) | bytes[offset + 1];
-}
-
-static int FindMarker(byte[] bytes, byte marker, int start)
-{
-    for (var i = start; i < bytes.Length - 1; i++)
-    {
-        if (bytes[i] == 0xFF && bytes[i + 1] == marker)
-        {
-            return i;
-        }
-    }
-
-    return -1;
-}
-
-static byte[] RenderGrayscale(DicomPixelData pixelData, bool preferDicomWindow)
-{
-    if (pixelData.SamplesPerPixel != 1)
-    {
-        throw new InvalidOperationException("The validation renderer currently supports monochrome images.");
-    }
-
-    var frame = ToArray(pixelData.GetFrame(0));
-    var samples = new int[pixelData.Width * pixelData.Height];
-    var min = int.MaxValue;
-    var max = int.MinValue;
-    var bytesPerSample = Math.Max(1, pixelData.BitsAllocated / 8);
-    for (var i = 0; i < samples.Length; i++)
-    {
-        var sample = ReadSample(frame, i * bytesPerSample, bytesPerSample, pixelData.PixelRepresentation);
-        samples[i] = sample;
-        min = Math.Min(min, sample);
-        max = Math.Max(max, sample);
-    }
-
-    var center = preferDicomWindow ? GetDouble(pixelData.Dataset, DicomTag.WindowCenter) : null;
-    var width = preferDicomWindow ? GetDouble(pixelData.Dataset, DicomTag.WindowWidth) : null;
-    var low = center.HasValue && width.HasValue ? center.Value - (width.Value / 2.0) : min;
-    var high = center.HasValue && width.HasValue ? center.Value + (width.Value / 2.0) : max;
-    if (high <= low)
-    {
-        high = low + 1;
-    }
-
-    var invert = pixelData.PhotometricInterpretation == PhotometricInterpretation.Monochrome1;
-    var rendered = new byte[samples.Length];
-    for (var i = 0; i < samples.Length; i++)
-    {
-        var normalized = (samples[i] - low) / (high - low);
-        var value = (byte)Math.Round(Math.Clamp(normalized, 0.0, 1.0) * 255.0);
-        rendered[i] = invert ? (byte)(255 - value) : value;
-    }
-
-    return rendered;
-}
-
-static double? GetDouble(DicomDataset dataset, DicomTag tag)
-{
-    return dataset.TryGetValues<double>(tag, out var values) && values.Length > 0 ? values[0] : null;
-}
-
-static int MaxSampleDifference(DicomPixelData expected, DicomPixelData actual)
-{
-    var max = 0;
-    for (var frameIndex = 0; frameIndex < expected.NumberOfFrames; frameIndex++)
-    {
-        var expectedFrame = ToArray(expected.GetFrame(frameIndex));
-        var actualFrame = ToArray(actual.GetFrame(frameIndex));
-        var bytesPerSample = Math.Max(1, expected.BitsAllocated / 8);
-        for (var offset = 0; offset < expectedFrame.Length; offset += bytesPerSample)
-        {
-            var expectedSample = ReadSample(expectedFrame, offset, bytesPerSample, expected.PixelRepresentation);
-            var actualSample = ReadSample(actualFrame, offset, bytesPerSample, actual.PixelRepresentation);
-            max = Math.Max(max, Math.Abs(expectedSample - actualSample));
-        }
-    }
-
-    return max;
 }
 
 static void ValidateComparablePixelData(DicomPixelData expected, DicomPixelData actual)
 {
     if (expected.NumberOfFrames != actual.NumberOfFrames)
     {
-        throw new InvalidOperationException($"Decoded frame count {actual.NumberOfFrames} differs from source frame count {expected.NumberOfFrames}.");
+        throw new InvalidOperationException(
+            $"Decoded frame count {actual.NumberOfFrames} differs from source frame count {expected.NumberOfFrames}.");
     }
 
     if (expected.Width != actual.Width || expected.Height != actual.Height)
     {
-        throw new InvalidOperationException($"Decoded dimensions {actual.Width}x{actual.Height} differ from source dimensions {expected.Width}x{expected.Height}.");
+        throw new InvalidOperationException(
+            $"Decoded dimensions {actual.Width}x{actual.Height} differ from source dimensions {expected.Width}x{expected.Height}.");
     }
 
     if (expected.BitsAllocated != actual.BitsAllocated
         || expected.BitsStored != actual.BitsStored
         || expected.HighBit != actual.HighBit
         || expected.PixelRepresentation != actual.PixelRepresentation
-        || expected.SamplesPerPixel != actual.SamplesPerPixel)
+        || expected.SamplesPerPixel != actual.SamplesPerPixel
+        || expected.PhotometricInterpretation != actual.PhotometricInterpretation)
     {
-        throw new InvalidOperationException("Decoded bit depth, representation, or sample metadata differs from the source.");
+        throw new InvalidOperationException("Decoded pixel metadata differs from the source.");
     }
 
-    for (var frame = 0; frame < expected.NumberOfFrames; frame++)
+    for (var frameIndex = 0; frameIndex < expected.NumberOfFrames; frameIndex++)
     {
-        var expectedLength = expected.GetFrame(frame).Size;
-        var actualLength = actual.GetFrame(frame).Size;
+        var expectedLength = expected.GetFrame(frameIndex).Size;
+        var actualLength = actual.GetFrame(frameIndex).Size;
         if (expectedLength != actualLength)
         {
-            throw new InvalidOperationException($"Decoded frame {frame} length {actualLength} differs from source length {expectedLength}.");
+            throw new InvalidOperationException(
+                $"Decoded frame {frameIndex} length {actualLength} differs from source length {expectedLength}.");
         }
     }
 }
 
-static int ReadSample(byte[] bytes, int offset, int bytesPerSample, PixelRepresentation pixelRepresentation)
+static int MaxSampleDifference(DicomPixelData expected, DicomPixelData actual)
+{
+    var bytesPerSample = Math.Max(1, expected.BitsAllocated / 8);
+    if (bytesPerSample is not 1 and not 2)
+    {
+        throw new NotSupportedException($"Bits Allocated {expected.BitsAllocated} is not supported by this validator.");
+    }
+
+    var maximum = 0;
+    for (var frameIndex = 0; frameIndex < expected.NumberOfFrames; frameIndex++)
+    {
+        var expectedFrame = expected.GetFrame(frameIndex);
+        var actualFrame = actual.GetFrame(frameIndex);
+        for (var offset = 0; offset < expectedFrame.Size; offset += bytesPerSample)
+        {
+            var expectedSample = ReadSample(
+                expectedFrame.Data,
+                offset,
+                bytesPerSample,
+                expected.PixelRepresentation);
+            var actualSample = ReadSample(
+                actualFrame.Data,
+                offset,
+                bytesPerSample,
+                actual.PixelRepresentation);
+            maximum = Math.Max(maximum, Math.Abs(expectedSample - actualSample));
+        }
+    }
+
+    return maximum;
+}
+
+static int ReadSample(
+    byte[] bytes,
+    int offset,
+    int bytesPerSample,
+    PixelRepresentation pixelRepresentation)
 {
     if (bytesPerSample == 1)
     {
-        return pixelRepresentation == PixelRepresentation.Signed ? unchecked((sbyte)bytes[offset]) : bytes[offset];
+        return pixelRepresentation == PixelRepresentation.Signed
+            ? unchecked((sbyte)bytes[offset])
+            : bytes[offset];
     }
 
     var value = bytes[offset] | (bytes[offset + 1] << 8);
-    return pixelRepresentation == PixelRepresentation.Signed ? unchecked((short)value) : value;
-}
-
-static byte[] ToArray(IByteBuffer buffer)
-{
-    var bytes = new byte[buffer.Size];
-    Buffer.BlockCopy(buffer.Data, 0, bytes, 0, bytes.Length);
-    return bytes;
+    return pixelRepresentation == PixelRepresentation.Signed
+        ? unchecked((short)value)
+        : value;
 }
 
 static bool IsLosslessSyntax(DicomTransferSyntax syntax)
 {
-    return syntax == DicomTransferSyntax.HTJ2KLossless || syntax == DicomTransferSyntax.HTJ2KLosslessRPCL;
-}
-
-static string Sha256(byte[] bytes)
-{
-    return Convert.ToHexString(SHA256.HashData(bytes));
-}
-
-static int MaxByteDifference(byte[] expected, byte[] actual)
-{
-    var max = Math.Abs(expected.Length - actual.Length);
-    for (var i = 0; i < Math.Min(expected.Length, actual.Length); i++)
-    {
-        max = Math.Max(max, Math.Abs(expected[i] - actual[i]));
-    }
-
-    return max;
-}
-
-static void WriteGrayscaleBmp(string path, int width, int height, byte[] pixels)
-{
-    const int fileHeaderSize = 14;
-    const int dibHeaderSize = 40;
-    const int paletteSize = 256 * 4;
-    var stride = ((width + 3) / 4) * 4;
-    var imageSize = stride * height;
-    var pixelOffset = fileHeaderSize + dibHeaderSize + paletteSize;
-    using var stream = File.Create(path);
-    using var writer = new BinaryWriter(stream);
-    writer.Write((byte)'B');
-    writer.Write((byte)'M');
-    writer.Write(pixelOffset + imageSize);
-    writer.Write((ushort)0);
-    writer.Write((ushort)0);
-    writer.Write(pixelOffset);
-    writer.Write(dibHeaderSize);
-    writer.Write(width);
-    writer.Write(height);
-    writer.Write((ushort)1);
-    writer.Write((ushort)8);
-    writer.Write(0);
-    writer.Write(imageSize);
-    writer.Write(2835);
-    writer.Write(2835);
-    writer.Write(256);
-    writer.Write(256);
-    for (var i = 0; i < 256; i++)
-    {
-        writer.Write((byte)i);
-        writer.Write((byte)i);
-        writer.Write((byte)i);
-        writer.Write((byte)0);
-    }
-
-    var padding = new byte[stride - width];
-    for (var y = height - 1; y >= 0; y--)
-    {
-        writer.Write(pixels, y * width, width);
-        writer.Write(padding);
-    }
+    return syntax == DicomTransferSyntax.HTJ2KLossless
+        || syntax == DicomTransferSyntax.HTJ2KLosslessRPCL;
 }
