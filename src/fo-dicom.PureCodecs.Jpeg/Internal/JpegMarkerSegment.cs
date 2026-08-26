@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public sealed class JpegMarkerSegment
+    internal sealed class JpegMarkerSegment
     {
         public JpegMarkerSegment(byte code, byte[] payload)
         {

@@ -127,30 +127,38 @@ public sealed class Jpeg2000TransformQuantizationTests
     }
 
     [Theory]
-    [InlineData(8, Jpeg2000SubbandKind.LL, 2, 10)]
-    [InlineData(8, Jpeg2000SubbandKind.HL, 2, 11)]
-    [InlineData(8, Jpeg2000SubbandKind.HH, 2, 12)]
+    [InlineData(8, (int)Jpeg2000SubbandKind.LL, 2, 10)]
+    [InlineData(8, (int)Jpeg2000SubbandKind.HL, 2, 11)]
+    [InlineData(8, (int)Jpeg2000SubbandKind.HH, 2, 12)]
     public void Guard_bits_contribute_to_effective_wavelet_coefficient_depth(
         int precision,
-        Jpeg2000SubbandKind subband,
+        int subband,
         int guardBits,
         int expectedDepth)
     {
-        Assert.Equal(expectedDepth, Jpeg2000BitPlaneMath.EffectiveBitDepth(precision, subband, guardBits));
+        Assert.Equal(
+            expectedDepth,
+            Jpeg2000BitPlaneMath.EffectiveBitDepth(precision, (Jpeg2000SubbandKind)subband, guardBits));
     }
 
     [Theory]
-    [InlineData(new[] { 0, 0, 0 }, 8, Jpeg2000SubbandKind.LL, 2, 10)]
-    [InlineData(new[] { 0, 1, -1 }, 8, Jpeg2000SubbandKind.LL, 2, 9)]
-    [InlineData(new[] { 0, 32, -7 }, 8, Jpeg2000SubbandKind.HL, 2, 5)]
+    [InlineData(new[] { 0, 0, 0 }, 8, (int)Jpeg2000SubbandKind.LL, 2, 10)]
+    [InlineData(new[] { 0, 1, -1 }, 8, (int)Jpeg2000SubbandKind.LL, 2, 9)]
+    [InlineData(new[] { 0, 32, -7 }, 8, (int)Jpeg2000SubbandKind.HL, 2, 5)]
     public void Zero_bit_plane_calculation_tracks_coefficient_magnitude(
         int[] coefficients,
         int precision,
-        Jpeg2000SubbandKind subband,
+        int subband,
         int guardBits,
         int expectedZeroBitPlanes)
     {
-        Assert.Equal(expectedZeroBitPlanes, Jpeg2000BitPlaneMath.ZeroBitPlanes(coefficients, precision, subband, guardBits));
+        Assert.Equal(
+            expectedZeroBitPlanes,
+            Jpeg2000BitPlaneMath.ZeroBitPlanes(
+                coefficients,
+                precision,
+                (Jpeg2000SubbandKind)subband,
+                guardBits));
     }
 
     [Fact]

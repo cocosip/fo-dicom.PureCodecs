@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000TileModel
+    internal sealed class Jpeg2000TileModel
     {
         public Jpeg2000TileModel(int index, uint x0, uint y0, uint x1, uint y1)
         {

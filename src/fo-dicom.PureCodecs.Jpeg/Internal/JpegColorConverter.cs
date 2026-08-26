@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public static class JpegColorConverter
+    internal static class JpegColorConverter
     {
         private const int RgbYScale = 19595;
         private const int GbgYScale = 38470;

@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsContextModel
+    internal sealed class JpegLsContextModel
     {
         private readonly JpegLsRegularContextState[] _regularContexts;
         private readonly JpegLsGradientQuantizer _quantizer;

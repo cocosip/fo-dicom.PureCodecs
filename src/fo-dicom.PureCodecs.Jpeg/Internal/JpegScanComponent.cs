@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public sealed class JpegScanComponent
+    internal sealed class JpegScanComponent
     {
         public JpegScanComponent(int selector, int dcTableId, int acTableId)
         {

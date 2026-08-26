@@ -3,7 +3,7 @@ using FellowOakDicom.Imaging.Codec;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsStartOfScan
+    internal sealed class JpegLsStartOfScan
     {
         private JpegLsStartOfScan(JpegLsScanComponent[] components, int nearLossless, JpegLsInterleaveMode interleaveMode, int pointTransform)
         {

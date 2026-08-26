@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000CodestreamWriter
+    internal sealed class Jpeg2000CodestreamWriter
     {
         private readonly List<byte> _bytes = new List<byte>();
 

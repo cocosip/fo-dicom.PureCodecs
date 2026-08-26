@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsMarkerWriter
+    internal sealed class JpegLsMarkerWriter
     {
         private readonly List<byte> _bytes = new List<byte>();
 

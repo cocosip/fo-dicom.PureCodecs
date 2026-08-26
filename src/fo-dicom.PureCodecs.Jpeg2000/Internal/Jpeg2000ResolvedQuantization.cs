@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000ResolvedQuantization
+    internal sealed class Jpeg2000ResolvedQuantization
     {
         public Jpeg2000ResolvedQuantization(int componentIndex, Jpeg2000QuantizationComponent component, int defaultGuardBits)
             : this(componentIndex, component.Style, component.GuardBits, defaultGuardBits, component.StepSizes)

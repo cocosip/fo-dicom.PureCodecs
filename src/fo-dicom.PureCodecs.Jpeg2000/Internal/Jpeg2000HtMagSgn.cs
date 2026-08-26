@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public static class Jpeg2000HtMagSgnEncoder
+    internal static class Jpeg2000HtMagSgnEncoder
     {
         public static byte[] Encode(IReadOnlyList<int> coefficients)
         {
@@ -32,7 +32,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public static class Jpeg2000HtMagSgnDecoder
+    internal static class Jpeg2000HtMagSgnDecoder
     {
         public static int[] Decode(byte[] bytes, int coefficientCount)
         {

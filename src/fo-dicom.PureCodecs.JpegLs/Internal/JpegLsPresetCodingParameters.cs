@@ -2,7 +2,7 @@ using FellowOakDicom.Imaging.Codec;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsPresetCodingParameters
+    internal sealed class JpegLsPresetCodingParameters
     {
         private JpegLsPresetCodingParameters(int maximumSampleValue, int threshold1, int threshold2, int threshold3, int reset)
         {

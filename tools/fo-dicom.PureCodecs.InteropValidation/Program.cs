@@ -34,6 +34,7 @@ internal static class InteropValidationProgram
     private const int DefaultWorkerTimeoutSeconds = 300;
     private const int Jpeg2000LossyRate = 16;
     private const int Jpeg2000LossyMaximumDifference = 58;
+    private const int JpegProcess2_4Rgb12MaximumDifference = 160;
     private const int Htj2kLossyMaximumDifference = 8;
 
     private static readonly CodecDefinition[] CodecDefinitions =
@@ -202,6 +203,16 @@ internal static class InteropValidationProgram
             executed++;
         }
 
+        if (definition.Syntax == DicomTransferSyntax.JPEGProcess2_4)
+        {
+            const string fixtureName = "generated-rgb12.dcm";
+            var source = CreateRgb12Interleaved(rows: 16, columns: 16);
+            Console.WriteLine($"INTEROP|case|fixture={fixtureName}|format={definition.Key}|bitsAllocated={source.BitsAllocated}|bitsStored={source.BitsStored}|pixelRepresentation={source.PixelRepresentation}|photometric={source.PhotometricInterpretation.Value}|samplesPerPixel={source.SamplesPerPixel}|frames={source.NumberOfFrames}");
+            ValidatePureEncodeNativeDecode(source, fixtureName, definition, metrics);
+            ValidateNativeEncodePureDecode(source, fixtureName, definition, metrics);
+            executed++;
+        }
+
         Console.WriteLine(
             $"INTEROP|worker-summary|format={definition.Key}|fixtures={executed}" +
             $"|passedDatasetRows={metrics.PassedDatasetRows}|failedDatasetRows={metrics.FailedDatasetRows}");
@@ -333,9 +344,10 @@ internal static class InteropValidationProgram
         {
             var expected = ToArray(source.GetFrame(frame));
             var actual = ToArray(decoded.GetFrame(frame));
-            if (definition.Tolerance.HasValue)
+            var tolerance = ResolveTolerance(source, definition);
+            if (tolerance.HasValue)
             {
-                AssertWithinTolerance(source, expected, actual, definition.Tolerance.Value, frame, direction, fixturePath, definition.Key);
+                AssertWithinTolerance(source, expected, actual, tolerance.Value, frame, direction, fixturePath, definition.Key);
             }
             else
             {
@@ -505,9 +517,47 @@ internal static class InteropValidationProgram
 
     private static bool SupportsJpegProcess2_4(DicomPixelData source) =>
         SupportsJpegProcess1(source)
-        || (source.BitsAllocated == 16 && source.BitsStored == 12 && source.SamplesPerPixel == 1);
+        || (source.BitsAllocated == 16 && source.BitsStored == 12 && source.SamplesPerPixel is 1 or 3);
 
     private static bool SupportsJpeg2000(DicomPixelData source) => source.BitsAllocated is 8 or 16 && source.SamplesPerPixel is 1 or 3;
+
+    private static DicomPixelData CreateRgb12Interleaved(ushort rows, ushort columns)
+    {
+        var frame = new byte[rows * columns * 3 * 2];
+        for (var pixel = 0; pixel < rows * columns; pixel++)
+        {
+            var x = pixel % columns;
+            var y = pixel / columns;
+            WriteUInt16(frame, (pixel * 3) * 2, 512 + x * 96 + y * 16);
+            WriteUInt16(frame, (pixel * 3 + 1) * 2, 768 + x * 32 + y * 80);
+            WriteUInt16(frame, (pixel * 3 + 2) * 2, 1024 + x * 48 + y * 48);
+        }
+
+        var dataset = new DicomDataset(DicomTransferSyntax.ExplicitVRLittleEndian)
+        {
+            { DicomTag.SOPClassUID, DicomUID.SecondaryCaptureImageStorage },
+            { DicomTag.SOPInstanceUID, DicomUID.Generate() },
+            { DicomTag.StudyInstanceUID, DicomUID.Generate() },
+            { DicomTag.SeriesInstanceUID, DicomUID.Generate() },
+            { DicomTag.PhotometricInterpretation, PhotometricInterpretation.Rgb.Value },
+            { DicomTag.Rows, rows },
+            { DicomTag.Columns, columns },
+            { DicomTag.BitsAllocated, (ushort)16 },
+            { DicomTag.BitsStored, (ushort)12 },
+            { DicomTag.HighBit, (ushort)11 },
+            { DicomTag.PixelRepresentation, (ushort)PixelRepresentation.Unsigned },
+            { DicomTag.SamplesPerPixel, (ushort)3 },
+            { DicomTag.PlanarConfiguration, (ushort)PlanarConfiguration.Interleaved }
+        };
+        DicomPixelData.Create(dataset, true).AddFrame(new MemoryByteBuffer(frame));
+        return DicomPixelData.Create(dataset);
+    }
+
+    private static void WriteUInt16(byte[] bytes, int offset, int value)
+    {
+        bytes[offset] = (byte)value;
+        bytes[offset + 1] = (byte)(value >> 8);
+    }
 
     private static byte[] ToArray(IByteBuffer buffer)
     {
@@ -591,6 +641,19 @@ internal static class InteropValidationProgram
             value = 0;
             return values.TryGetValue(key, out var text) && int.TryParse(text, out value);
         }
+    }
+
+    private static int? ResolveTolerance(DicomPixelData source, CodecDefinition definition)
+    {
+        if (definition.Syntax == DicomTransferSyntax.JPEGProcess2_4
+            && source.BitsAllocated == 16
+            && source.BitsStored == 12
+            && source.SamplesPerPixel == 3)
+        {
+            return JpegProcess2_4Rgb12MaximumDifference;
+        }
+
+        return definition.Tolerance;
     }
 
     private sealed record WorkerResult(string Format, int ExitCode, long ElapsedMilliseconds, string Output, string Error);

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public static class Jpeg2000ProgressionOrderIterator
+    internal static class Jpeg2000ProgressionOrderIterator
     {
         public static IReadOnlyList<Jpeg2000PacketModel> Enumerate(
             Jpeg2000ProgressionOrder progressionOrder,

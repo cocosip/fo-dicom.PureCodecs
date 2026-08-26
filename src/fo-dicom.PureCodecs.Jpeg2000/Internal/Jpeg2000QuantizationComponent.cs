@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000QuantizationComponent : Jpeg2000Quantization
+    internal sealed class Jpeg2000QuantizationComponent : Jpeg2000Quantization
     {
         private Jpeg2000QuantizationComponent(int componentIndex, Jpeg2000Quantization quantization)
             : base(quantization.Style, quantization.GuardBits, CopySteps(quantization))

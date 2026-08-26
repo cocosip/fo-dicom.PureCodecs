@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public sealed class JpegEntropyBitWriter
+    internal sealed class JpegEntropyBitWriter
     {
         private readonly List<byte> _bytes = new List<byte>();
         private int _currentByte;

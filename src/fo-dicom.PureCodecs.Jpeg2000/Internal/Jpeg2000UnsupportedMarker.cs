@@ -1,7 +1,7 @@
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
     [System.Obsolete("PPM and PPT packed packet headers are supported by the codestream decoder.")]
-    public static class Jpeg2000UnsupportedMarker
+    internal static class Jpeg2000UnsupportedMarker
     {
         [System.Obsolete("PPM and PPT packed packet headers are supported by the codestream decoder.")]
         public static void RejectPackedPacketHeaders(Jpeg2000MarkerSegment segment)

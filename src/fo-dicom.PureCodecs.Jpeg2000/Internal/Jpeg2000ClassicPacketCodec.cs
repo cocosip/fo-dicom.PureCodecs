@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000PacketContribution
+    internal sealed class Jpeg2000PacketContribution
     {
         public Jpeg2000PacketContribution(int codeBlockIndex, int codingPassCount, int byteLength)
         {
@@ -18,7 +18,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public int ByteLength { get; }
     }
 
-    public sealed class Jpeg2000ClassicPacket
+    internal sealed class Jpeg2000ClassicPacket
     {
         public Jpeg2000ClassicPacket(
             int layerIndex,
@@ -52,7 +52,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public static class Jpeg2000ClassicPacketEncoder
+    internal static class Jpeg2000ClassicPacketEncoder
     {
         public static byte[] Encode(Jpeg2000ClassicPacket packet)
         {
@@ -73,7 +73,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public static class Jpeg2000ClassicPacketDecoder
+    internal static class Jpeg2000ClassicPacketDecoder
     {
         public static Jpeg2000ClassicPacket Decode(byte[] bytes)
         {

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public readonly struct Jpeg2000MqState
+    internal readonly struct Jpeg2000MqState
     {
         public Jpeg2000MqState(ushort probabilityEstimate, int mostProbableSymbolNextIndex, int leastProbableSymbolNextIndex, bool switchesMostProbableSymbol)
         {
@@ -21,7 +21,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public bool SwitchesMostProbableSymbol { get; }
     }
 
-    public sealed class Jpeg2000MqDecoderStateTable
+    internal sealed class Jpeg2000MqDecoderStateTable
     {
         private readonly Jpeg2000MqState[] _states;
 
@@ -79,7 +79,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public sealed class Jpeg2000MqEncoderStateTable
+    internal sealed class Jpeg2000MqEncoderStateTable
     {
         private readonly Jpeg2000MqState[] _states;
 
@@ -95,7 +95,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public Jpeg2000MqState this[int index] => _states[index];
     }
 
-    public sealed class Jpeg2000MqEncoder
+    internal sealed class Jpeg2000MqEncoder
     {
         private readonly Jpeg2000BitWriter _writer = new Jpeg2000BitWriter();
         private readonly Dictionary<int, int> _contextStates = new Dictionary<int, int>();
@@ -119,7 +119,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public sealed class Jpeg2000MqDecoder
+    internal sealed class Jpeg2000MqDecoder
     {
         private readonly Jpeg2000BitReader _reader;
         private readonly Dictionary<int, int> _contextStates = new Dictionary<int, int>();

@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public sealed class JpegStartOfScan
+    internal sealed class JpegStartOfScan
     {
         private JpegStartOfScan(
             JpegScanComponent[] components,

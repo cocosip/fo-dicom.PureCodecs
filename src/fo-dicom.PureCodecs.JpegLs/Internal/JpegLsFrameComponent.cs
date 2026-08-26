@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsFrameComponent
+    internal sealed class JpegLsFrameComponent
     {
         public JpegLsFrameComponent(int identifier, int horizontalSamplingFactor, int verticalSamplingFactor, int mappingTableSelector)
         {

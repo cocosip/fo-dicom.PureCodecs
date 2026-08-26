@@ -3,7 +3,7 @@ using FellowOakDicom.Imaging.Codec;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsScanCodec
+    internal sealed class JpegLsScanCodec
     {
         private readonly int _width;
         private readonly int _height;

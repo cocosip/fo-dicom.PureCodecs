@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsGradientQuantizer
+    internal sealed class JpegLsGradientQuantizer
     {
         private readonly JpegLsTraits _traits;
 

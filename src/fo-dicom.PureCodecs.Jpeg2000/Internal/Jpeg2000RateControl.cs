@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000RateDistortionPass
+    internal sealed class Jpeg2000RateDistortionPass
     {
         public Jpeg2000RateDistortionPass(int index, int byteLength, double distortionReduction)
         {
@@ -18,7 +18,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public double DistortionReduction { get; }
     }
 
-    public sealed class Jpeg2000RateControlOptions
+    internal sealed class Jpeg2000RateControlOptions
     {
         public Jpeg2000RateControlOptions(double rate, int rateLevels, double targetRatio, int numLayers, bool includeFinalLosslessLayer)
         {
@@ -40,7 +40,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public bool IncludeFinalLosslessLayer { get; }
     }
 
-    public sealed class Jpeg2000QualityLayer
+    internal sealed class Jpeg2000QualityLayer
     {
         public Jpeg2000QualityLayer(IReadOnlyList<Jpeg2000RateDistortionPass> passes, bool isFinalLosslessLayer)
         {
@@ -67,7 +67,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public static class Jpeg2000PcrdLayerAllocator
+    internal static class Jpeg2000PcrdLayerAllocator
     {
         public static IReadOnlyList<Jpeg2000QualityLayer> Allocate(
             IReadOnlyList<Jpeg2000RateDistortionPass> passes,

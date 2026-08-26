@@ -63,7 +63,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                         jpeg2000Parameters.EncodeSignedPixelValuesAsUnsigned,
                         jpeg2000Parameters.Rate,
                         layerRates);
-                    newPixelData.AddFrame(new MemoryByteBuffer(encoded));
+                    newPixelData.AddFrame(CodecOutputBuffer.Create(encoded, oldPixelData.NumberOfFrames));
                 }
                 catch (Exception exception)
                 {
@@ -80,13 +80,31 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                 {
                     var decoded = _frameCodec.DecodeFrame(newPixelData, oldPixelData.GetFrame(frame).ToArrayCopy());
                     decoded = NormalizeFrameForDecode(newPixelData, decoded);
-                    newPixelData.AddFrame(new MemoryByteBuffer(decoded));
+                    newPixelData.AddFrame(CodecOutputBuffer.Create(decoded, oldPixelData.NumberOfFrames));
                 }
                 catch (Exception exception)
                 {
                     throw CodecFailure.Wrap(TransferSyntax, "decode", frame, exception);
                 }
             }
+
+            UpdateDecodedPixelDataMetadata(oldPixelData, newPixelData);
+        }
+
+        private static void UpdateDecodedPixelDataMetadata(DicomPixelData source, DicomPixelData target)
+        {
+            if (source.SamplesPerPixel != 3
+                || (source.PhotometricInterpretation != PhotometricInterpretation.YbrIct
+                    && source.PhotometricInterpretation != PhotometricInterpretation.YbrRct
+                    && source.PhotometricInterpretation != PhotometricInterpretation.YbrFull
+                    && source.PhotometricInterpretation != PhotometricInterpretation.YbrFull422
+                    && source.PhotometricInterpretation != PhotometricInterpretation.YbrPartial422))
+            {
+                return;
+            }
+
+            target.PhotometricInterpretation = PhotometricInterpretation.Rgb;
+            target.PlanarConfiguration = PlanarConfiguration.Interleaved;
         }
 
         private static int ResolveTolerance(DicomJpeg2000Params parameters)

@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public readonly struct Jpeg2000SamplePrecision
+    internal readonly struct Jpeg2000SamplePrecision
     {
         public Jpeg2000SamplePrecision(int bitsStored, bool isSigned)
         {

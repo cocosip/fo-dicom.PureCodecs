@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000Comment
+    internal sealed class Jpeg2000Comment
     {
         private Jpeg2000Comment(int registrationValue, byte[] payload)
         {

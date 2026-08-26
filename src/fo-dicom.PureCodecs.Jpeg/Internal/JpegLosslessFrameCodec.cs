@@ -6,7 +6,7 @@ using FellowOakDicom.Imaging.Codec;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public sealed class JpegLosslessFrameCodec
+    internal sealed class JpegLosslessFrameCodec
     {
         private const int DefaultSelectionValue = 1;
 

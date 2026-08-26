@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000StartOfPacket
+    internal sealed class Jpeg2000StartOfPacket
     {
         private Jpeg2000StartOfPacket(int sequenceNumber)
         {

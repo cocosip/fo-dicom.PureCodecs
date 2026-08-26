@@ -3,7 +3,7 @@ using FellowOakDicom.Imaging.Codec;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsFrameInfo
+    internal sealed class JpegLsFrameInfo
     {
         private JpegLsFrameInfo(int bitsPerSample, int height, int width, JpegLsFrameComponent[] components)
         {

@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public static class Jpeg2000LevelShift
+    internal static class Jpeg2000LevelShift
     {
         public static int Forward(int sample, int precision, bool isSigned)
         {

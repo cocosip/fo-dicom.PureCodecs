@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000ClassicCodeBlock
+    internal sealed class Jpeg2000ClassicCodeBlock
     {
         public Jpeg2000ClassicCodeBlock(int width, int height, IReadOnlyList<int> coefficients)
         {

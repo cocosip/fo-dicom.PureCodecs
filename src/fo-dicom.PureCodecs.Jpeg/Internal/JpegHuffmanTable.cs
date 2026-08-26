@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public sealed class JpegHuffmanTable
+    internal sealed class JpegHuffmanTable
     {
         private readonly Dictionary<int, int> _decodeValues;
         private readonly Dictionary<int, HuffmanCode> _encodeCodes;

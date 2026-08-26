@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000PacketLengthTable
+    internal sealed class Jpeg2000PacketLengthTable
     {
         private Jpeg2000PacketLengthTable(int index, uint[] packetLengths)
         {

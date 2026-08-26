@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public readonly struct Jpeg2000HtQuad : IEquatable<Jpeg2000HtQuad>
+    internal readonly struct Jpeg2000HtQuad : IEquatable<Jpeg2000HtQuad>
     {
         public Jpeg2000HtQuad(int x, int y, int significancePattern)
         {
@@ -40,7 +40,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public sealed class Jpeg2000HtCleanupResult
+    internal sealed class Jpeg2000HtCleanupResult
     {
         public Jpeg2000HtCleanupResult(IReadOnlyList<Jpeg2000HtQuad> quads, IReadOnlyList<bool> melEvents, IReadOnlyList<Jpeg2000HtVlcSymbol> vlcSymbols)
         {
@@ -56,7 +56,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public IReadOnlyList<Jpeg2000HtVlcSymbol> VlcSymbols { get; }
     }
 
-    public static class Jpeg2000HtCleanupPass
+    internal static class Jpeg2000HtCleanupPass
     {
         public static Jpeg2000HtCleanupResult Encode(Jpeg2000ClassicCodeBlock block)
         {
@@ -127,7 +127,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public sealed class Jpeg2000HtEncodedCodeBlock
+    internal sealed class Jpeg2000HtEncodedCodeBlock
     {
         public Jpeg2000HtEncodedCodeBlock(int width, int height, byte[] magSgn, byte[] mel, byte[] vlc)
         {
@@ -155,7 +155,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public int VlcLength => Vlc.Length;
     }
 
-    public static class Jpeg2000HtCodeBlockEncoder
+    internal static class Jpeg2000HtCodeBlockEncoder
     {
         public static Jpeg2000HtEncodedCodeBlock Encode(Jpeg2000ClassicCodeBlock block)
         {
@@ -179,7 +179,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public static class Jpeg2000HtCodeBlockDecoder
+    internal static class Jpeg2000HtCodeBlockDecoder
     {
         public static Jpeg2000ClassicCodeBlock Decode(Jpeg2000HtEncodedCodeBlock encoded)
         {

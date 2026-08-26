@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public static class JpegLsPredictor
+    internal static class JpegLsPredictor
     {
         public static int Predict(int left, int above, int aboveLeft)
         {

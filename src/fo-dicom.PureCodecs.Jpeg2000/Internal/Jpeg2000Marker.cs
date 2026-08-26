@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public static class Jpeg2000Marker
+    internal static class Jpeg2000Marker
     {
         public const byte SOC = 0x4F;
         public const byte SIZ = 0x51;

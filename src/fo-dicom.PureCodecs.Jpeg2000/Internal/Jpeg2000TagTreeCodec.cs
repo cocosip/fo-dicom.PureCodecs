@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000TagTree
+    internal sealed class Jpeg2000TagTree
     {
         public Jpeg2000TagTree(int width, int height, IReadOnlyList<int> values)
         {
@@ -34,7 +34,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public static class Jpeg2000TagTreeEncoder
+    internal static class Jpeg2000TagTreeEncoder
     {
         public static byte[] Encode(Jpeg2000TagTree tree)
         {
@@ -50,7 +50,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public static class Jpeg2000TagTreeDecoder
+    internal static class Jpeg2000TagTreeDecoder
     {
         public static Jpeg2000TagTree Decode(byte[] bytes)
         {

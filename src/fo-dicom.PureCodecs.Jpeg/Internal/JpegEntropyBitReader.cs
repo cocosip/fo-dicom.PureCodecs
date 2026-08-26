@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public sealed class JpegEntropyBitReader
+    internal sealed class JpegEntropyBitReader
     {
         private readonly byte[] _data;
         private int _offset;

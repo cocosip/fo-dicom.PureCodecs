@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000ImageModel
+    internal sealed class Jpeg2000ImageModel
     {
         private Jpeg2000ImageModel(
             uint width,

@@ -4,7 +4,7 @@ using FellowOakDicom.Imaging.Codec;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public sealed class JpegSequentialDctCodec
+    internal sealed class JpegSequentialDctCodec
     {
         private static readonly int[] LuminanceQuantization =
         {

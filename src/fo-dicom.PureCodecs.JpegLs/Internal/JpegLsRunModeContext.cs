@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsRunModeContext
+    internal sealed class JpegLsRunModeContext
     {
         private readonly int _runInterruptionType;
 

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public class Jpeg2000CodingStyle
+    internal class Jpeg2000CodingStyle
     {
         protected Jpeg2000CodingStyle(
             bool hasPrecinctSizes,

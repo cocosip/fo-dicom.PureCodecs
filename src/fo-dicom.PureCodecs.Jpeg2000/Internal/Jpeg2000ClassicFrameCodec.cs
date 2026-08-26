@@ -5,7 +5,7 @@ using FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000ClassicFrameCodec
+    internal sealed class Jpeg2000ClassicFrameCodec
     {
         private static readonly byte[] PayloadMagic = { (byte)'P', (byte)'C', (byte)'J', (byte)'2', 0x01 };
 

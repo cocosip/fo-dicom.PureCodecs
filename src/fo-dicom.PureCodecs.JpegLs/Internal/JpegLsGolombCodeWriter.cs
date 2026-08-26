@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsGolombCodeWriter
+    internal sealed class JpegLsGolombCodeWriter
     {
         private readonly List<byte> _bytes = new List<byte>();
         private byte _currentByte;

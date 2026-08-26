@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000ComponentModel
+    internal sealed class Jpeg2000ComponentModel
     {
         public Jpeg2000ComponentModel(int index, int precision, bool isSigned, int horizontalSeparation, int verticalSeparation)
         {

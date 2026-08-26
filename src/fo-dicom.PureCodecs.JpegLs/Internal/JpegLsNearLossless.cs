@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public static class JpegLsNearLossless
+    internal static class JpegLsNearLossless
     {
         public static int ClampSample(int sample, int bitsStored)
         {

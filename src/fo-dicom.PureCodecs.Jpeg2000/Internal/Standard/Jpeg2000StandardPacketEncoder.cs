@@ -210,7 +210,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             return new LayeredPacketEncoder(blocks);
         }
 
-        public sealed class LayeredPacketEncoder
+        internal sealed class LayeredPacketEncoder
         {
             private readonly List<BandPacketState> _bands = new List<BandPacketState>();
 

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000SizeSegment
+    internal sealed class Jpeg2000SizeSegment
     {
         private Jpeg2000SizeSegment(
             int capabilities,

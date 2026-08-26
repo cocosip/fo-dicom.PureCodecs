@@ -5,7 +5,7 @@ using FellowOakDicom.Imaging.Codec;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsFrameCodec
+    internal sealed class JpegLsFrameCodec
     {
         public byte[] EncodeFrame(
             DicomPixelData pixelData,

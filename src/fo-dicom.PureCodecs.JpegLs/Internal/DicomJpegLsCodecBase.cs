@@ -3,6 +3,7 @@ using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 using FellowOakDicom.IO.Buffer;
+using FellowOakDicom.PureCodecs.Internal;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
@@ -41,7 +42,9 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                         NormalizeFrameForEncode(oldPixelData, oldPixelData.GetFrame(frame)),
                         nearLossless,
                         GetInterleaveMode(oldPixelData));
-                    newPixelData.AddFrame(new MemoryByteBuffer(PadToEvenLength(encoded)));
+                    newPixelData.AddFrame(CodecOutputBuffer.Create(
+                        PadToEvenLength(encoded),
+                        oldPixelData.NumberOfFrames));
                 }
                 catch (Exception exception)
                 {
@@ -57,7 +60,7 @@ namespace FellowOakDicom.PureCodecs.JpegLs.Internal
                 try
                 {
                     var decoded = _frameCodec.DecodeFrame(newPixelData, ToArray(oldPixelData.GetFrame(frame)));
-                    newPixelData.AddFrame(new MemoryByteBuffer(decoded));
+                    newPixelData.AddFrame(CodecOutputBuffer.Create(decoded, oldPixelData.NumberOfFrames));
                 }
                 catch (Exception exception)
                 {

@@ -3,6 +3,7 @@ using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 using FellowOakDicom.IO.Buffer;
+using FellowOakDicom.PureCodecs.Internal;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
@@ -10,7 +11,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
     {
         private readonly JpegSequentialDctCodec _frameCodec;
 
-        protected DicomJpegSequentialCodecBase(DicomTransferSyntax transferSyntax, JpegSequentialProcess process)
+        private protected DicomJpegSequentialCodecBase(DicomTransferSyntax transferSyntax, JpegSequentialProcess process)
         {
             TransferSyntax = transferSyntax ?? throw new ArgumentNullException(nameof(transferSyntax));
             _frameCodec = new JpegSequentialDctCodec(process);
@@ -54,7 +55,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                             jpegParameters.Quality,
                             useYbrFull422: false,
                             smoothingFactor: jpegParameters.SmoothingFactor);
-                        newPixelData.AddFrame(new MemoryByteBuffer(encoded12Bit));
+                        newPixelData.AddFrame(CodecOutputBuffer.Create(encoded12Bit, oldPixelData.NumberOfFrames));
                         continue;
                     }
 
@@ -76,7 +77,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                         useYbrFull422: oldPixelData.SamplesPerPixel == 3
                             && jpegParameters.SampleFactor == DicomJpegSampleFactor.SF422,
                         smoothingFactor: jpegParameters.SmoothingFactor);
-                    newPixelData.AddFrame(new MemoryByteBuffer(encoded));
+                    newPixelData.AddFrame(CodecOutputBuffer.Create(encoded, oldPixelData.NumberOfFrames));
                 }
                 catch (Exception exception)
                 {
@@ -94,6 +95,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 
         public void Decode(DicomPixelData oldPixelData, DicomPixelData newPixelData, DicomCodecParams parameters)
         {
+            var jpegParameters = JpegCodecParams.From(parameters);
             NormalizeEightBitContainerMetadata(newPixelData, newPixelData);
             ValidateSupportedPixelData(newPixelData);
 
@@ -112,8 +114,10 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                             oldPixelData,
                             newPixelData,
                             decoded12Bit,
-                            JpegCodecParams.From(parameters));
-                        newPixelData.AddFrame(new MemoryByteBuffer(ToLittleEndianBytes(decoded12Bit)));
+                            jpegParameters);
+                        newPixelData.AddFrame(CodecOutputBuffer.Create(
+                            ToLittleEndianBytes(decoded12Bit),
+                            oldPixelData.NumberOfFrames));
                         continue;
                     }
 
@@ -122,14 +126,16 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
                         newPixelData.Width,
                         newPixelData.Height,
                         newPixelData.SamplesPerPixel);
-                    decoded = NormalizeFrameForDecode(oldPixelData, newPixelData, decoded, JpegCodecParams.From(parameters));
-                    newPixelData.AddFrame(new MemoryByteBuffer(decoded));
+                    decoded = NormalizeFrameForDecode(oldPixelData, newPixelData, decoded, jpegParameters);
+                    newPixelData.AddFrame(CodecOutputBuffer.Create(decoded, oldPixelData.NumberOfFrames));
                 }
                 catch (Exception exception)
                 {
                     throw Wrap("decode", frame, exception);
                 }
             }
+
+            UpdateDecodedColorMetadata(oldPixelData, newPixelData, jpegParameters);
         }
 
         private void ValidateSupportedPixelData(DicomPixelData pixelData)
@@ -311,6 +317,25 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
             {
                 targetPixelData.Dataset.AddOrUpdate(DicomTag.BitsAllocated, (ushort)8);
             }
+
+        }
+
+        private static void UpdateDecodedColorMetadata(
+            DicomPixelData sourcePixelData,
+            DicomPixelData targetPixelData,
+            JpegCodecParams parameters)
+        {
+            var photometric = sourcePixelData.PhotometricInterpretation?.Value;
+            if (!parameters.ConvertColorspaceToRGB
+                || sourcePixelData.SamplesPerPixel != 3
+                || (photometric != PhotometricInterpretation.YbrFull.Value
+                    && photometric != PhotometricInterpretation.YbrFull422.Value))
+            {
+                return;
+            }
+
+            targetPixelData.PhotometricInterpretation = PhotometricInterpretation.Rgb;
+            targetPixelData.PlanarConfiguration = PlanarConfiguration.Interleaved;
         }
 
         private static byte[] UnpackLowEightBits(byte[] frame, int sampleCount)
@@ -421,7 +446,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg.Internal
         }
     }
 
-    public class JpegCodecParams : DicomJpegParams
+    internal class JpegCodecParams : DicomJpegParams
     {
         public JpegCodecParams()
         {

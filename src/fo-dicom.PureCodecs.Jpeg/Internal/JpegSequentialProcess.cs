@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public enum JpegSequentialProcess
+    internal enum JpegSequentialProcess
     {
         Baseline,
         Extended,

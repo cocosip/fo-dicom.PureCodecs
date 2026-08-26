@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsTraits
+    internal sealed class JpegLsTraits
     {
         private JpegLsTraits(
             int maximumSampleValue,

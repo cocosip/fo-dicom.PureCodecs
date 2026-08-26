@@ -3,7 +3,7 @@ using FellowOakDicom.Imaging.Codec;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public sealed class JpegLosslessScanCodec
+    internal sealed class JpegLosslessScanCodec
     {
         private readonly JpegHuffmanTable _table;
 

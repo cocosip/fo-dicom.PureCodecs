@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public static class Jpeg2000HtStandardTables
+    internal static class Jpeg2000HtStandardTables
     {
         public static readonly ushort[] VlcTable0 = BuildVlcDecodeTable(Jpeg2000HtStandardEncodeTables.VlcTable0Source);
 

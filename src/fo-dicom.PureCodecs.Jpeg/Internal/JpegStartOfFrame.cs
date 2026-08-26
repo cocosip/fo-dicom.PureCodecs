@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public sealed class JpegStartOfFrame
+    internal sealed class JpegStartOfFrame
     {
         private JpegStartOfFrame(byte marker, int samplePrecision, int height, int width, JpegFrameComponent[] components)
         {

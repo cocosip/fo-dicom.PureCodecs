@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public sealed class JpegQuantizationTable
+    internal sealed class JpegQuantizationTable
     {
         private readonly int[] _divisors;
 

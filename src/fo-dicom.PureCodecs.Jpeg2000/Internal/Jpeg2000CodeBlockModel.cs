@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000CodeBlockModel
+    internal sealed class Jpeg2000CodeBlockModel
     {
         public Jpeg2000CodeBlockModel(
             int componentIndex,

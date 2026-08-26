@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public readonly struct Jpeg2000HtVlcSymbol : IEquatable<Jpeg2000HtVlcSymbol>
+    internal readonly struct Jpeg2000HtVlcSymbol : IEquatable<Jpeg2000HtVlcSymbol>
     {
         public Jpeg2000HtVlcSymbol(int context, int rho, bool hasMagnitudeResidual, int embK, int emb1)
         {
@@ -52,7 +52,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public sealed class Jpeg2000HtVlcEntry
+    internal sealed class Jpeg2000HtVlcEntry
     {
         public Jpeg2000HtVlcEntry(int context, int rho, bool hasMagnitudeResidual, int embK, int emb1, int codeword, int codewordLength)
         {
@@ -92,7 +92,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public Jpeg2000HtVlcSymbol Symbol => new Jpeg2000HtVlcSymbol(Context, Rho, HasMagnitudeResidual, EmbK, Emb1);
     }
 
-    public sealed class Jpeg2000HtVlcTable
+    internal sealed class Jpeg2000HtVlcTable
     {
         public static readonly Jpeg2000HtVlcTable InitialQuadRow = new Jpeg2000HtVlcTable(new[]
         {
@@ -174,7 +174,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public static class Jpeg2000HtVlcEncoder
+    internal static class Jpeg2000HtVlcEncoder
     {
         public static byte[] Encode(IReadOnlyList<Jpeg2000HtVlcSymbol> symbols, bool initialQuadRow)
         {
@@ -190,7 +190,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public static class Jpeg2000HtVlcDecoder
+    internal static class Jpeg2000HtVlcDecoder
     {
         public static Jpeg2000HtVlcSymbol[] Decode(byte[] bytes, int symbolCount, bool initialQuadRow)
         {

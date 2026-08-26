@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000CodingStyleComponent
+    internal sealed class Jpeg2000CodingStyleComponent
     {
         private Jpeg2000CodingStyleComponent(int componentIndex, Jpeg2000CodingStyle style)
         {

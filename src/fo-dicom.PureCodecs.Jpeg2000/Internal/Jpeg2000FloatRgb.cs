@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public readonly struct Jpeg2000FloatRgb : IEquatable<Jpeg2000FloatRgb>
+    internal readonly struct Jpeg2000FloatRgb : IEquatable<Jpeg2000FloatRgb>
     {
         public Jpeg2000FloatRgb(double r, double g, double b)
         {

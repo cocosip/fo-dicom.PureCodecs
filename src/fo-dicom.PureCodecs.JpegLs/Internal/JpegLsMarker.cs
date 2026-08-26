@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public static class JpegLsMarker
+    internal static class JpegLsMarker
     {
         public const byte SOF55 = 0xF7;
         public const byte SOI = 0xD8;

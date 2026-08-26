@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsRunModeScanner
+    internal sealed class JpegLsRunModeScanner
     {
         private static readonly int[] RunIndexBitCounts =
         {

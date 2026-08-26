@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000RegionOfInterest
+    internal sealed class Jpeg2000RegionOfInterest
     {
         private Jpeg2000RegionOfInterest(int componentIndex, int style, int shift)
         {

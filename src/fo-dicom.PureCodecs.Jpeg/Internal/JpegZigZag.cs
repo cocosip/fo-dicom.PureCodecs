@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public static class JpegZigZag
+    internal static class JpegZigZag
     {
         private static readonly int[] Order =
         {

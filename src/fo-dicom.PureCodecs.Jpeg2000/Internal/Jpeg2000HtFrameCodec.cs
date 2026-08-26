@@ -5,7 +5,7 @@ using FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000HtFrameCodec
+    internal sealed class Jpeg2000HtFrameCodec
     {
         private const int OpenJphDecompositionLevels = 5;
 

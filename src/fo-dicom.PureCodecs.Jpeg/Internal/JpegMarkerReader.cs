@@ -3,7 +3,7 @@ using FellowOakDicom.Imaging.Codec;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public sealed class JpegMarkerReader
+    internal sealed class JpegMarkerReader
     {
         private readonly byte[] _data;
         private int _offset;

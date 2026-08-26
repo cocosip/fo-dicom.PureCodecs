@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public static class Jpeg2000ReversibleWaveletTransform
+    internal static class Jpeg2000ReversibleWaveletTransform
     {
         public static int[] Forward2D(int[] samples, int width, int height, int levels)
         {

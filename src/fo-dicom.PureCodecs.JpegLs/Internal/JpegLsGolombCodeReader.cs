@@ -3,7 +3,7 @@ using FellowOakDicom.Imaging.Codec;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsGolombCodeReader
+    internal sealed class JpegLsGolombCodeReader
     {
         private readonly byte[] _bytes;
         private int _position;

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public static class Jpeg2000BitPlaneMath
+    internal static class Jpeg2000BitPlaneMath
     {
         public static int EffectiveBitDepth(int precision, Jpeg2000SubbandKind subband, int guardBits)
         {

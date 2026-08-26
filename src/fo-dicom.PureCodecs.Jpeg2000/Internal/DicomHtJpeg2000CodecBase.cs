@@ -13,7 +13,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         private readonly Jpeg2000ProgressionOrder _defaultProgressionOrder;
         private readonly Jpeg2000HtFrameCodec _frameCodec = new Jpeg2000HtFrameCodec();
 
-        protected DicomHtJpeg2000CodecBase(DicomTransferSyntax transferSyntax, bool lossy, Jpeg2000ProgressionOrder defaultProgressionOrder)
+        private protected DicomHtJpeg2000CodecBase(DicomTransferSyntax transferSyntax, bool lossy, Jpeg2000ProgressionOrder defaultProgressionOrder)
         {
             TransferSyntax = transferSyntax ?? throw new ArgumentNullException(nameof(transferSyntax));
             _lossy = lossy;
@@ -55,7 +55,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                     }
 
                     var encoded = _frameCodec.EncodeFrame(oldPixelData, sourceFrame, _lossy, tolerance, progressionOrder);
-                    newPixelData.AddFrame(new MemoryByteBuffer(encoded));
+                    newPixelData.AddFrame(CodecOutputBuffer.Create(encoded, oldPixelData.NumberOfFrames));
                 }
                 catch (Exception exception)
                 {
@@ -89,7 +89,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
                             newPixelData.BitsAllocated / 8);
                     }
 
-                    newPixelData.AddFrame(new MemoryByteBuffer(decoded));
+                    newPixelData.AddFrame(CodecOutputBuffer.Create(decoded, oldPixelData.NumberOfFrames));
                 }
                 catch (Exception exception)
                 {

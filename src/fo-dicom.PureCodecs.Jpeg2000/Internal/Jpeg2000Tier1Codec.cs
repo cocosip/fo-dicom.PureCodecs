@@ -2,14 +2,14 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public enum Jpeg2000Tier1PassType
+    internal enum Jpeg2000Tier1PassType
     {
         SignificancePropagation,
         MagnitudeRefinement,
         Cleanup
     }
 
-    public sealed class Jpeg2000Tier1Pass
+    internal sealed class Jpeg2000Tier1Pass
     {
         public Jpeg2000Tier1Pass(Jpeg2000Tier1PassType type, int bitPlane, int byteLength)
         {
@@ -25,7 +25,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public int ByteLength { get; }
     }
 
-    public sealed class Jpeg2000Tier1EncodedCodeBlock
+    internal sealed class Jpeg2000Tier1EncodedCodeBlock
     {
         public Jpeg2000Tier1EncodedCodeBlock(int width, int height, byte[] data, IReadOnlyList<Jpeg2000Tier1Pass> passes)
         {
@@ -44,7 +44,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public IReadOnlyList<Jpeg2000Tier1Pass> Passes { get; }
     }
 
-    public static class Jpeg2000Tier1Encoder
+    internal static class Jpeg2000Tier1Encoder
     {
         public static Jpeg2000Tier1EncodedCodeBlock Encode(Jpeg2000ClassicCodeBlock block, int maxBitPlane)
         {
@@ -72,7 +72,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public static class Jpeg2000Tier1Decoder
+    internal static class Jpeg2000Tier1Decoder
     {
         public static Jpeg2000ClassicCodeBlock Decode(Jpeg2000Tier1EncodedCodeBlock encoded)
         {
@@ -97,7 +97,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public sealed class Jpeg2000ClassicEncodedCodeBlock
+    internal sealed class Jpeg2000ClassicEncodedCodeBlock
     {
         public Jpeg2000ClassicEncodedCodeBlock(int width, int height, byte[] data, IReadOnlyList<Jpeg2000Tier1Pass> codingPasses)
         {
@@ -116,7 +116,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         public IReadOnlyList<Jpeg2000Tier1Pass> CodingPasses { get; }
     }
 
-    public static class Jpeg2000ClassicCodeBlockEncoder
+    internal static class Jpeg2000ClassicCodeBlockEncoder
     {
         public static Jpeg2000ClassicEncodedCodeBlock Encode(Jpeg2000ClassicCodeBlock block)
         {
@@ -126,7 +126,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
         }
     }
 
-    public static class Jpeg2000ClassicCodeBlockDecoder
+    internal static class Jpeg2000ClassicCodeBlockDecoder
     {
         public static Jpeg2000ClassicCodeBlock Decode(Jpeg2000ClassicEncodedCodeBlock encoded)
         {

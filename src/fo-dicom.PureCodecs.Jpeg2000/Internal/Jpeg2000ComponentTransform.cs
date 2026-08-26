@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public static class Jpeg2000ComponentTransform
+    internal static class Jpeg2000ComponentTransform
     {
         public static Jpeg2000IntRgb ForwardReversible(Jpeg2000IntRgb rgb, bool allowMultipleComponentTransform)
         {

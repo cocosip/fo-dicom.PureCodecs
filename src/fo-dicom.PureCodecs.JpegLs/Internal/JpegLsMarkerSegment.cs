@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsMarkerSegment
+    internal sealed class JpegLsMarkerSegment
     {
         public JpegLsMarkerSegment(byte code, byte[] payload)
         {

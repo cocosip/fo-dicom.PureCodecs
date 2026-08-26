@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public sealed class JpegBlock8x8
+    internal sealed class JpegBlock8x8
     {
         public const int Size = 8;
         public const int CoefficientCount = Size * Size;

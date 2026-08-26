@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000StartOfTilePart
+    internal sealed class Jpeg2000StartOfTilePart
     {
         private Jpeg2000StartOfTilePart(int tileIndex, uint tilePartLength, int tilePartIndex, int tilePartCount)
         {

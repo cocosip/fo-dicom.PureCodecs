@@ -11,6 +11,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\fo-dicom.PureCodecs\Internal\*.cs" Link="Internal\%(Filename)%(Extension)" />
+    <Compile Include="..\fo-dicom.PureCodecs\Internal\ByteBufferExtensions.cs" Link="Internal\ByteBufferExtensions.cs" />
+    <Compile Include="..\fo-dicom.PureCodecs\Internal\CodecFailure.cs" Link="Internal\CodecFailure.cs" />
+    <Compile Include="..\fo-dicom.PureCodecs\Internal\CodecOutputBuffer.cs" Link="Internal\CodecOutputBuffer.cs" />
   </ItemGroup>
 </Project>

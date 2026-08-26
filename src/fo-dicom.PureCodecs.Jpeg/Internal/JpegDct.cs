@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public static class JpegDct
+    internal static class JpegDct
     {
         private static readonly double[] Cosines = CreateCosines();
         private static readonly double[] InverseScales = CreateInverseScales();

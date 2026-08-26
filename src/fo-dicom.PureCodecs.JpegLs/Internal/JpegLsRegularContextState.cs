@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsRegularContextState
+    internal sealed class JpegLsRegularContextState
     {
         internal JpegLsRegularContextState(int initialA)
         {

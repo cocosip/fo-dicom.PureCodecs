@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000ResolvedCodingStyle
+    internal sealed class Jpeg2000ResolvedCodingStyle
     {
         public Jpeg2000ResolvedCodingStyle(int componentIndex, Jpeg2000CodingStyleDefault defaults, Jpeg2000CodingStyle component)
         {

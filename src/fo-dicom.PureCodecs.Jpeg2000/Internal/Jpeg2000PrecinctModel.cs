@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000PrecinctModel
+    internal sealed class Jpeg2000PrecinctModel
     {
         public Jpeg2000PrecinctModel(
             int resolutionLevel,

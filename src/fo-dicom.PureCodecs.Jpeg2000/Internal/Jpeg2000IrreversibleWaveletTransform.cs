@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public static class Jpeg2000IrreversibleWaveletTransform
+    internal static class Jpeg2000IrreversibleWaveletTransform
     {
         private const double Alpha = -1.586134342059924;
         private const double Beta = -0.052980118572961;

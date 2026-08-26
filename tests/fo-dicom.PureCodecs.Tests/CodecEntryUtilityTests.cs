@@ -1,6 +1,5 @@
 using System;
 using FellowOakDicom;
-using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 using FellowOakDicom.IO.Buffer;
 using FellowOakDicom.PureCodecs.Internal;
@@ -20,16 +19,6 @@ public sealed class CodecEntryUtilityTests
 
         Assert.Equal(new byte[] { 1, 2, 3 }, buffer.Data);
         Assert.Equal(new byte[] { 9, 2, 3 }, copy);
-    }
-
-    [Fact]
-    public void Frame_validation_throws_codec_exception_for_out_of_range_frame()
-    {
-        var exception = Assert.Throws<DicomCodecException>(
-            () => FrameValidation.EnsureFrameIndex(DicomTransferSyntax.RLELossless, frame: 2, frameCount: 2));
-
-        Assert.Contains(DicomTransferSyntax.RLELossless.UID.Name, exception.Message);
-        Assert.Contains("frame 2", exception.Message);
     }
 
     [Fact]
@@ -55,34 +44,4 @@ public sealed class CodecEntryUtilityTests
         Assert.Same(inner, wrapped.InnerException);
     }
 
-    [Fact]
-    public void Pixel_metadata_snapshot_captures_pixel_data_shape()
-    {
-        var dataset = new DicomDataset
-        {
-            { DicomTag.PhotometricInterpretation, PhotometricInterpretation.Monochrome2.Value },
-            { DicomTag.Rows, (ushort)3 },
-            { DicomTag.Columns, (ushort)4 },
-            { DicomTag.BitsAllocated, (ushort)8 },
-            { DicomTag.BitsStored, (ushort)8 },
-            { DicomTag.HighBit, (ushort)7 },
-            { DicomTag.PixelRepresentation, (ushort)0 },
-            { DicomTag.SamplesPerPixel, (ushort)1 },
-            { DicomTag.PixelData, new byte[12] },
-        };
-
-        var pixelData = DicomPixelData.Create(dataset);
-
-        var snapshot = PixelMetadataSnapshot.From(pixelData);
-
-        Assert.Equal((ushort)4, snapshot.Width);
-        Assert.Equal((ushort)3, snapshot.Height);
-        Assert.Equal(1, snapshot.NumberOfFrames);
-        Assert.Equal((ushort)8, snapshot.BitsAllocated);
-        Assert.Equal((ushort)8, snapshot.BitsStored);
-        Assert.Equal((ushort)1, snapshot.SamplesPerPixel);
-        Assert.Equal(PixelRepresentation.Unsigned, snapshot.PixelRepresentation);
-        Assert.Equal(PlanarConfiguration.Interleaved, snapshot.PlanarConfiguration);
-        Assert.Equal(PhotometricInterpretation.Monochrome2, snapshot.PhotometricInterpretation);
-    }
 }

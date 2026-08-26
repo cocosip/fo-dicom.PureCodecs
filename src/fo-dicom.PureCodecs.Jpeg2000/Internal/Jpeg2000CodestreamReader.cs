@@ -2,7 +2,7 @@ using System;
 
 namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 {
-    public sealed class Jpeg2000CodestreamReader
+    internal sealed class Jpeg2000CodestreamReader
     {
         private static readonly byte[] Jp2Signature =
         {

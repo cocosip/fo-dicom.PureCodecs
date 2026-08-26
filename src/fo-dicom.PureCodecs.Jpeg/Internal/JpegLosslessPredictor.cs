@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.Jpeg.Internal
 {
-    public static class JpegLosslessPredictor
+    internal static class JpegLosslessPredictor
     {
         public static int PredictSample(
             int selectionValue,

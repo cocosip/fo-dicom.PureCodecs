@@ -1,6 +1,6 @@
 namespace FellowOakDicom.PureCodecs.JpegLs.Internal
 {
-    public sealed class JpegLsScanComponent
+    internal sealed class JpegLsScanComponent
     {
         public JpegLsScanComponent(int selector, int mappingTableSelector)
         {
