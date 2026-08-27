@@ -56,6 +56,15 @@ RGB/YBR layouts; and repacks decoded samples into fo-dicom's raw frame layout.
 `YBR_FULL` and `YBR_FULL_422` normalize to RGB before classic MCT and update the
 compressed photometric interpretation to `YBR_RCT` or `YBR_ICT`.
 
+HTJ2K uses the same Dataset boundary contract for three-component frames. Its
+encoder normalizes supported `YBR_FULL` and `YBR_FULL_422` input to interleaved
+RGB before the mandatory HT MCT, then writes interleaved `YBR_RCT` for lossless
+output or `YBR_ICT` for lossy output. The decoder obtains the MCT state from the
+parsed COD marker; after an actual three-component MCT decode it writes
+interleaved RGB metadata with the decoded frame. The adapter does not alter the
+source Dataset, and the inherited `DicomTranscoder` remains solely responsible
+for lossy compression history tags.
+
 ## Architecture
 
 The implementation shares JPEG 2000 structural infrastructure, not compatibility

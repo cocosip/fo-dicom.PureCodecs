@@ -92,10 +92,19 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
         public byte[] DecodeFrame(DicomPixelData targetPixelData, byte[] codestream)
         {
+            return DecodeFrame(targetPixelData, codestream, out _);
+        }
+
+        public byte[] DecodeFrame(
+            DicomPixelData targetPixelData,
+            byte[] codestream,
+            out bool usesMultipleComponentTransform)
+        {
             var parsed = Jpeg2000CodestreamParser.ParseSingleTilePart(
                 codestream,
                 sodFamilyName: "HTJ2K",
                 codestreamName: "HTJ2K");
+            usesMultipleComponentTransform = parsed.CodingStyle.UsesMultipleComponentTransform;
             foreach (var shift in parsed.RegionOfInterestShifts)
             {
                 if (shift != 0)

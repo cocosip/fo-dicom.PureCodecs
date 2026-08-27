@@ -83,6 +83,115 @@ public sealed class CodecAdapterContractTests
     }
 
     [Theory]
+    [InlineData("1.2.840.10008.1.2.4.201", "YBR_RCT")]
+    [InlineData("1.2.840.10008.1.2.4.202", "YBR_RCT")]
+    [InlineData("1.2.840.10008.1.2.4.203", "YBR_ICT")]
+    public void Dicom_transcoder_marks_htj2k_mct_output_and_decode_as_interleaved_color(
+        string targetSyntaxUid,
+        string compressedPhotometricInterpretation)
+    {
+        RegisterPureTranscoder();
+        var source = DicomPixelDataFixtures.CreateRgbInterleaved(rows: 16, columns: 16);
+        var targetSyntax = DicomTransferSyntax.Parse(targetSyntaxUid);
+
+        var compressed = new DicomTranscoder(
+            DicomTransferSyntax.ExplicitVRLittleEndian,
+            targetSyntax).Transcode(source);
+        var compressedPixelData = DicomPixelData.Create(compressed);
+
+        Assert.Equal(compressedPhotometricInterpretation, compressedPixelData.PhotometricInterpretation.Value);
+        Assert.Equal(PlanarConfiguration.Interleaved, compressedPixelData.PlanarConfiguration);
+
+        var decoded = new DicomTranscoder(
+            targetSyntax,
+            DicomTransferSyntax.ExplicitVRLittleEndian).Transcode(compressed);
+        var decodedPixelData = DicomPixelData.Create(decoded);
+
+        Assert.Equal(PhotometricInterpretation.Rgb, decodedPixelData.PhotometricInterpretation);
+        Assert.Equal(PlanarConfiguration.Interleaved, decodedPixelData.PlanarConfiguration);
+    }
+
+    [Fact]
+    public void Htj2k_lossless_normalizes_ybr_full_input_and_marks_rgb_after_decode()
+    {
+        RegisterPureTranscoder();
+        var source = CreateColorDataset(
+            PhotometricInterpretation.YbrFull,
+            columns: 2,
+            new byte[] { 100, 128, 128, 76, 84, 255 });
+
+        var compressed = new DicomTranscoder(
+            DicomTransferSyntax.ExplicitVRLittleEndian,
+            DicomTransferSyntax.HTJ2KLossless).Transcode(source);
+        var compressedPixelData = DicomPixelData.Create(compressed);
+
+        Assert.Equal(PhotometricInterpretation.YbrRct, compressedPixelData.PhotometricInterpretation);
+        Assert.Equal(PlanarConfiguration.Interleaved, compressedPixelData.PlanarConfiguration);
+
+        var decoded = new DicomTranscoder(
+            DicomTransferSyntax.HTJ2KLossless,
+            DicomTransferSyntax.ExplicitVRLittleEndian).Transcode(compressed);
+        var decodedPixelData = DicomPixelData.Create(decoded);
+
+        Assert.Equal(PhotometricInterpretation.Rgb, decodedPixelData.PhotometricInterpretation);
+        Assert.Equal(PlanarConfiguration.Interleaved, decodedPixelData.PlanarConfiguration);
+        Assert.Equal(new byte[] { 100, 100, 100, 254, 0, 0 }, decodedPixelData.GetFrame(0).Data);
+    }
+
+    [Fact]
+    public void Htj2k_lossless_normalizes_ybr_full_422_input_and_marks_rgb_after_decode()
+    {
+        RegisterPureTranscoder();
+        var source = CreateColorDataset(
+            PhotometricInterpretation.YbrFull422,
+            columns: 2,
+            new byte[] { 100, 150, 128, 128 });
+
+        var compressed = new DicomTranscoder(
+            DicomTransferSyntax.ExplicitVRLittleEndian,
+            DicomTransferSyntax.HTJ2KLossless).Transcode(source);
+        var compressedPixelData = DicomPixelData.Create(compressed);
+
+        Assert.Equal(PhotometricInterpretation.YbrRct, compressedPixelData.PhotometricInterpretation);
+        Assert.Equal(PlanarConfiguration.Interleaved, compressedPixelData.PlanarConfiguration);
+
+        var decoded = new DicomTranscoder(
+            DicomTransferSyntax.HTJ2KLossless,
+            DicomTransferSyntax.ExplicitVRLittleEndian).Transcode(compressed);
+        var decodedPixelData = DicomPixelData.Create(decoded);
+
+        Assert.Equal(PhotometricInterpretation.Rgb, decodedPixelData.PhotometricInterpretation);
+        Assert.Equal(PlanarConfiguration.Interleaved, decodedPixelData.PlanarConfiguration);
+        Assert.Equal(new byte[] { 100, 100, 100, 150, 150, 150 }, decodedPixelData.GetFrame(0).Data);
+    }
+
+    [Theory]
+    [InlineData("1.2.840.10008.1.2.4.50")]
+    [InlineData("1.2.840.10008.1.2.4.91")]
+    [InlineData("1.2.840.10008.1.2.4.203")]
+    public void Dicom_transcoder_appends_lossy_history_for_lossy_output(string targetSyntaxUid)
+    {
+        RegisterPureTranscoder();
+        var source = DicomPixelDataFixtures.CreateMonochrome8(rows: 16, columns: 16);
+        source.AddOrUpdate(DicomTag.LossyImageCompression, "01");
+        source.AddOrUpdate(DicomTag.LossyImageCompressionMethod, "ISO_10918_1");
+        source.AddOrUpdate(DicomTag.LossyImageCompressionRatio, "2.000");
+        var targetSyntax = DicomTransferSyntax.Parse(targetSyntaxUid);
+
+        var compressed = new DicomTranscoder(
+            DicomTransferSyntax.ExplicitVRLittleEndian,
+            targetSyntax).Transcode(source);
+
+        Assert.Equal("01", compressed.GetSingleValue<string>(DicomTag.LossyImageCompression));
+        var methods = compressed.GetValues<string>(DicomTag.LossyImageCompressionMethod);
+        Assert.Equal("ISO_10918_1", methods[0]);
+        Assert.Equal(targetSyntax.LossyCompressionMethod, methods[1]);
+        var ratios = compressed.GetValues<string>(DicomTag.LossyImageCompressionRatio);
+        Assert.Equal("2.000", ratios[0]);
+        Assert.Equal(2, ratios.Length);
+    }
+
+    [Theory]
     [InlineData("YBR_FULL")]
     [InlineData("YBR_FULL_422")]
     [InlineData("YBR_PARTIAL_422")]

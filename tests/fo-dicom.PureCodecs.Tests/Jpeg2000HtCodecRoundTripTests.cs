@@ -35,7 +35,7 @@ public sealed class Jpeg2000HtCodecRoundTripTests
     [Theory]
     [InlineData(8)]
     [InlineData(16)]
-    public void Htj2k_lossless_round_trips_planar_rgb_exactly(int bitsAllocated)
+    public void Htj2k_lossless_decodes_planar_rgb_as_interleaved_rgb(int bitsAllocated)
     {
         var dataset = bitsAllocated == 8
             ? DicomPixelDataFixtures.CreateRgbPlanar(rows: 2, columns: 3)
@@ -49,8 +49,15 @@ public sealed class Jpeg2000HtCodecRoundTripTests
         codec.Decode(compressed, decoded, codec.GetDefaultParameters());
 
         Assert.Equal(PlanarConfiguration.Interleaved, compressed.PlanarConfiguration);
-        Assert.Equal(PlanarConfiguration.Planar, decoded.PlanarConfiguration);
-        Assert.Equal(source.GetFrame(0).Data, decoded.GetFrame(0).Data);
+        Assert.Equal(PhotometricInterpretation.YbrRct, compressed.PhotometricInterpretation);
+        Assert.Equal(PhotometricInterpretation.Rgb, decoded.PhotometricInterpretation);
+        Assert.Equal(PlanarConfiguration.Interleaved, decoded.PlanarConfiguration);
+        Assert.Equal(
+            Jpeg2000FrameLayout.PlanarToInterleaved(
+                source.GetFrame(0).Data,
+                source.Width * source.Height,
+                bitsAllocated / 8),
+            decoded.GetFrame(0).Data);
     }
 
     [Fact]

@@ -39,20 +39,18 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             if (oldPixelData.SamplesPerPixel == 3)
             {
                 newPixelData.PlanarConfiguration = PlanarConfiguration.Interleaved;
+                newPixelData.PhotometricInterpretation = _lossy
+                    ? PhotometricInterpretation.YbrIct
+                    : PhotometricInterpretation.YbrRct;
             }
 
             for (var frame = 0; frame < oldPixelData.NumberOfFrames; frame++)
             {
                 try
                 {
-                    var sourceFrame = oldPixelData.GetFrame(frame).ToArrayCopy();
-                    if (oldPixelData.SamplesPerPixel == 3 && oldPixelData.PlanarConfiguration == PlanarConfiguration.Planar)
-                    {
-                        sourceFrame = Jpeg2000FrameLayout.PlanarToInterleaved(
-                            sourceFrame,
-                            oldPixelData.Width * oldPixelData.Height,
-                            oldPixelData.BitsAllocated / 8);
-                    }
+                    var sourceFrame = NormalizeFrameForEncode(
+                        oldPixelData,
+                        oldPixelData.GetFrame(frame).ToArrayCopy());
 
                     var encoded = _frameCodec.EncodeFrame(oldPixelData, sourceFrame, _lossy, tolerance, progressionOrder);
                     newPixelData.AddFrame(CodecOutputBuffer.Create(encoded, oldPixelData.NumberOfFrames));
@@ -80,7 +78,16 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             {
                 try
                 {
-                    var decoded = _frameCodec.DecodeFrame(newPixelData, oldPixelData.GetFrame(frame).ToArrayCopy());
+                    var decoded = _frameCodec.DecodeFrame(
+                        newPixelData,
+                        oldPixelData.GetFrame(frame).ToArrayCopy(),
+                        out var usesMultipleComponentTransform);
+                    if (usesMultipleComponentTransform && newPixelData.SamplesPerPixel == 3)
+                    {
+                        newPixelData.PhotometricInterpretation = PhotometricInterpretation.Rgb;
+                        newPixelData.PlanarConfiguration = PlanarConfiguration.Interleaved;
+                    }
+
                     if (newPixelData.SamplesPerPixel == 3 && newPixelData.PlanarConfiguration == PlanarConfiguration.Planar)
                     {
                         decoded = Jpeg2000FrameLayout.InterleavedToPlanar(
@@ -106,6 +113,57 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             }
 
             return 0;
+        }
+
+        private static byte[] NormalizeFrameForEncode(DicomPixelData pixelData, byte[] frame)
+        {
+            IByteBuffer normalized = new MemoryByteBuffer(frame);
+            if (pixelData.SamplesPerPixel == 3 && pixelData.PlanarConfiguration == PlanarConfiguration.Planar)
+            {
+                if (pixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull422)
+                {
+                    throw new DicomCodecException("HTJ2K planar YBR_FULL_422 encoding is not supported.");
+                }
+
+                normalized = new MemoryByteBuffer(Jpeg2000FrameLayout.PlanarToInterleaved(
+                    normalized.Data,
+                    pixelData.Width * pixelData.Height,
+                    pixelData.BitsAllocated / 8));
+            }
+
+            if (pixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull)
+            {
+                if (pixelData.BitsAllocated != 8)
+                {
+                    throw new DicomCodecException("HTJ2K YBR_FULL encoding supports only 8-bit allocated samples.");
+                }
+
+                normalized = PixelDataConverter.YbrFullToRgb(normalized);
+            }
+            else if (pixelData.PhotometricInterpretation == PhotometricInterpretation.YbrFull422)
+            {
+                if (pixelData.BitsAllocated != 8)
+                {
+                    throw new DicomCodecException("HTJ2K YBR_FULL_422 encoding supports only 8-bit allocated samples.");
+                }
+
+                normalized = PixelDataConverter.YbrFull422ToRgb(normalized, pixelData.Width);
+            }
+
+            var expectedLength = pixelData.Width * pixelData.Height * pixelData.SamplesPerPixel * pixelData.BytesAllocated;
+            if (normalized.Data.Length < expectedLength)
+            {
+                throw new DicomCodecException("HTJ2K color conversion produced an incomplete RGB frame.");
+            }
+
+            if (normalized.Data.Length == expectedLength)
+            {
+                return normalized.Data;
+            }
+
+            var trimmed = new byte[expectedLength];
+            Buffer.BlockCopy(normalized.Data, 0, trimmed, 0, trimmed.Length);
+            return trimmed;
         }
 
         private static void ValidateParameters(DicomHtJpeg2000Params parameters)

@@ -469,6 +469,8 @@ open; restore the blocking CI step after the fixed package is publicly available
 - [x] Normalize classic JPEG 2000 `YBR_FULL` and `YBR_FULL_422` input to complete RGB frames before MCT.
 - [x] Validate classic JPEG 2000 YBR output with the native OpenJPEG decoder.
 - [x] Keep classic JPEG 2000 YBR metadata consistent after RGB normalization and MCT even when optional photometric updates are disabled.
+- [x] Keep HTJ2K three-component MCT metadata consistent: normalize supported YBR input, write `YBR_RCT`/`YBR_ICT` on encode, and write interleaved RGB after COD-declared MCT decode.
+- [x] Test inherited `DicomTranscoder` lossy history accumulation without moving history-tag ownership into codecs or CLI tools.
 - [x] Decode classic JPEG 2000 multi-tile codestreams and validate exact output with `fo-dicom.Codecs`/OpenJPEG.
 - [x] Add explicit Phase 1 exclusion for JPEG 2000 Part 2 Multi-component transfer syntaxes `.92` and `.93`.
 - [x] Add explicit unsupported JPIP/JPT behavior.
