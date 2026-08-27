@@ -1056,6 +1056,176 @@ public sealed class Jpeg2000DicomIntegrationTests
     }
 
     [Fact]
+    public void Htj2k_decode_rejects_mixed_standard_and_historical_component_precisions()
+    {
+        var source = CreateRgbPixelData(bitsStored: 12);
+        var codec = new DicomHtJpeg2000LosslessCodec();
+        var encoded = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, codec.TransferSyntax), true);
+        codec.Encode(source, encoded, codec.GetDefaultParameters());
+        var codestream = encoded.GetFrame(0).Data.ToArray();
+        var sizOffset = FindMarkerOffset(codestream, Jpeg2000Marker.SIZ);
+        codestream[sizOffset + 43] = 0x0F;
+        var compressed = CreateCompressedPixelDataWithFrame(source, codec.TransferSyntax, codestream);
+        var target = DicomPixelData.Create(
+            CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian),
+            true);
+
+        var exception = Assert.Throws<DicomCodecException>(
+            () => codec.Decode(compressed, target, codec.GetDefaultParameters()));
+
+        Assert.Contains("precision", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(false, 0x0B)]
+    [InlineData(true, 0x8B)]
+    public void Htj2k_lossless_encode_uses_twelve_bit_siz_and_normalizes_container_padding(
+        bool isSigned,
+        int expectedSsiz)
+    {
+        var sourceSamples = isSigned
+            ? new ushort[] { 0x0000, 0x0001, 0x07FF, 0x0800, 0x0FFF, 0xFFFF, 0xF800 }
+            : new ushort[] { 0x0000, 0x0001, 0x07FF, 0x0800, 0x0FFF, 0xF123 };
+        var expectedSamples = isSigned
+            ? new ushort[] { 0x0000, 0x0001, 0x07FF, 0x0800, 0x0FFF, 0x0FFF, 0x0800 }
+            : new ushort[] { 0x0000, 0x0001, 0x07FF, 0x0800, 0x0FFF, 0x0123 };
+        var source = CreateMonochromePixelData(bitsStored: 12, isSigned, sourceSamples);
+        var codec = new DicomHtJpeg2000LosslessCodec();
+        var compressed = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, codec.TransferSyntax), true);
+        var decoded = DicomPixelData.Create(
+            CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian),
+            true);
+
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+
+        var codestream = compressed.GetFrame(0).Data;
+        var sizOffset = FindMarkerOffset(codestream, Jpeg2000Marker.SIZ);
+        Assert.Equal(expectedSsiz, codestream[sizOffset + 40]);
+        Assert.Equal(12, ReadSizeSegment(codestream).Components[0].Precision);
+        Assert.Equal(
+            new byte[]
+            {
+                0x20, 0x68,
+                0x70, 0x70, 0x70,
+                0x70, 0x70, 0x70,
+                0x70, 0x70, 0x70,
+                0x70, 0x70, 0x70,
+                0x68, 0x68, 0x68
+            },
+            ReadMarkerPayload(codestream, Jpeg2000Marker.QCD));
+        Assert.Equal(
+            new byte[] { 0x00, 0x02, 0x00, 0x00, 0x00, 0x06 },
+            ReadMarkerPayload(codestream, Jpeg2000Marker.CAP));
+        Assert.Equal((ushort)16, compressed.BitsAllocated);
+        Assert.Equal((ushort)12, compressed.BitsStored);
+        Assert.Equal((ushort)11, compressed.HighBit);
+
+        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
+
+        Assert.Equal(CreateRepeatedLittleEndianFrame(expectedSamples), decoded.GetFrame(0).Data);
+    }
+
+    [Theory]
+    [InlineData(201, false, 0x0B)]
+    [InlineData(201, true, 0x8B)]
+    [InlineData(202, false, 0x0B)]
+    [InlineData(202, true, 0x8B)]
+    [InlineData(203, false, 0x0B)]
+    [InlineData(203, true, 0x8B)]
+    public void Htj2k_encode_uses_bits_stored_for_siz_in_every_transfer_syntax(
+        int transferSyntax,
+        bool isSigned,
+        int expectedSsiz)
+    {
+        var samples = isSigned
+            ? new ushort[] { 0x0000, 0x07FF, 0x0800, 0xFFFF }
+            : new ushort[] { 0x0000, 0x07FF, 0x0800, 0xF123 };
+        var source = CreateMonochromePixelData(bitsStored: 12, isSigned, samples);
+        var codec = CreateHtJpeg2000Codec(transferSyntax);
+        var compressed = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, codec.TransferSyntax), true);
+
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+
+        var codestream = compressed.GetFrame(0).Data;
+        var sizOffset = FindMarkerOffset(codestream, Jpeg2000Marker.SIZ);
+        Assert.Equal(expectedSsiz, codestream[sizOffset + 40]);
+    }
+
+    [Theory]
+    [InlineData(false, 0x0B)]
+    [InlineData(true, 0x8B)]
+    public void Htj2k_lossy_twelve_bit_encode_uses_stored_precision_quantization_and_sample_math(
+        bool isSigned,
+        int expectedSsiz)
+    {
+        var sourceSamples = isSigned
+            ? new ushort[] { 0x0000, 0x0001, 0x07FF, 0x0800, 0x0FFF, 0xFFFF, 0xF800 }
+            : new ushort[] { 0x0000, 0x0001, 0x07FF, 0x0800, 0x0FFF, 0xF123 };
+        var source = CreateMonochromePixelData(bitsStored: 12, isSigned, sourceSamples);
+        var codec = new DicomHtJpeg2000LossyCodec();
+        var compressed = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, codec.TransferSyntax), true);
+        var decoded = DicomPixelData.Create(
+            CloneForTransferSyntax(source.Dataset, DicomTransferSyntax.ExplicitVRLittleEndian),
+            true);
+
+        codec.Encode(source, compressed, codec.GetDefaultParameters());
+        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
+
+        var codestream = compressed.GetFrame(0).Data;
+        var sizOffset = FindMarkerOffset(codestream, Jpeg2000Marker.SIZ);
+        Assert.Equal(expectedSsiz, codestream[sizOffset + 40]);
+        Assert.Equal(
+            new byte[]
+            {
+                0x22,
+                0x97, 0x18, 0x96, 0xEA, 0x96, 0xEA, 0x96, 0xBC,
+                0x8F, 0x00, 0x8F, 0x00, 0x8E, 0xE2,
+                0x87, 0x4C, 0x87, 0x4C, 0x87, 0x64,
+                0x70, 0x03, 0x70, 0x03, 0x70, 0x46,
+                0x77, 0xD2, 0x77, 0xD2, 0x77, 0x61
+            },
+            ReadMarkerPayload(codestream, Jpeg2000Marker.QCD));
+        Assert.Equal(
+            new byte[] { 0x00, 0x02, 0x00, 0x00, 0x00, 0x26 },
+            ReadMarkerPayload(codestream, Jpeg2000Marker.CAP));
+        AssertStoredSamplesWithinTolerance(
+            CreateRepeatedLittleEndianFrame(sourceSamples),
+            decoded.GetFrame(0).Data,
+            bitsStored: 12,
+            isSigned,
+            tolerance: 8);
+    }
+
+    [Theory]
+    [InlineData(false, 0x0F)]
+    [InlineData(true, 0x8F)]
+    public void Htj2k_lossless_decode_accepts_historical_sixteen_bit_siz_with_twelve_bit_dicom_metadata(
+        bool isSigned,
+        int expectedSsiz)
+    {
+        var samples = isSigned
+            ? new ushort[] { 0x0000, 0x0001, 0x07FF, 0xF800, 0xFFFF }
+            : new ushort[] { 0x0000, 0x0001, 0x07FF, 0x0800, 0x0FFF };
+        var source = CreateMonochromePixelData(bitsStored: 16, isSigned, samples);
+        var codec = new DicomHtJpeg2000LosslessCodec();
+        var encoded = DicomPixelData.Create(CloneForTransferSyntax(source.Dataset, codec.TransferSyntax), true);
+        codec.Encode(source, encoded, codec.GetDefaultParameters());
+        var codestream = encoded.GetFrame(0).Data;
+        var sizOffset = FindMarkerOffset(codestream, Jpeg2000Marker.SIZ);
+        var compressed = CreateCompressedPixelDataWithStoredPrecision(
+            source,
+            codec.TransferSyntax,
+            codestream,
+            bitsStored: 12);
+        var decoded = CreateTargetPixelDataWithStoredPrecision(source, bitsStored: 12);
+
+        codec.Decode(compressed, decoded, codec.GetDefaultParameters());
+
+        Assert.Equal(expectedSsiz, codestream[sizOffset + 40]);
+        Assert.Equal(source.GetFrame(0).Data, decoded.GetFrame(0).Data);
+    }
+
+    [Fact]
     public void Jpeg2000_classic_decode_rejects_16_bit_siz_for_12_bit_dicom_metadata()
     {
         var source = CreateMonochrome16PixelData(sample: 1000, PixelRepresentation.Unsigned);
@@ -1078,7 +1248,7 @@ public sealed class Jpeg2000DicomIntegrationTests
     [Theory]
     [InlineData(5000, PixelRepresentation.Unsigned)]
     [InlineData(3000, PixelRepresentation.Signed)]
-    public void Htj2k_lossless_decode_rejects_samples_outside_dicom_stored_range(
+    public void Htj2k_lossless_decode_preserves_codestream_samples_outside_dicom_stored_range(
         int sample,
         PixelRepresentation pixelRepresentation)
     {
@@ -1093,14 +1263,13 @@ public sealed class Jpeg2000DicomIntegrationTests
             bitsStored: 12);
         var target = CreateTargetPixelDataWithStoredPrecision(source, bitsStored: 12);
 
-        var exception = Assert.Throws<DicomCodecException>(
-            () => codec.Decode(compressed, target, codec.GetDefaultParameters()));
+        codec.Decode(compressed, target, codec.GetDefaultParameters());
 
-        Assert.Contains("stored range", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(source.GetFrame(0).Data, target.GetFrame(0).Data);
     }
 
     [Fact]
-    public void Htj2k_lossy_decode_clamps_irreversible_overshoot_to_dicom_stored_range()
+    public void Htj2k_lossy_decode_preserves_codestream_precision_when_dicom_precision_is_lower()
     {
         var source = CreateMonochrome16PixelData(sample: 5000, PixelRepresentation.Unsigned);
         var codec = new DicomHtJpeg2000LossyCodec();
@@ -1118,7 +1287,8 @@ public sealed class Jpeg2000DicomIntegrationTests
         var decoded = target.GetFrame(0).Data;
         for (var offset = 0; offset < decoded.Length; offset += 2)
         {
-            Assert.InRange(decoded[offset] | (decoded[offset + 1] << 8), 0, 4095);
+            var sample = decoded[offset] | (decoded[offset + 1] << 8);
+            Assert.InRange(Math.Abs(sample - 5000), 0, 8);
         }
     }
 
@@ -1288,6 +1458,15 @@ public sealed class Jpeg2000DicomIntegrationTests
         }
 
         throw new Xunit.Sdk.XunitException("SIZ marker not found.");
+    }
+
+    private static byte[] ReadMarkerPayload(byte[] codestream, byte marker)
+    {
+        var offset = FindMarkerOffset(codestream, marker);
+        var length = ReadMarkerPayloadLength(codestream, offset);
+        var payload = new byte[length];
+        Buffer.BlockCopy(codestream, offset + 4, payload, 0, length);
+        return payload;
     }
 
     private static DicomPixelData EncodeDecodeJpeg2000Lossy(DicomPixelData source, PureJpeg2000Params parameters)
@@ -1489,6 +1668,112 @@ public sealed class Jpeg2000DicomIntegrationTests
             frame);
         dataset.AddOrUpdate(DicomTag.PixelRepresentation, (ushort)pixelRepresentation);
         return DicomPixelData.Create(dataset);
+    }
+
+    private static DicomPixelData CreateMonochromePixelData(
+        ushort bitsStored,
+        bool isSigned,
+        ushort[] samples)
+    {
+        var frame = CreateRepeatedLittleEndianFrame(samples);
+        var dataset = DicomPixelDataFixtures.CreateBaseDataset(
+            rows: 32,
+            columns: 32,
+            samplesPerPixel: 1,
+            photometricInterpretation: PhotometricInterpretation.Monochrome2,
+            bitsAllocated: 16,
+            bitsStored,
+            highBit: (ushort)(bitsStored - 1),
+            planarConfiguration: null,
+            numberOfFrames: 1,
+            transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
+            frame);
+        dataset.AddOrUpdate(
+            DicomTag.PixelRepresentation,
+            (ushort)(isSigned ? PixelRepresentation.Signed : PixelRepresentation.Unsigned));
+        return DicomPixelData.Create(dataset);
+    }
+
+    private static DicomPixelData CreateRgbPixelData(ushort bitsStored)
+    {
+        const int sampleCount = 32 * 32 * 3;
+        var frame = new byte[sampleCount * 2];
+        for (var sample = 0; sample < sampleCount; sample++)
+        {
+            var value = (ushort)((sample * 37) & ((1 << bitsStored) - 1));
+            frame[sample * 2] = (byte)value;
+            frame[(sample * 2) + 1] = (byte)(value >> 8);
+        }
+
+        var dataset = DicomPixelDataFixtures.CreateBaseDataset(
+            rows: 32,
+            columns: 32,
+            samplesPerPixel: 3,
+            photometricInterpretation: PhotometricInterpretation.Rgb,
+            bitsAllocated: 16,
+            bitsStored,
+            highBit: (ushort)(bitsStored - 1),
+            planarConfiguration: PlanarConfiguration.Interleaved,
+            numberOfFrames: 1,
+            transferSyntax: DicomTransferSyntax.ExplicitVRLittleEndian,
+            frame);
+        return DicomPixelData.Create(dataset);
+    }
+
+    private static IDicomCodec CreateHtJpeg2000Codec(int transferSyntax)
+    {
+        return transferSyntax switch
+        {
+            201 => new DicomHtJpeg2000LosslessCodec(),
+            202 => new DicomHtJpeg2000LosslessRpclCodec(),
+            203 => new DicomHtJpeg2000LossyCodec(),
+            _ => throw new ArgumentOutOfRangeException(nameof(transferSyntax))
+        };
+    }
+
+    private static byte[] CreateRepeatedLittleEndianFrame(ushort[] samples)
+    {
+        const int sampleCount = 32 * 32;
+        var frame = new byte[sampleCount * 2];
+        for (var sample = 0; sample < sampleCount; sample++)
+        {
+            var value = samples[sample % samples.Length];
+            frame[sample * 2] = (byte)value;
+            frame[(sample * 2) + 1] = (byte)(value >> 8);
+        }
+
+        return frame;
+    }
+
+    private static void AssertStoredSamplesWithinTolerance(
+        byte[] expected,
+        byte[] actual,
+        int bitsStored,
+        bool isSigned,
+        int tolerance)
+    {
+        Assert.Equal(expected.Length, actual.Length);
+        var mask = (1 << bitsStored) - 1;
+        var signBit = 1 << (bitsStored - 1);
+        for (var offset = 0; offset < expected.Length; offset += 2)
+        {
+            var expectedSample = (expected[offset] | (expected[offset + 1] << 8)) & mask;
+            var actualSample = (actual[offset] | (actual[offset + 1] << 8)) & mask;
+            if (isSigned)
+            {
+                if ((expectedSample & signBit) != 0)
+                {
+                    expectedSample -= 1 << bitsStored;
+                }
+
+                if ((actualSample & signBit) != 0)
+                {
+                    actualSample -= 1 << bitsStored;
+                }
+            }
+
+            Assert.InRange(Math.Abs(expectedSample - actualSample), 0, tolerance);
+        }
     }
 
     private static DicomPixelData CreateCompressedPixelDataWithStoredPrecision(

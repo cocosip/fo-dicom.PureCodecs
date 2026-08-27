@@ -862,11 +862,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             var result = new byte[pixelCount * components.Length * bytesPerSample];
             var precision = components[0].Precision;
             var max = (1 << precision) - 1;
-            var targetIsSigned = targetPixelData.PixelRepresentation == PixelRepresentation.Signed;
-            var storedMin = targetIsSigned ? -(1 << (targetPixelData.BitsStored - 1)) : 0;
-            var storedMax = targetIsSigned
-                ? (1 << (targetPixelData.BitsStored - 1)) - 1
-                : (1 << targetPixelData.BitsStored) - 1;
 
             for (var pixel = 0; pixel < pixelCount; pixel++)
             {
@@ -876,18 +871,6 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
                     var value = floatSamples != null
                         ? RoundSample(floatSamples[pixel])
                         : components[component].Samples[pixel];
-                    if (_profile == Jpeg2000DecodeProfile.HighThroughputOpenJph
-                        && components[component].Precision != targetPixelData.BitsStored
-                        && (value < storedMin || value > storedMax))
-                    {
-                        if (floatSamples == null)
-                        {
-                            throw Jpeg2000Binary.CreateException(
-                                "HTJ2K decoded sample is outside the DICOM BitsStored range.");
-                        }
-
-                        value = Math.Min(storedMax, Math.Max(storedMin, value));
-                    }
 
                     if (components[component].IsSigned)
                     {
@@ -938,23 +921,26 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal.Standard
             }
 
             var targetIsSigned = targetPixelData.PixelRepresentation == PixelRepresentation.Signed;
+            var allComponentsUseStoredPrecision = true;
+            var allComponentsUseAllocatedPrecision = _profile == Jpeg2000DecodeProfile.HighThroughputOpenJph
+                && targetPixelData.BitsStored < targetPixelData.BitsAllocated;
             for (var component = 0; component < siz.Components.Count; component++)
             {
                 var sizeComponent = siz.Components[component];
-                var usesAllocatedContainerPrecision = _profile == Jpeg2000DecodeProfile.HighThroughputOpenJph
-                    && targetPixelData.BitsStored < targetPixelData.BitsAllocated
-                    && sizeComponent.Precision == targetPixelData.BitsAllocated;
-                if (sizeComponent.Precision != targetPixelData.BitsStored && !usesAllocatedContainerPrecision)
-                {
-                    throw Jpeg2000Binary.CreateException(
-                        $"JPEG 2000 SIZ component {component} precision conflicts with DICOM BitsStored.");
-                }
+                allComponentsUseStoredPrecision &= sizeComponent.Precision == targetPixelData.BitsStored;
+                allComponentsUseAllocatedPrecision &= sizeComponent.Precision == targetPixelData.BitsAllocated;
 
                 if (sizeComponent.IsSigned != targetIsSigned)
                 {
                     throw Jpeg2000Binary.CreateException(
                         $"JPEG 2000 SIZ component {component} signedness conflicts with DICOM PixelRepresentation.");
                 }
+            }
+
+            if (!allComponentsUseStoredPrecision && !allComponentsUseAllocatedPrecision)
+            {
+                throw Jpeg2000Binary.CreateException(
+                    "JPEG 2000 SIZ component precision conflicts with DICOM pixel metadata.");
             }
 
             if (cod.LayerCount <= 0)

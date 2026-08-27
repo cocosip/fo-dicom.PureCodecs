@@ -430,7 +430,8 @@ Build a pure C# `netstandard2.0` codec package that fully replaces the completed
 - [x] Keep explicit classic and high-throughput 5/3 and 9/7 transform entry points where arithmetic differs.
 - [x] Prove classic `.90/.91` behavior is unchanged after every shared JPEG 2000 infrastructure change.
 - [x] Complete exact default `.203` RGB codestream alignment; do not widen pixel tolerance around the remaining difference.
-- [x] Scope 12-in-16 SIZ precision compatibility to HTJ2K, reject reversible out-of-range samples, and clip irreversible overshoot.
+- [x] Encode HTJ2K SIZ, QCD, CAP/MAGB, level shift, and quantization from `BitsStored` while using `BitsAllocated` for the pixel container.
+- [x] Scope 12-in-16 SIZ compatibility to image-wide HTJ2K precision modes, preserve SIZ-precision samples in the allocated output container, and reject mixed component precision.
 - [x] Reject invalid HTJ2K `TargetRatio` and unsupported `NumLayers` values before frame processing.
 - [x] Compare every HTJ2K reference manifest field and build Pure manifests independently.
 - [x] Move all Native HTJ2K operations into bounded worker processes.

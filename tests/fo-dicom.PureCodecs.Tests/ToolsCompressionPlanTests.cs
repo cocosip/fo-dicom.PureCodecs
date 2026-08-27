@@ -649,11 +649,10 @@ public sealed class ToolsCompressionPlanTests
     }
 
     [Fact]
-    public void Compress_htj2k_lossless_12_bit_image_uses_native_component_precision_and_qcd()
+    public void Compress_htj2k_lossless_12_bit_image_uses_stored_precision_and_standard_qcd()
     {
         var inputPath = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-htj2k-lossless-12-bit-" + Guid.NewGuid().ToString("N") + ".dcm");
         var pureOutputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-purecodecs-htj2k-lossless-12-bit-" + Guid.NewGuid().ToString("N"));
-        var nativeOutputDirectory = Path.Combine(Path.GetTempPath(), "fo-dicom-native-htj2k-lossless-12-bit-" + Guid.NewGuid().ToString("N"));
         var sourceDataset = DicomPixelDataFixtures.CreateBaseDataset(
             rows: 288,
             columns: 288,
@@ -671,19 +670,35 @@ public sealed class ToolsCompressionPlanTests
         {
             new DicomFile(sourceDataset).Save(inputPath);
             var pureFormat = CompressionTargetFormats.All.Single(item => item.TransferSyntax == DicomTransferSyntax.HTJ2KLossless);
-            var nativeOutputPath = Path.Combine(nativeOutputDirectory, "native.dcm");
-            RunNativeWorker(inputPath, nativeOutputPath, "201");
             var pureResult = Assert.Single(new DicomCompressionTool()
                 .Compress(inputPath, pureOutputDirectory, pureFormat));
 
             Assert.Equal(CompressionResultStatus.Success, pureResult.Status);
 
-            var nativeFrame = DicomPixelData.Create(DicomFile.Open(nativeOutputPath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
-            var pureFrame = DicomPixelData.Create(DicomFile.Open(pureResult.Item.OutputPath, FileReadOption.ReadAll).Dataset).GetFrame(0).Data;
+            var outputDataset = DicomFile.Open(pureResult.Item.OutputPath, FileReadOption.ReadAll).Dataset;
+            var outputPixelData = DicomPixelData.Create(outputDataset);
+            var pureFrame = outputPixelData.GetFrame(0).Data;
 
-            Assert.Equal(ReadJpeg2000ComponentPrecision(nativeFrame), ReadJpeg2000ComponentPrecision(pureFrame));
-            Assert.Equal(ReadJpeg2000QcdPayload(nativeFrame), ReadJpeg2000QcdPayload(pureFrame));
-            Assert.Equal(ReadJpeg2000CommentPayload(nativeFrame), ReadJpeg2000CommentPayload(pureFrame));
+            Assert.Equal(0x0B, ReadJpeg2000ComponentPrecision(pureFrame));
+            Assert.Equal(
+                new byte[]
+                {
+                    0x20, 0x68,
+                    0x70, 0x70, 0x70,
+                    0x70, 0x70, 0x70,
+                    0x70, 0x70, 0x70,
+                    0x70, 0x70, 0x70,
+                    0x68, 0x68, 0x68
+                },
+                ReadJpeg2000QcdPayload(pureFrame));
+            var comment = ReadJpeg2000CommentPayload(pureFrame);
+            Assert.Equal(new byte[] { 0x00, 0x01 }, comment[..2]);
+            Assert.Equal(
+                "OpenJPH Ver 0.30.1.",
+                System.Text.Encoding.ASCII.GetString(comment, 2, comment.Length - 2));
+            Assert.Equal((ushort)16, outputPixelData.BitsAllocated);
+            Assert.Equal((ushort)12, outputPixelData.BitsStored);
+            Assert.Equal((ushort)11, outputPixelData.HighBit);
         }
         finally
         {
@@ -692,12 +707,9 @@ public sealed class ToolsCompressionPlanTests
                 File.Delete(inputPath);
             }
 
-            foreach (var outputDirectory in new[] { pureOutputDirectory, nativeOutputDirectory })
+            if (Directory.Exists(pureOutputDirectory))
             {
-                if (Directory.Exists(outputDirectory))
-                {
-                    Directory.Delete(outputDirectory, recursive: true);
-                }
+                Directory.Delete(pureOutputDirectory, recursive: true);
             }
         }
     }

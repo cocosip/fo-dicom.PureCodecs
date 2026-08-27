@@ -20,28 +20,26 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
             var width = pixelData.Width;
             var height = pixelData.Height;
-            var bitsAllocated = pixelData.BitsAllocated;
-            var bitsStored = pixelData.BitsStored;
+            var codestreamPrecision = pixelData.BitsStored;
             var isSigned = pixelData.PixelRepresentation == PixelRepresentation.Signed;
             var samplesPerPixel = pixelData.SamplesPerPixel;
             var decompositionLevels = OpenJphDecompositionLevels;
             var usesNativeDefaultLossyParameters = lossy && qualityTolerance == 0;
-            var codingBitDepth = !lossy || usesNativeDefaultLossyParameters ? bitsAllocated : bitsStored;
             var encodedSteps = lossy
                 ? usesNativeDefaultLossyParameters
                     ? Jpeg2000HtIrreversibleQuantization.CreateOpenJphScalarExpoundedSteps(
                         decompositionLevels,
-                        codingBitDepth,
+                        codestreamPrecision,
                         baseDelta: -1.0f)
                     : Jpeg2000HtIrreversibleQuantization.CreateQualityScalarExpoundedSteps(
                         decompositionLevels,
-                        bitsStored,
+                        codestreamPrecision,
                         CreateLossyQuality(qualityTolerance))
                 : Array.Empty<ushort>();
             var encoder = new Jpeg2000HtTileEncoder();
             var tileParts = lossy
-                ? encoder.EncodeLossyTileParts(pixelData, frame, progressionOrder, decompositionLevels, encodedSteps, codingBitDepth)
-                : encoder.EncodeLosslessTileParts(pixelData, frame, progressionOrder, decompositionLevels, codingBitDepth);
+                ? encoder.EncodeLossyTileParts(pixelData, frame, progressionOrder, decompositionLevels, encodedSteps, codestreamPrecision)
+                : encoder.EncodeLosslessTileParts(pixelData, frame, progressionOrder, decompositionLevels, codestreamPrecision);
             byte[] qcdPayload;
             if (lossy)
             {
@@ -50,7 +48,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
             else
             {
                 var reversibleExponentBits = Jpeg2000ReversibleBiboGains.CreateReversibleExponentBits(
-                    codingBitDepth,
+                    codestreamPrecision,
                     samplesPerPixel == 3,
                     decompositionLevels);
                 qcdPayload = Jpeg2000MarkerPayloadBuilder.CreateReversibleQuantizationFromExponentBits(reversibleExponentBits);
@@ -62,7 +60,7 @@ namespace FellowOakDicom.PureCodecs.Jpeg2000.Internal
 
             var writer = new Jpeg2000CodestreamWriter();
             writer.WriteStandalone(Jpeg2000Marker.SOC);
-            writer.WriteSegment(Jpeg2000Marker.SIZ, Jpeg2000MarkerPayloadBuilder.CreateSize(width, height, codingBitDepth, isSigned, samplesPerPixel, capabilities: 0x4000));
+            writer.WriteSegment(Jpeg2000Marker.SIZ, Jpeg2000MarkerPayloadBuilder.CreateSize(width, height, codestreamPrecision, isSigned, samplesPerPixel, capabilities: 0x4000));
             writer.WriteSegment(Jpeg2000Marker.CAP, Jpeg2000MarkerPayloadBuilder.CreateHighThroughputCapabilities(reversible: !lossy, magnitudeBound));
             writer.WriteSegment(Jpeg2000Marker.COD, CreateCodingStylePayload(progressionOrder, samplesPerPixel == 3, decompositionLevels, lossy));
             writer.WriteSegment(Jpeg2000Marker.QCD, qcdPayload);
