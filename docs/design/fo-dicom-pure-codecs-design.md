@@ -1,4 +1,4 @@
-# fo-dicom.PureCodecs Design and Development Plan
+# fo-dicom.PureCodecs Design
 
 ## Purpose
 
@@ -6,19 +6,22 @@
 
 The first development phase must fully replace the codec capabilities currently provided by `fo-dicom.Codecs`, while removing the native C/C++ dependency that can crash the hosting process. All codec failures must surface as managed exceptions, normally `DicomCodecException` or a more specific managed exception wrapped by codec code.
 
-This document is the baseline for architecture, scope, implementation order, and acceptance criteria. Future development should update this document when the agreed direction changes.
+This document is the baseline for architecture, scope, package shape, and
+acceptance criteria. Future development should update this document when the
+agreed direction changes.
 
-## Design Document Set
+## Document Set
 
-Development must use this document together with the focused design documents below:
+Development must use this document together with the documents below:
 
-- `docs/development/development-checklist.md`: overall development workflow and checkbox progress tracker.
-- `docs/design/codec-entry-design.md`: package entry point, `PureTranscoderManager`, registration, shared utilities, and stub codec rules.
+- `docs/development/verification-baseline.md`: current verification results and
+  the commands that reproduce them.
+- `docs/design/codec-entry-design.md`: package entry point, `PureTranscoderManager`, registration, public codec types, and shared utilities.
 - `docs/design/rle-codec-design.md`: RLE Lossless encode/decode design.
 - `docs/design/jpeg-codec-design.md`: JPEG Process 1, Process 2/4, Process 14, and Process 14 SV1 design.
 - `docs/design/jpegls-codec-design.md`: JPEG-LS Lossless and JPEG-LS Near-Lossless design.
 - `docs/design/jpeg2000-codec-design.md`: JPEG 2000 Lossless, JPEG 2000 Lossy,
-  HTJ2K design, classic/HT compatibility boundary, and release gates.
+  HTJ2K design, and the classic/HT compatibility boundary.
 
 ## Hard Requirements
 
@@ -41,14 +44,15 @@ All production libraries target only:
 
 This keeps the package usable from .NET Framework 4.7.2+, .NET Core, and modern .NET runtimes.
 
-Test projects may target modern runtimes such as `net8.0`, but the shipped codec assemblies must remain `netstandard2.0`.
+Test, tool, benchmark, and modern consumer-smoke projects target `net10.0`; the
+shipped codec assemblies must remain `netstandard2.0`.
 
 ## Package Shape
 
 The final output is one NuGet package:
 
 ```text
-fo-dicom.PureCodecs.nupkg
+FoDicom.PureCodecs.nupkg
   lib/netstandard2.0/
     fo-dicom.PureCodecs.dll
     fo-dicom.PureCodecs.Jpeg.dll
@@ -69,7 +73,7 @@ The user installs one NuGet package and registers one transcoder manager. The in
 
 ## Package Version Management
 
-NuGet dependency versions are managed centrally in `Directory.Packages.props` with `ManagePackageVersionsCentrally` enabled. Project files use versionless `PackageReference` items for centrally managed packages. The current phase 1 fo-dicom package version is `5.2.6`.
+NuGet dependency versions are managed centrally in `Directory.Packages.props` with `ManagePackageVersionsCentrally` enabled. Project files use versionless `PackageReference` items for centrally managed packages. The current production `fo-dicom` version is `5.2.6`; the interoperability reference uses `fo-dicom.Codecs` `6.0.0` through normal NuGet restore.
 
 ## fo-dicom Integration
 
@@ -243,168 +247,34 @@ This mirrors fo-dicom's current `DefaultTranscoderManager` style: deterministic 
 - Multi-frame data should be processed frame by frame unless a codec algorithm truly requires cross-frame state.
 - Large compressed or raw frames may use fo-dicom buffer abstractions, but codec logic itself must stay managed.
 
-## Development Order
+## Implementation Record
 
-Development should proceed in this order:
+Phase 1 was implemented in this order:
 
-1. Repository and solution skeleton.
-2. Public package and transcoder registration.
-3. Compatibility test harness based on `fo-dicom.Codecs` tests.
-4. RLE Lossless.
-5. JPEG family.
-6. JPEG-LS family.
-7. JPEG 2000 classic.
-8. HTJ2K.
-9. Package, install, and runtime smoke tests.
+| Step | Scope | Status |
+| --- | --- | --- |
+| 0 | Solution skeleton, five `netstandard2.0` production projects, test project, package configuration | Complete |
+| 1 | `PureTranscoderManager` registration and `CanTranscode` coverage for every Phase 1 syntax | Complete |
+| 2 | RLE Lossless encode/decode | Complete |
+| 3 | JPEG Process 1, Process 2/4, Process 14, Process 14 SV1 | Complete |
+| 4 | JPEG-LS Lossless and Near-Lossless | Complete |
+| 5 | Classic JPEG 2000 Lossless and Lossy | Complete |
+| 6 | HTJ2K Lossless, Lossless RPCL, and Lossy | Complete |
+| 7 | NuGet package, consumer smoke tests, compatibility matrix | Complete |
 
-The order is intentional. RLE proves the package layout, manager registration, frame handling, and test harness before the harder codecs are implemented.
-
-## Phase Plan
-
-### Phase 0: Project Skeleton
-
-Deliverables:
-
-- Solution file.
-- Five production projects, all `netstandard2.0`.
-- Test project.
-- NuGet package project or packaging configuration.
-- Initial README with usage.
-- `PureTranscoderManager` stub.
-
-Exit criteria:
-
-- Package builds.
-- Test project references the package projects.
-- Registration code compiles.
-
-### Phase 1: Codec Registration Compatibility
-
-Deliverables:
-
-- Explicit `PureTranscoderManager` registration using fo-dicom's `IDicomCodec` implementations.
-- Stub codecs for all supported transfer syntaxes.
-- Tests for `HasCodec`, `GetCodec`, and `CanTranscode`.
-
-Exit criteria:
-
-- `CanTranscode(ExplicitVRLittleEndian, syntax)` returns true for all phase 1 syntaxes.
-- `CanTranscode(syntax, ExplicitVRLittleEndian)` returns true for all phase 1 syntaxes.
-- Stub encode/decode throws clear `DicomCodecException` until implemented.
-
-### Phase 2: RLE Lossless
-
-Deliverables:
-
-- RLE encoder.
-- RLE decoder.
-- Segment table validation.
-- Multi-frame support.
-- 8-bit and 16-bit tests.
-
-Exit criteria:
-
-- Raw to RLE succeeds.
-- RLE to raw succeeds.
-- Raw to RLE to raw round-trip passes byte-level checks for supported layouts.
-- Efferent RLE issue tests are represented in the local test suite.
-
-### Phase 3: JPEG Family
-
-Deliverables:
-
-- JPEG marker parser.
-- JPEG Process 1 codec.
-- JPEG Process 2/4 codec.
-- JPEG Process 14 codec.
-- JPEG Process 14 SV1 codec.
-- Color and planar conversion support.
-
-Exit criteria:
-
-- 8-bit JPEG Process 1 round-trip works where Efferent supports it.
-- 8-bit and 12-bit JPEG Process 2/4 paths work where Efferent supports them.
-- Lossless Process 14 and 14 SV1 handle 8-bit, 12-bit, and 16-bit cases required by test data.
-- Existing fo-dicom JPEG lossless sample tests still pass.
-
-### Phase 4: JPEG-LS Family
-
-Deliverables:
-
-- JPEG-LS bitstream parser.
-- Lossless encode/decode.
-- Near-lossless encode/decode.
-- Interleave mode support.
-- Allowed error support.
-
-Exit criteria:
-
-- JPEG-LS Lossless raw to compressed to raw works.
-- JPEG-LS Near-Lossless raw to compressed to raw works within expected tolerance.
-- Efferent JPEG-LS acceptance samples decode and render.
-
-### Phase 5: JPEG 2000 Classic
-
-Deliverables:
-
-- JPEG 2000 codestream parser.
-- Lossless decode/encode.
-- Lossy decode/encode.
-- Wavelet transform paths.
-- Packet/progression handling needed by DICOM samples.
-
-Exit criteria:
-
-- JPEG 2000 Lossless round-trip works.
-- JPEG 2000 Lossy round-trip works with expected lossy tolerance.
-- Efferent JPEG 2000 acceptance samples decode and render.
-
-### Phase 6: HTJ2K
-
-Deliverables:
-
-- HTJ2K codestream support.
-- HTJ2K Lossless.
-- HTJ2K Lossless RPCL.
-- HTJ2K Lossy.
-
-Exit criteria:
-
-- All three HTJ2K transfer syntaxes encode and decode.
-- Acceptance samples pass.
-- Invalid streams fail with managed exceptions.
-
-### Phase 7: Final Replacement Validation
-
-Deliverables:
-
-- NuGet package.
-- Usage docs.
-- Compatibility matrix.
-- Update the focused design and development checklist with any remaining
-  supported-syntax exclusions or blocked release gates.
-
-Exit criteria:
-
-- One NuGet package installs into a consumer app.
-- Consumer app registers only `PureTranscoderManager`.
-- No native DLLs are copied or required.
-- All phase 1 transfer syntaxes pass `CanTranscode`.
-- Raw to compressed to raw tests pass for 8-bit and 16-bit fixtures where applicable.
-- Acceptance DICOM samples transcode, inverse transcode, and render.
-- .NET Framework 4.7.2+ smoke test passes.
-- Modern .NET smoke test passes.
+The order was intentional: RLE proved the package layout, manager registration,
+frame handling, and test harness before the harder codecs were implemented.
 
 ## Test Strategy
 
-The test suite should be built from four layers:
+The test suite is built from four layers:
 
 1. Unit tests for low-level codec primitives.
 2. Codec tests for one frame and multi-frame datasets.
 3. Compatibility tests based on `<FO_DICOM_CODECS_SOURCE_ROOT>\Tests`.
 4. Consumer smoke tests using the built NuGet package.
 
-The `fo-dicom.Codecs` tests are useful but not sufficient because some of them only check that conversion does not throw and that pixel data exists. `fo-dicom.PureCodecs` should add stronger checks:
+The `fo-dicom.Codecs` tests are useful but not sufficient because some of them only check that conversion does not throw and that pixel data exists. `fo-dicom.PureCodecs` adds stronger checks:
 
 - Exact byte equality for lossless round-trips.
 - Tolerance checks for lossy round-trips.
@@ -446,7 +316,7 @@ The key Efferent implementation files are:
 - Native fallback.
 - P/Invoke fallback.
 - Separate NuGet packages per codec family.
-- `net8.0`-specific production assemblies.
+- Runtime-specific production assemblies.
 - Replacing fo-dicom core APIs.
 
 ## Current Phase 1 Boundaries
@@ -459,20 +329,22 @@ The key Efferent implementation files are:
 - JPEG 2000 accepts raw codestreams only. Part 2 multi-component, JPIP, JPT,
   and component subsampling are out of scope. See the
   [JPEG 2000 and HTJ2K design](jpeg2000-codec-design.md) for HTJ2K marker
-  exclusions and the remaining public-reference interoperability gate.
+  exclusions.
 
-## Open Decisions
+## Packaging Decisions
 
-Phase 1 alpha release readiness resolved the initial packaging decisions:
+- The NuGet package id is `FoDicom.PureCodecs`; the assemblies keep the
+  `fo-dicom.PureCodecs*` names.
+- The package contains the entry assembly and codec-family assemblies under
+  `lib/netstandard2.0`.
+- The package version is maintained manually in
+  `src/fo-dicom.PureCodecs/fo-dicom.PureCodecs.csproj` and must match the release
+  tag.
+- The package targets fo-dicom 5.x through the centrally managed `fo-dicom`
+  package reference. fo-dicom 4.x compatibility is not claimed.
+- The assemblies are not strong-named.
 
-- The NuGet package id is `fo-dicom.PureCodecs`.
-- The first alpha package version is `0.1.0-alpha.1`.
-- The package contains the entry assembly and codec-family assemblies under `lib/netstandard2.0`.
-- The first alpha targets fo-dicom 5.x through the centrally managed `fo-dicom` package reference.
-- fo-dicom 4.x compatibility is not claimed for the first alpha.
-- The assemblies are not strong-named in the first alpha package.
-
-The remaining future-release decisions are:
+Future release decisions still open:
 
 - Performance goals for large multi-frame studies.
 - Whether later releases should add strong-named assemblies.

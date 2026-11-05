@@ -269,7 +269,7 @@ JPEG is complete when:
 
 ## Implementation Notes
 
-Current implementation status:
+Implemented behavior:
 
 - JPEG Process 1 and Process 2/4 use a managed sequential DCT path with marker parsing, DQT, DHT, SOF0/SOF1, SOS, Huffman entropy coding, quantization, zigzag, forward DCT, and inverse DCT.
 - The DCT path supports 8-bit monochrome and three-component data, plus 12-bit
@@ -292,7 +292,7 @@ Current implementation status:
   8-bit samples from 16-bit DICOM containers, and Process 2/4 handles 12-bit
   component-aware samples without truncating them to bytes.
 
-Known limitations before full JPEG release readiness:
+Known limitations:
 
 - Process 2/4 12-bit color encoding supports SF444; 12-bit SF422 encoding
   remains unsupported.

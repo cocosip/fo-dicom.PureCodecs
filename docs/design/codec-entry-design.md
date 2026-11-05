@@ -80,11 +80,10 @@ public sealed class PureTranscoderManager : TranscoderManager
 
 No broad reflection over arbitrary loaded assemblies should be used. There should be no second public codec registration abstraction beyond fo-dicom's `IDicomCodec` and `ITranscoderManager`.
 
-## Codec Stub Rule
+## Codec Implementations
 
-Before an algorithm is implemented, each transfer syntax may have a stub codec so that registration and package layout can be tested.
-
-The current stub codec public class names are:
+Each family assembly exposes concrete `IDicomCodec` implementations with these
+public class names:
 
 - `FellowOakDicom.PureCodecs.Rle.DicomRleLosslessCodec`
 - `FellowOakDicom.PureCodecs.Jpeg.DicomJpegProcess1Codec`
@@ -99,21 +98,22 @@ The current stub codec public class names are:
 - `FellowOakDicom.PureCodecs.Jpeg2000.DicomHtJpeg2000LosslessRpclCodec`
 - `FellowOakDicom.PureCodecs.Jpeg2000.DicomHtJpeg2000LossyCodec`
 
-The shared `UnimplementedDicomCodec` base is temporary entry-layer infrastructure for stub codecs. It must be replaced or made irrelevant as each family algorithm is implemented.
+Every listed codec implements its full encode and decode path; the package does
+not contain stub or pass-through codecs.
 
-Stub codecs must:
+Codec implementations must:
 
 - Implement `IDicomCodec`.
 - Return the correct `TransferSyntax`.
 - Return a valid default parameter object when needed.
-- Throw `DicomCodecException` from `Encode` and `Decode`.
-- Include the transfer syntax name in the exception message.
+- Throw `DicomCodecException` from `Encode` and `Decode` for invalid input or
+  unsupported features, including the transfer syntax name in the message.
 
-Stub codecs must not:
+Codec implementations must not:
 
 - Silently pass through pixel data.
 - Produce invalid compressed frames.
-- Claim algorithm completion in tests.
+- Claim algorithm support that the tests do not cover.
 
 ## Shared Utilities
 
@@ -150,14 +150,14 @@ The exact helper signature can change during implementation, but exception messa
 
 ## Test Plan
 
-Entry-layer tests should verify:
+Entry-layer tests verify:
 
 - `PureTranscoderManager` constructs successfully.
 - `HasCodec` is true for all phase 1 transfer syntaxes.
 - `GetCodec` returns the expected codec type for each transfer syntax.
 - `CanTranscode(raw, compressed)` is true for each phase 1 syntax.
 - `CanTranscode(compressed, raw)` is true for each phase 1 syntax.
-- Stub codecs fail with `DicomCodecException` before algorithms are implemented.
+- Invalid input fails with `DicomCodecException`.
 - A consumer app can register `PureTranscoderManager` without registering family DLLs directly.
 
 ## Completion Criteria

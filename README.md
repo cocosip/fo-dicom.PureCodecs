@@ -99,16 +99,17 @@ The compatibility target is the public behavior of `fo-dicom.Codecs` for complet
 - Tolerance-based decoded frame checks for lossy transfer syntaxes.
 - Efferent `fo-dicom.Codecs` unit and acceptance fixtures included in the repository.
 - Managed exceptions for invalid compressed streams.
-- Consumer package installation on modern .NET and .NET Framework 4.7.2 on Windows.
+- Consumer app execution on modern .NET and, on Windows, .NET Framework 4.7.2, plus independent inspection of the packed package layout.
 
-Current Phase 1 exclusions and interoperability status are maintained in the
-[overall design](docs/design/fo-dicom-pure-codecs-design.md), the
-[JPEG 2000 and HTJ2K design](docs/design/jpeg2000-codec-design.md), and the
-[development checklist](docs/development/development-checklist.md).
+Current Phase 1 exclusions are maintained in the
+[overall design](docs/design/fo-dicom-pure-codecs-design.md) and the
+[JPEG 2000 and HTJ2K design](docs/design/jpeg2000-codec-design.md). Current
+verification results and test commands are recorded in the
+[verification baseline](docs/development/verification-baseline.md).
 
 ## Native Interoperability Validation
 
-The Native/Pure codec interoperability matrix is a standalone process-isolated runner, not an xUnit test. It covers twelve RLE, JPEG, JPEG-LS, classic JPEG 2000, and HTJ2K transfer syntaxes, including HTJ2K `.201`, `.202`, and `.203`. Workers use the public C# API of the normally restored `fo-dicom.Codecs` 6.0.0-beta1 NuGet package as the reference side. Each format runs in its own process, defaults to four concurrent formats, and terminates a worker process tree after five minutes. A failing row is reported as a matrix failure; it is not skipped or hidden.
+The Native/Pure codec interoperability matrix is a standalone process-isolated runner, not an xUnit test. It covers twelve RLE, JPEG, JPEG-LS, classic JPEG 2000, and HTJ2K transfer syntaxes, including HTJ2K `.201`, `.202`, and `.203`. Workers use the public C# API of the normally restored `fo-dicom.Codecs` 6.0.0 NuGet package as the reference side. Each format runs in its own process, defaults to four concurrent formats, and terminates a worker process tree after five minutes. A failing row is reported as a matrix failure; it is not skipped or hidden.
 
 ```powershell
 dotnet run --project tools/fo-dicom.PureCodecs.InteropValidation -- --parallel 4 --worker-timeout-seconds 300
@@ -134,8 +135,8 @@ dotnet run -c Release --project benchmarks/fo-dicom.PureCodecs.Benchmarks -- --j
 ```
 
 BenchmarkDotNet writes machine-specific Markdown and JSON reports to
-`BenchmarkDotNet.Artifacts/`, which is intentionally ignored. Compare Go and
-C# only when the source pixels or compressed DICOM frame, transfer syntax,
+`BenchmarkDotNet.Artifacts/`, which is intentionally ignored. Compare benchmark
+results only when the source pixels or compressed DICOM frame, transfer syntax,
 codec settings, and operation boundary match; record the runtime, CPU, and
 operating system alongside the result.
 
@@ -143,7 +144,7 @@ operating system alongside the result.
 
 The repository includes smoke scripts that run sample consumer apps through direct project references, pack `FoDicom.PureCodecs`, and independently verify that the package contains only the expected managed `netstandard2.0` assemblies.
 
-Use the platform-native script in CI:
+Use the platform-native script:
 
 ```bash
 bash ./eng/verify-package-consumer-smoke.sh

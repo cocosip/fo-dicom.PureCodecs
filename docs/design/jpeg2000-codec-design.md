@@ -6,11 +6,11 @@ This is the single design authority for the JPEG 2000 family in
 `fo-dicom.PureCodecs`. It supersedes the former OpenJPEG/OpenJPH separation and
 HTJ2K alignment documents.
 
-The family is implemented in pure C#. Classic JPEG 2000 functionality and the
-HTJ2K codec paths are present; Phase 1 is **not** released as fully aligned.
-The outstanding release gate is the normally restored public
-`fo-dicom.Codecs` complete-dataset interoperability matrix described in
-[Development Checklist](../development/development-checklist.md).
+The family is implemented in pure C#. Classic JPEG 2000 and all three HTJ2K
+codec paths are implemented and pass the normally restored public
+`fo-dicom.Codecs` complete-dataset interoperability matrix in both directions.
+Current results and commands are recorded in the
+[verification baseline](../development/verification-baseline.md).
 
 ## Scope
 
@@ -21,9 +21,9 @@ Production assembly: `fo-dicom.PureCodecs.Jpeg2000.dll` targeting
 | --- | --- | --- | --- |
 | JPEG 2000 Lossless | `1.2.840.10008.1.2.4.90` | Classic | Implemented |
 | JPEG 2000 Lossy | `1.2.840.10008.1.2.4.91` | Classic | Implemented |
-| HTJ2K Lossless | `1.2.840.10008.1.2.4.201` | High-throughput | Implemented; release gate open |
-| HTJ2K Lossless RPCL | `1.2.840.10008.1.2.4.202` | High-throughput | Implemented; release gate open |
-| HTJ2K Lossy | `1.2.840.10008.1.2.4.203` | High-throughput | Implemented; release gate open |
+| HTJ2K Lossless | `1.2.840.10008.1.2.4.201` | High-throughput | Implemented |
+| HTJ2K Lossless RPCL | `1.2.840.10008.1.2.4.202` | High-throughput | Implemented |
+| HTJ2K Lossy | `1.2.840.10008.1.2.4.203` | High-throughput | Implemented |
 
 JPEG 2000 Part 2 multi-component syntaxes (`.92` and `.93`), JPIP, JPT, and
 component subsampling are outside Phase 1 and fail with managed exceptions.
@@ -137,33 +137,26 @@ Validation has three independent layers:
    `fo-dicom.Codecs` APIs in both directions. Lossless assertions are exact;
    lossy assertions use the pre-measured fixed tolerance.
 
-## Recorded Verification and Open Release Gate
+## Recorded Verification
 
-The 2026-08-25 source/test audit recorded a full Release suite of `902/902`
-passing and no skipped tests. The same audit recorded `104/112` passing rows in
-the 12-format complete-dataset interoperability matrix: 4 workers passed and 8
-failed. All eight failures are the seven-frame `sample-05.dcm` Pure-to-reference
-decode path at frame 1; the corresponding reference-to-Pure rows pass.
+The 2026-11-05 Release run recorded `934/934` tests passing with no skipped
+tests. The same run recorded `12/12` passing formats and `114/114` passing
+complete-dataset rows in the twelve-format interoperability matrix, including
+bidirectional `.201`, `.202`, and `.203` rows against `fo-dicom.Codecs` 6.0.0.
 
-This result proves neither a Pure codec defect nor release readiness. The public
-reference decoder returns oversized pooled buffers for those complete-dataset
-rows, whereas the declared frame size is exact. Per-frame extraction is allowed
-only to diagnose the failure; it is not an acceptance substitute. Do not add
-output reconstruction, frame splitting, package checks, or failure downgrades.
+The matrix runs each format in a bounded child process through the public C#
+APIs of the normally restored `fo-dicom.Codecs` package. Lossless rows require
+exact decoded bytes; `.203` uses the recorded lossy tolerance. A failed row
+exits the worker nonzero and is never skipped, downgraded, or reconstructed.
 
-The gate closes only when an ordinarily restored public `fo-dicom.Codecs`
-package passes every complete-dataset row, including `.201`, `.202`, and `.203`,
-in both directions. At that point rerun the unchanged worker matrix, focused
-JPEG 2000/HTJ2K tests, full Release suite, package inspection, and consumer smoke
-tests before claiming Phase 1 completion.
+Reproduce the baseline with the commands in the
+[verification baseline](../development/verification-baseline.md).
 
 ## Maintenance Rules
 
-Do not create a second JPEG 2000 design, alignment handoff, or optimization
-checklist. Keep enduring design and current release-gate facts here; record
-cross-codec active remediation only in
-[fo-dicom.Codecs Alignment Remediation](../development/fo-dicom-codecs-alignment-remediation.md).
+Do not create a second JPEG 2000 design, alignment handoff, or progress log.
+Keep enduring design facts here and record current cross-codec verification
+results in the [verification baseline](../development/verification-baseline.md).
 Historical benchmark measurements and resolved tool-compression investigations
 are intentionally not retained as living requirements. Start future performance
-work only from a new measured hotspot after the affected reference gate is
-stable.
+work only from a new measured hotspot.

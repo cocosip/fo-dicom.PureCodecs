@@ -232,7 +232,7 @@ JPEG-LS is complete when:
 
 The current implementation is fully managed and lives in `fo-dicom.PureCodecs.JpegLs`.
 
-- `DicomJpegLsLosslessCodec` and `DicomJpegLsNearLosslessCodec` now inherit the managed JPEG-LS codec base instead of the unimplemented stub.
+- `DicomJpegLsLosslessCodec` and `DicomJpegLsNearLosslessCodec` use the managed JPEG-LS codec base.
 - `DicomJpegLsParams` exposes `AllowedError`, `InterleaveMode`, and `ColorTransform` with defaults matching `fo-dicom.Codecs` where applicable.
 - The encoder emits one JPEG-LS codestream per DICOM frame with SOI, SOF55, LSE preset coding parameters, SOS, scan data, and EOI.
 - The scan codec implements regular mode, run mode, Golomb coding, context modeling, default or LSE-provided JPEG-LS thresholds and reset values, and near-lossless sample reconstruction.

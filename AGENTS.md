@@ -4,10 +4,13 @@
 
 This repository is `fo-dicom.PureCodecs`, a pure C# replacement for `fo-dicom.Codecs`.
 
-The authoritative design and development plan is:
+The authoritative design is:
 
 - `docs/design/fo-dicom-pure-codecs-design.md`
-- `docs/development/development-checklist.md`
+
+The current verification baseline and reproducible test commands are:
+
+- `docs/development/verification-baseline.md`
 
 Focused design documents:
 
@@ -133,13 +136,17 @@ Important files:
 
 ## Verification
 
-When implementation begins, use the `fo-dicom.Codecs` tests and DICOM samples as the compatibility baseline, but add stronger validation:
+Use the `fo-dicom.Codecs` tests and DICOM samples as the compatibility baseline,
+with stronger validation:
 
 - Exact byte equality for lossless round-trips.
 - Tolerance checks for lossy round-trips.
 - Frame count preservation.
 - Required DICOM tag checks after compression.
 - Managed exception checks for invalid input.
+
+The recorded results and the commands that reproduce them are in
+`docs/development/verification-baseline.md`.
 
 ## .NET Commands
 

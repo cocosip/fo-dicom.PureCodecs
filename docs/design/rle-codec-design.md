@@ -190,7 +190,7 @@ RLE is complete when:
 ## Implementation Notes
 
 - Implemented in `fo-dicom.PureCodecs.Rle` with managed header, segment, and frame codecs.
-- `DicomRleLosslessCodec` now implements encode and decode directly instead of inheriting the unimplemented stub base.
+- `DicomRleLosslessCodec` implements encode and decode directly.
 - Segment coding uses DICOM PackBits-style literal and repeat runs and omits `-128` no-op bytes during encode.
 - Frame mapping supports 8-bit monochrome, 16-bit monochrome, RGB interleaved, RGB planar, and multi-frame round-trips.
 - Segment order is sample-major with most-significant byte first within each sample.
