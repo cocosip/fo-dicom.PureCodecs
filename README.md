@@ -109,7 +109,7 @@ verification results and test commands are recorded in the
 
 ## Native Interoperability Validation
 
-The Native/Pure codec interoperability matrix is a standalone process-isolated runner, not an xUnit test. It covers twelve RLE, JPEG, JPEG-LS, classic JPEG 2000, and HTJ2K transfer syntaxes, including HTJ2K `.201`, `.202`, and `.203`. Workers use the public C# API of the normally restored `fo-dicom.Codecs` 6.0.0 NuGet package as the reference side. Each format runs in its own process, defaults to four concurrent formats, and terminates a worker process tree after five minutes. A failing row is reported as a matrix failure; it is not skipped or hidden.
+The Native/Pure codec interoperability matrix is a standalone process-isolated runner, not an xUnit test. It covers twelve RLE, JPEG, JPEG-LS, classic JPEG 2000, and HTJ2K transfer syntaxes, including HTJ2K `.201`, `.202`, and `.203`. Workers use the public C# API of the normally restored `fo-dicom.Codecs` 6.0.0 NuGet package as the reference side. Each format runs in its own process, defaults to four concurrent formats, and terminates a worker process tree after five minutes. A failing row is reported as a matrix failure; it is not skipped or hidden. A worker process that dies from a signal is restarted once and logged as `INTEROP|worker-abort`, because the reference native code aborts intermittently; dataset rows are never retried, so a real codec mismatch always fails the matrix.
 
 ```powershell
 dotnet run --project tools/fo-dicom.PureCodecs.InteropValidation -- --parallel 4 --worker-timeout-seconds 300

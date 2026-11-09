@@ -82,6 +82,13 @@ internal static class InteropValidationProgram
             await throttle.WaitAsync();
             try
             {
+                var result = await RunWorkerProcessAsync(repositoryRoot, definition.Key, workerTimeoutSeconds);
+                if (!IsAbnormalExit(result.ExitCode))
+                {
+                    return result;
+                }
+
+                Console.WriteLine($"INTEROP|worker-abort|format={result.Format}|exit={result.ExitCode}|retrying=1");
                 return await RunWorkerProcessAsync(repositoryRoot, definition.Key, workerTimeoutSeconds);
             }
             finally
@@ -113,6 +120,11 @@ internal static class InteropValidationProgram
             $"|failedDatasetRows={summaries.Sum(summary => summary.FailedDatasetRows)}");
         return failures == 0 ? 0 : 1;
     }
+
+    // A signal exit (>= 128) or a killed worker (-1) means the worker process died;
+    // that is a reference-runtime abort, not a codec result, so the worker is restarted
+    // once. Dataset rows are never retried, so real mismatches always fail the matrix.
+    private static bool IsAbnormalExit(int exitCode) => exitCode < 0 || exitCode >= 128;
 
     private static async Task<WorkerResult> RunWorkerProcessAsync(string repositoryRoot, string format, int workerTimeoutSeconds)
     {

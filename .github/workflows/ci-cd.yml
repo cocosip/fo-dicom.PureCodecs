@@ -39,16 +39,9 @@ env:
 jobs:
   # Restore, build and test once; packaging and the verification scripts reuse that
   # Release output. Only a master/tag push produces a releasable package.
-  #
-  # ponytail: ubuntu-24.04 pinned instead of ubuntu-latest. The one observed test-host
-  # abort ("free(): invalid pointer", exit 134) appeared when ubuntu-latest switched to
-  # 26.04 and originates in the native fo-dicom.Codecs reference code loaded by the
-  # test host, not in this repository's managed code; it did not reproduce in ~44
-  # diagnostic runs. Every earlier release ran this job on 24.04. Drop the pin once the
-  # fo-dicom.Codecs native assets are verified on 26.04.
   build-and-test:
     name: Build and test
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
@@ -105,8 +98,29 @@ jobs:
       - name: Build
         run: dotnet build "$SOLUTION_PATH" --configuration "$CONFIGURATION" --no-restore --verbosity minimal
 
+      # ponytail: the test host is retried once when it aborts (SIGABRT/SIGSEGV,
+      # exit 134/139). The only native code in that process is the fo-dicom.Codecs
+      # reference loaded by two comparison tests, and it aborts intermittently
+      # ("free(): invalid pointer"); no assertion or row failure is ever retried.
+      # Drop the retry once the reference native libraries stop aborting.
       - name: Test
-        run: dotnet test "$SOLUTION_PATH" --configuration "$CONFIGURATION" --no-build --verbosity minimal
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          for _ in 1 2; do
+            dotnet test "$SOLUTION_PATH" --configuration "$CONFIGURATION" --no-build --verbosity minimal
+            code=$?
+            if [[ "$code" -eq 0 ]]; then
+              exit 0
+            fi
+            if [[ "$code" -ne 134 && "$code" -ne 139 ]]; then
+              exit "$code"
+            fi
+            echo "::warning::The test host aborted (exit $code); retrying once because the reference fo-dicom.Codecs native code aborts intermittently."
+          done
+
+          exit 1
 
       - name: Validate fo-dicom interoperability
         timeout-minutes: 15
