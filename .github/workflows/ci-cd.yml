@@ -39,9 +39,16 @@ env:
 jobs:
   # Restore, build and test once; packaging and the verification scripts reuse that
   # Release output. Only a master/tag push produces a releasable package.
+  #
+  # ponytail: ubuntu-24.04 pinned instead of ubuntu-latest. The one observed test-host
+  # abort ("free(): invalid pointer", exit 134) appeared when ubuntu-latest switched to
+  # 26.04 and originates in the native fo-dicom.Codecs reference code loaded by the
+  # test host, not in this repository's managed code; it did not reproduce in ~44
+  # diagnostic runs. Every earlier release ran this job on 24.04. Drop the pin once the
+  # fo-dicom.Codecs native assets are verified on 26.04.
   build-and-test:
     name: Build and test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
