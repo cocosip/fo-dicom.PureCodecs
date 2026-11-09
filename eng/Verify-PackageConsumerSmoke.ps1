@@ -14,7 +14,7 @@ $net472Project = Join-Path $repoRoot "tests/ConsumerSmoke/Net472/ConsumerSmoke.N
 $modernProject = Join-Path $repoRoot "tests/ConsumerSmoke/Modern/ConsumerSmoke.Modern.csproj"
 $nugetCacheRoot = Join-Path $repoRoot "artifacts/consumer-smoke/nuget-cache"
 $nugetConfigPath = Join-Path $repoRoot "artifacts/consumer-smoke/NuGet.Config"
-$isWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+$isWindowsHost = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
 
 function Invoke-CheckedDotNet {
     dotnet @args
@@ -85,7 +85,7 @@ $env:NUGET_PACKAGES = $nugetCacheRoot
 if ($SkipNet472) {
     Write-Host ".NET Framework 4.7.2 consumer smoke skipped by -SkipNet472."
 }
-elseif ($isWindows) {
+elseif ($isWindowsHost) {
     Invoke-CheckedDotNet restore $net472Project --configfile $nugetConfigPath
     Invoke-CheckedDotNet run --project $net472Project --configuration $Configuration --no-restore
 }

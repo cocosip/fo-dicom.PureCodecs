@@ -1,255 +1,252 @@
 name: CI/CD
 
+# Shared CI/CD convention with Locus and obconnector-dotnet:
+#   push master / PR -> master : restore + build + test
+#   push master                : ... + pack + verified package / consumer smoke (no publish)
+#   push release tag (v0.5.1)  : ... + pack + verify + publish NuGet + GitHub Release
+#   workflow_dispatch          : same as a pull request
+#
+# The package version lives in src/fo-dicom.PureCodecs/fo-dicom.PureCodecs.csproj.
+# A tag must be "v<Version>" and is validated before the first build, so a
+# released package can never carry a version that differs from its tag.
 on:
-  pull_request:
-    branches:
-      - master
-      - main
   push:
     branches:
       - master
-      - main
     tags:
-      - 'v*'
+      - 'v*.*.*'
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
+  CI: true
   DOTNET_VERSION: 10.0.x
+  CONFIGURATION: Release
   SOLUTION_PATH: fo-dicom.PureCodecs.slnx
   PACKAGE_PROJECT: src/fo-dicom.PureCodecs/fo-dicom.PureCodecs.csproj
-  PACKAGE_ID: FoDicom.PureCodecs
   PACKAGE_OUTPUT: artifacts/packages
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
 
 jobs:
+  # Restore, build and test once; packaging and the verification scripts reuse that
+  # Release output. Only a master/tag push produces a releasable package.
   build-and-test:
     name: Build and test
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
+    env:
+      PACKAGE_BUILD: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Resolve and validate version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="$(dotnet msbuild "$PACKAGE_PROJECT" -getProperty:Version)"
+          if [[ -z "$version" ]]; then
+            echo "::error::Could not read <Version> from $PACKAGE_PROJECT."
+            exit 1
+          fi
+
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match $PACKAGE_PROJECT <Version> $version. Use tag v$version or update the project version first."
+              exit 1
+            fi
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Version: $version"
+
       - name: Restore
-        run: dotnet restore "${{ env.SOLUTION_PATH }}"
+        run: dotnet restore "$SOLUTION_PATH" --verbosity minimal
 
       - name: Build
-        run: dotnet build "${{ env.SOLUTION_PATH }}" -c Release --no-restore
+        run: dotnet build "$SOLUTION_PATH" --configuration "$CONFIGURATION" --no-restore --verbosity minimal
 
       - name: Test
-        run: dotnet test "${{ env.SOLUTION_PATH }}" -c Release --no-build --verbosity normal
+        run: dotnet test "$SOLUTION_PATH" --configuration "$CONFIGURATION" --no-build --verbosity minimal
 
       - name: Validate fo-dicom interoperability
         timeout-minutes: 15
-        run: dotnet run --project tools/fo-dicom.PureCodecs.InteropValidation -c Release --no-build -- --parallel 4 --worker-timeout-seconds 300
+        run: dotnet run --project tools/fo-dicom.PureCodecs.InteropValidation --configuration "$CONFIGURATION" --no-build -- --parallel 4 --worker-timeout-seconds 300
 
-      - name: Read package version
-        if: startsWith(github.ref, 'refs/tags/v')
-        id: version
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          version="$(dotnet msbuild "${{ env.PACKAGE_PROJECT }}" -getProperty:Version)"
-          tag="${GITHUB_REF_NAME}"
-          expected_tag="v${version}"
-
-          if [[ -z "$version" ]]; then
-            echo "::error::Could not read <Version> from ${{ env.PACKAGE_PROJECT }}."
-            exit 1
-          fi
-
-          if [[ "$tag" != "$expected_tag" ]]; then
-            echo "::error::Tag $tag does not match ${{ env.PACKAGE_PROJECT }} <Version> $version. Use tag $expected_tag or update the project version first."
-            exit 1
-          fi
-
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
-      - name: Pack
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: dotnet pack "${{ env.PACKAGE_PROJECT }}" -c Release --no-build -p:BuildProjectReferences=false -o "${{ env.PACKAGE_OUTPUT }}"
-
-      - name: Upload NuGet packages
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/upload-artifact@v4
-        with:
-          name: nuget-packages
-          path: ${{ env.PACKAGE_OUTPUT }}/*.nupkg
-          retention-days: 7
-
-  publish-nuget:
-    name: Publish to NuGet
-    needs: build-and-test
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      contents: read
-
-    steps:
-      - name: Download NuGet packages
-        uses: actions/download-artifact@v4
-        with:
-          name: nuget-packages
-          path: packages
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Validate NuGet API key
-        shell: bash
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-        run: |
-          set -euo pipefail
-
-          if [[ -z "${NUGET_API_KEY}" ]]; then
-            echo "::error::Set the NUGET_API_KEY secret to a nuget.org API key for the release environment or repository."
-            exit 1
-          fi
-
-      - name: Publish to NuGet.org
-        shell: bash
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-
-          packages=(packages/*.nupkg)
-          if [[ ${#packages[@]} -eq 0 ]]; then
-            echo "::error::No NuGet packages found."
-            exit 1
-          fi
-
-          for package in "${packages[@]}"; do
-            dotnet nuget push "$package" \
-              --api-key "$NUGET_API_KEY" \
-              --source https://api.nuget.org/v3/index.json \
-              --skip-duplicate
-          done
-
-  create-release:
-    name: Create GitHub Release
-    needs: publish-nuget
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download NuGet packages
-        uses: actions/download-artifact@v4
-        with:
-          name: nuget-packages
-          path: packages
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Read package version
-        id: version
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          version="$(dotnet msbuild "${{ env.PACKAGE_PROJECT }}" -getProperty:Version)"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-
-      - name: Get previous tag
-        id: previous_tag
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          current_tag="${{ steps.version.outputs.tag }}"
-          previous_tag="$(git describe --tags --abbrev=0 "${current_tag}^" 2>/dev/null || true)"
-
-          if [[ -n "$previous_tag" ]]; then
-            echo "tag=$previous_tag" >> "$GITHUB_OUTPUT"
-            echo "log_args=$previous_tag..$current_tag" >> "$GITHUB_OUTPUT"
-            echo "diff_args=$previous_tag..$current_tag" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=" >> "$GITHUB_OUTPUT"
-            echo "log_args=$current_tag" >> "$GITHUB_OUTPUT"
-            echo "diff_args=$(git hash-object -t tree /dev/null)..$current_tag" >> "$GITHUB_OUTPUT"
-          fi
+      # The repository's package verification script packs FoDicom.PureCodecs,
+      # asserts the package holds only the expected managed netstandard2.0
+      # assemblies (no native/runtime payload), and runs the consumer smoke app.
+      - name: Pack and verify package
+        if: env.PACKAGE_BUILD == 'true'
+        run: bash ./eng/verify-package-consumer-smoke.sh --configuration "$CONFIGURATION"
 
       - name: Generate release notes
-        id: release_notes
+        if: env.PACKAGE_BUILD == 'true' && startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
           set -euo pipefail
 
           version="${{ steps.version.outputs.version }}"
-          current_tag="${{ steps.version.outputs.tag }}"
-          previous_tag="${{ steps.previous_tag.outputs.tag }}"
-          log_args="${{ steps.previous_tag.outputs.log_args }}"
-          diff_args="${{ steps.previous_tag.outputs.diff_args }}"
-          notes_path="release_notes.md"
+          url="https://github.com/${GITHUB_REPOSITORY}"
+          previous="$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD^ 2>/dev/null || true)"
 
-          commit_count="$(git log "$log_args" --oneline --no-merges | wc -l | tr -d ' ')"
-          changed_files="$(git diff --name-only "$diff_args" | wc -l | tr -d ' ')"
-          changelog="$(git log "$log_args" --pretty=format:'- %h - %s (%an)' --no-merges | sed 's/```//g' || true)"
-
-          if [[ -z "$changelog" ]]; then
-            changelog="- No non-merge commits in this release range."
+          if [[ -n "$previous" ]]; then
+            comparison="Changes since [${previous}](${url}/releases/tag/${previous}). [Full changelog](${url}/compare/${previous}...${GITHUB_REF_NAME})."
+          else
+            comparison="First release. [Commit history](${url}/commits/${GITHUB_REF_NAME})."
           fi
+          commit_count="$(git log --no-merges --oneline "${previous:+${previous}..}HEAD" | wc -l | tr -d ' ')"
 
           {
-            echo "## ${{ env.PACKAGE_ID }} $version"
-            echo ""
-            echo "### NuGet Package"
-            echo ""
-            echo "This release has been published to NuGet.org:"
-            echo ""
-            echo '```bash'
-            echo "dotnet add package ${{ env.PACKAGE_ID }} --version $version"
+            echo "# FoDicom.PureCodecs $version"
+            echo
+            echo "## Packages"
+            echo
+            echo '```shell'
+            echo "dotnet add package FoDicom.PureCodecs --version $version"
             echo '```'
-            echo ""
-            echo "### What's Changed"
-            echo ""
-            echo "This release includes $commit_count non-merge commits and $changed_files changed files."
-            echo ""
-            echo "$changelog"
-            echo ""
-            echo "### Useful Links"
-            echo ""
-            echo "- [NuGet Gallery](https://www.nuget.org/packages/${{ env.PACKAGE_ID }}/$version)"
-            if [[ -n "$previous_tag" ]]; then
-              echo "- [Full Changelog](https://github.com/${{ github.repository }}/compare/$previous_tag...$current_tag)"
-            else
-              echo "- [Full Changelog](https://github.com/${{ github.repository }}/commits/$current_tag)"
-            fi
-          } > "$notes_path"
+            echo
+            echo "## Changes"
+            echo
+            echo "$comparison"
+            echo
+            echo "$commit_count commits (excluding merges)."
+            echo
+            git log --no-merges --format='- %h %s (%an)' "${previous:+${previous}..}HEAD"
+          } > "$PACKAGE_OUTPUT/RELEASE_NOTES.md"
 
-          echo "path=$notes_path" >> "$GITHUB_OUTPUT"
+      - name: Upload verified packages and release notes
+        if: env.PACKAGE_BUILD == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: nuget-packages
+          path: ${{ env.PACKAGE_OUTPUT }}/
+          if-no-files-found: error
+          retention-days: 30
+
+  # Released packages must also be consumable from .NET Framework 4.7.2, which is
+  # the main netstandard2.0 consumer of fo-dicom. Windows-only, tags only.
+  verify-net472-consumer:
+    name: Verify .NET Framework consumer
+    needs: build-and-test
+    if: needs.build-and-test.outputs.release == 'true'
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Pack and verify .NET Framework 4.7.2 consumer
+        shell: pwsh
+        run: ./eng/Verify-PackageConsumerSmoke.ps1 -Configuration ${{ env.CONFIGURATION }} -RequireNet472
+
+  # The publish job only consumes build output: no checkout, no restore, no build.
+  publish:
+    name: Publish NuGet and GitHub Release
+    needs:
+      - build-and-test
+      - verify-net472-consumer
+    if: needs.build-and-test.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write # required by NuGet trusted publishing (GitHub OIDC token)
+
+    steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Download verified packages and release notes
+        uses: actions/download-artifact@v8
+        with:
+          name: nuget-packages
+          path: packages
+
+      # Trusted publishing: exchange this workflow's GitHub OIDC token for a
+      # one-hour nuget.org API key. Requires a nuget.org trusted publishing
+      # policy for cocosip/fo-dicom.PureCodecs / ci-cd.yml. No long-lived
+      # NUGET_API_KEY secret exists.
+      - name: NuGet login (OIDC -> temporary API key)
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: virtual # nuget.org profile name (not email); public, so no secret is needed
+
+      - name: Publish to NuGet.org
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+          VERSION: ${{ needs.build-and-test.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          package="packages/FoDicom.PureCodecs.${VERSION}.nupkg"
+          if [[ ! -s "$package" ]]; then
+            echo "::error::Verified package $package is missing from the build artifact."
+            exit 1
+          fi
+
+          dotnet nuget push "$package" \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: Release ${{ env.PACKAGE_ID }} ${{ steps.version.outputs.version }}
-          body_path: ${{ steps.release_notes.outputs.path }}
-          files: packages/*.nupkg
-          draft: false
-          prerelease: false
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.build-and-test.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          test -s packages/RELEASE_NOTES.md
+
+          flags=()
+          if [[ "$VERSION" == *-* ]]; then
+            flags+=(--prerelease --latest=false)
+          fi
+
+          gh release create "$GITHUB_REF_NAME" --verify-tag \
+            --title "FoDicom.PureCodecs $VERSION" \
+            --notes-file packages/RELEASE_NOTES.md \
+            "${flags[@]}" packages/*.nupkg packages/RELEASE_NOTES.md
