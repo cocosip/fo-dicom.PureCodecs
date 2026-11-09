@@ -14,7 +14,7 @@ It replaces the former checkbox progress tracker and the resolved
 
 Recorded on 2026-11-05:
 
-- Package identity: `FoDicom.PureCodecs`, version `0.5.1`, published as one
+- Package identity: `FoDicom.PureCodecs`, version `0.5.2`, published as one
   `FoDicom.PureCodecs.<version>.nupkg`.
 - Package contents: five managed assemblies under `lib/netstandard2.0`, with no
   native or runtime-specific assets.
@@ -25,6 +25,9 @@ Recorded on 2026-11-05:
   encode and decode.
 - Reference side: `fo-dicom.Codecs` `6.0.0`, restored normally and used only
   through its public C# API.
+
+The `0.5.2` release changes only CI/CD and release documentation; library
+sources and the results below are unchanged from the `0.5.1` baseline.
 
 ## Current Results
 
