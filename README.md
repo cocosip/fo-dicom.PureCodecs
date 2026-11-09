@@ -158,19 +158,35 @@ The shell script is intended for Linux and macOS jobs. It validates the package 
 
 The PowerShell script is intended for Windows jobs. It validates the same package checks and modern consumer smoke test, and also runs the .NET Framework 4.7.2 consumer smoke test.
 
+CI runs both scripts: the shell script on every `master` push and release tag, the PowerShell script with `-RequireNet472` on release tags before publishing.
+
 ## Release and Publishing
 
-GitHub Actions runs CI on pull requests and pushes to `master` or `main`. Tag pushes that match `v*` additionally pack the NuGet package, publish it to NuGet.org, and create a GitHub Release with release notes generated from the commits since the previous tag.
+The workflow is [.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml).
 
-The package version is not generated from the tag and is not overridden during packing. Before publishing a release, update `<Version>` in `src/fo-dicom.PureCodecs/fo-dicom.PureCodecs.csproj`, commit that change, and create a matching tag:
+| Event | What runs |
+| --- | --- |
+| `pull_request` to `master` | restore, build, test, fo-dicom interoperability validation |
+| `push` to `master` | the above, plus pack and package/consumer smoke verification (no publish) |
+| `push` of a `v<Version>` tag | the above, plus the .NET Framework 4.7.2 consumer smoke, then NuGet.org publish and GitHub Release |
+| `workflow_dispatch` | same as a pull request |
+
+Packaging on a `master` push proves that a releasable package is good before a tag exists; only a version tag publishes.
+
+The package version is not generated from the tag and is never overridden during packing. Before publishing a release, update `<Version>` in `src/fo-dicom.PureCodecs/fo-dicom.PureCodecs.csproj`, commit that change, and create a matching tag:
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.5.2
+git push origin v0.5.2
 ```
 
-The workflow validates that the pushed tag matches the project version. For example, `<Version>0.2.0</Version>` must be released with tag `v0.2.0`.
+The workflow reads the project `<Version>` before the first build and fails when the pushed tag does not match it: `<Version>0.5.2</Version>` must be released with tag `v0.5.2`. Pre-release versions such as `v0.5.2-rc.1` are published as NuGet pre-releases and GitHub pre-releases.
 
-NuGet publishing uses a NuGet.org API key. Create a GitHub environment named `release`, or use a repository secret, and add a secret named `NUGET_API_KEY` with a nuget.org API key that can publish `FoDicom.PureCodecs`.
+Publishing uses [NuGet Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing): the publish job requests `id-token: write` and `NuGet/login@v1` exchanges the GitHub OIDC token for a one-hour nuget.org API key. No long-lived `NUGET_API_KEY` secret is required. Configure the policy once on [nuget.org](https://www.nuget.org/) under **Trusted Publishing**:
 
-The workflow fails before publishing if `NUGET_API_KEY` is missing.
+- **Repository owner**: `cocosip`
+- **Repository**: `fo-dicom.PureCodecs`
+- **Workflow file**: `ci-cd.yml`
+- **Environment**: empty
+
+The login uses the nuget.org profile `virtual`, which owns `FoDicom.PureCodecs`. The former `NUGET_API_KEY` repository secret and the `release` GitHub environment are no longer used and can be removed.
